@@ -22,6 +22,13 @@
       "when": 1790590953826,
       "tag": "0002_fancy_chronomancer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790612235732,
+      "tag": "0003_aromatic_firelord",
+      "breakpoints": true
     }
   ]
 }

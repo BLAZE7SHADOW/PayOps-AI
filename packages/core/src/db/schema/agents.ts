@@ -4,9 +4,12 @@
  * run's timeline from (`GET /api/runs/:id/steps`); LangGraph's own checkpoints (a separate
  * `checkpoints` schema managed by PostgresSaver) are what actually resumes execution.
  */
-import { index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import {
   AGENT_STEP_KINDS,
+  EVIDENCE_SYSTEMS,
+  FINDING_CODES,
+  AGENT_NAMES,
   RUN_PATHS,
   RUN_STATUS,
   type Diagnosis,
@@ -66,5 +69,90 @@ export const agentSteps = pgTable(
   (t) => [index().on(t.runId, t.seq)],
 );
 
+
+/**
+ * One row per finding, normalized out of `agentRuns.findings` (docs/04-data-model.md's
+ * `agent_findings` row: "runId, caseId, findingId, agent, code, statement, evidenceIds[],
+ * confidence, grounded"). Added task 7 so the future trace UI (task 8) can select/join findings
+ * directly instead of deserializing a whole run's jsonb blob -- `agentRuns.findings` itself is
+ * kept as-is (D042): apps/server's `GET /api/runs/:id` and the web Investigation screen already
+ * read it directly and neither is being migrated in this task, so the jsonb column and this
+ * table are a deliberate, documented duplication of the same data for two different access
+ * patterns (whole-run hydrate vs. per-finding query), not a half-finished migration.
+ *
+ * `findingId` ("fd_02", docs/03 §7) is only unique *within* a run, so the row's natural key is
+ * the pair `(runId, findingId)` -- enforced by a `uniqueIndex`, following this schema's existing
+ * house style for a generated-id table with a natural composite key (see `cases_open_fingerprint_uq`
+ * in ops.ts, `disputes_one_open_per_batch_uq` in resolution.ts). `store.ts`'s upsert keys its
+ * `ON CONFLICT` on this same pair, so re-syncing a run (resume, or an extra grounding round) never
+ * duplicates or crashes on the constraint.
+ *
+ * `grounded`: computed by `store.ts` from `state.grounding` at sync time, not by the graph itself
+ * (docs/DECISIONS.md D042). Semantics -- true only once J4 actually confirmed the finding wasn't
+ * contradicted, false only on a real `GroundingViolation` naming this finding, and true by
+ * default when grounding has not run at all yet for this finding (fast path, where `groundCheck`
+ * never runs; or a finding written in the same sync as the run's terminal/interrupted state
+ * before any `groundCheck` node has executed). A third "not yet checked" state was considered
+ * (nullable boolean) and rejected: the doc's column list says plain `grounded` with no enum, and
+ * "innocent until a violation names it" is exactly `groundCheck`'s own append-only drop model
+ * (D041's `survivingFindings`) -- a finding is grounded until something concrete says otherwise.
+ */
+export const agentFindings = pgTable(
+  'agent_findings',
+  {
+    id: text().primaryKey(),
+    runId: text()
+      .notNull()
+      .references(() => agentRuns.id),
+    caseId: text()
+      .notNull()
+      .references(() => cases.id),
+    /** "fd_02" -- stable within this run only, see the table doc comment above. */
+    findingId: text().notNull(),
+    agent: text({ enum: AGENT_NAMES }).notNull(),
+    code: text({ enum: FINDING_CODES }).notNull(),
+    statement: text().notNull(),
+    evidenceIds: jsonb().$type<string[]>().notNull().default([]),
+    confidence: real().notNull(),
+    /** Default `true`: see the table doc comment -- "innocent until a violation names it". */
+    grounded: boolean().notNull().default(true),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index().on(t.runId), uniqueIndex('agent_findings_run_finding_uq').on(t.runId, t.findingId)],
+);
+
+/**
+ * One row per evidence item, normalized out of `agentRuns.evidence` (docs/04-data-model.md's
+ * `evidence` row: "runId, evidenceId, source, system, entityRef, facts, stepId"). Same rationale
+ * and jsonb-coexistence tradeoff as `agentFindings` above (D042).
+ *
+ * `evidenceId` ("ev_03", docs/03 §7) is likewise only unique *within* a run, so this table's
+ * natural key is `(runId, evidenceId)`, enforced the same way.
+ */
+export const evidence = pgTable(
+  'evidence',
+  {
+    id: text().primaryKey(),
+    runId: text()
+      .notNull()
+      .references(() => agentRuns.id),
+    /** "ev_03" -- stable within this run only, see the table doc comment above. */
+    evidenceId: text().notNull(),
+    source: text().notNull(),
+    system: text({ enum: EVIDENCE_SYSTEMS }).notNull(),
+    entityRef: text().notNull(),
+    facts: jsonb().$type<Record<string, string | number | boolean>>().notNull().default({}),
+    /** FK-ish link to `agent_steps` (docs/03 §7: "link to agentSteps for the raw payload") --
+     * left as a plain text column, not a `.references()`, because a step can be pruned/rotated
+     * independently in later phases and evidence should not become unreadable if it is. */
+    stepId: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.runId), uniqueIndex('evidence_run_evidence_uq').on(t.runId, t.evidenceId)],
+);
+
 export type AgentRunRow = typeof agentRuns.$inferSelect;
 export type AgentStepRow = typeof agentSteps.$inferSelect;
+export type AgentFindingRow = typeof agentFindings.$inferSelect;
+export type EvidenceRow = typeof evidence.$inferSelect;

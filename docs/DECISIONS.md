@@ -307,3 +307,51 @@ Phase 4 task 6 (docs/03-agent-system.md §4 "J4", §7 "Evidence model").
   should treat a missing value as `false`. Nothing yet *reads* `needsHumanReview` downstream
   (no UI surface exists before Phase 4 task 8) — it is populated and available on the run, same
   shape as D040's note about `state.risk` not yet being read by policy.
+
+## D042 · `agent_findings`/`evidence` persistence: default-grounded semantics, natural-key uniqueness, jsonb columns kept, single sync point
+Phase 4 task 7 (docs/04-data-model.md's `agent_findings`/`evidence` rows).
+
+- **`grounded` defaults to `true`, and is set `false` only by a real `GroundingViolation`.** A
+  third "not yet checked" state (nullable boolean, or a string enum) was considered and rejected:
+  the doc's column list is a plain `grounded` with no enum, and this reads naturally as the same
+  append-only "innocent until named" model `groundCheck` already uses for `state.findings` itself
+  (D041's `survivingFindings`: nothing is ever removed, a drop is recorded as a violation and
+  applied at the point of use). So a finding is `grounded: true` the moment it's written, and
+  flips to `false` only when `state.grounding.violations` names its id -- which covers both "J4
+  confirmed it" and "J4 never ran for this finding at all" (the fast path, where `groundCheck`
+  never executes, and any finding written in a sync before `groundCheck` has run) under one
+  consistent default, rather than a separate "unchecked" bucket the UI would have to special-case
+  for no real benefit yet (task 8 is the first reader).
+- **Natural-key uniqueness via a generated PK + `uniqueIndex`, matching the schema's existing
+  house style.** `findingId`/`evidenceId` ("fd_02"/"ev_03") are only unique *within one run*
+  (docs/03 §7), so the real uniqueness constraint is the pair `(runId, findingId)` /
+  `(runId, evidenceId)`. Rather than making that pair a composite primary key (no precedent for
+  that in this schema), both new tables follow the same pattern `cases` uses for its
+  `fingerprint` and `disputes` for its "one open per batch" rule: a generated `text().primaryKey()`
+  row id (`newId('agentFinding')`/`newId('evidenceRow')`, two new `ID_PREFIX` entries in
+  `packages/shared/src/ids.ts`) plus a `uniqueIndex` on the natural pair. `store.ts`'s upsert
+  targets that same pair in `onConflictDoUpdate`, so re-syncing a run (resume after an approval
+  interrupt, or a `groundCheck` extra round) updates the existing row in place instead of
+  duplicating it or throwing.
+- **`agentRuns.evidence`/`agentRuns.findings` (jsonb) are kept as-is, not migrated away.**
+  `apps/server/src/routes/runs.ts` and `apps/web/src/features/investigation/Investigation.tsx`
+  (the existing Phase 3 trace UI) both read `run.evidence`/`run.findings` directly off the
+  `agent_runs` row today, and migrating those readers over to the new normalized tables was out
+  of scope for this task (it belongs with task 8's UI work, which is the first thing that actually
+  needs per-finding querying). Keeping both is a deliberate, documented duplication of the same
+  data for two access patterns -- "hydrate the whole run" (jsonb, unchanged) vs. "query/join one
+  finding or one piece of evidence" (the new tables, for task 8's grounding trace) -- not a
+  half-finished migration.
+- **The fan-out is one call, at one point: `run.ts`'s `syncRunRow`, right after
+  `graph.invoke`/resume returns.** `syncEvidenceAndFindings` (store.ts) is called with the exact
+  same final `state.evidence`/`state.findings`/`state.grounding` that `syncRunRow` already writes
+  onto the jsonb columns, rather than having every node that appends evidence/findings (triage,
+  each specialist, `groundCheck`) also write to the normalized tables. This means the tables only
+  update once per `graph.invoke` call (not per node), which is fine because nothing reads them
+  mid-run yet, and keeps the persistence logic simple: it always sees the graph's complete,
+  already-reduced state, never a partial one from a node that hasn't merged yet.
+- **`evidence.stepId` is a plain column, not a foreign key to `agent_steps`.** docs/03 §7 calls
+  for "link to agentSteps for the raw payload", but a hard FK would forbid ever pruning/rotating
+  `agent_steps` independently in a later phase without cascading into evidence. Left as a
+  same-shaped text column instead, matching how `agentRuns.approvalId` (agents.ts) already omits
+  a `.references()` for a similar reason.

@@ -30,6 +30,8 @@ export const ID_PREFIX = {
   resolution: 'rsl',
   validation: 'val',
   agentStep: 'ast',
+  agentFinding: 'afd',
+  evidenceRow: 'evr',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

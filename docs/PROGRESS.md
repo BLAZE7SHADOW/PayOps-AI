@@ -4,11 +4,13 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-6 (Jev adapter, J1 signal
+**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-7 (Jev adapter, J1 signal
 intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, Risk specialist +
-J3 atomic scores + weighted tier, and now `groundCheck` + J4 structural/semantic grounding) are
-done; the rest of Phase 4 (evidence/finding persistence, UI decision/grounding trace, cassette
-recordings) is not started.
+J3 atomic scores + weighted tier, `groundCheck` + J4 structural/semantic grounding, and now
+`agent_findings`/`evidence` persistence) are done; the rest of Phase 4 (UI decision/grounding
+trace, cassette recordings) is not started. **Before starting task 8: see Blockers below --
+`pnpm test` now actually runs in this environment (it could not before) and surfaces 10
+pre-existing failures in tasks 3-6's code that were never verified by a real test run.**
 
 ## Phase checklist
 
@@ -22,11 +24,16 @@ recordings) is not started.
 
 ## Next task
 
-Phase 4 task 7: findings persisted to `agentFindings`, evidence to `evidence`
-(docs/06-phases.md Phase 4 task 7). `groundCheck`/J4 (task 6) is done — `state.grounding` and
-`state.gaps` are genuinely populated now, and `join` feeds `groundCheck` before `resolve`
-(nodes.ts, graph.ts). After task 7: UI decision/grounding trace (task 8), cassette recordings
-(task 9).
+Phase 4 task 8: UI -- Jev decisions in the trace with confidence; grounding status on each
+finding; dropped findings shown struck through with the reason (docs/06-phases.md Phase 4 task
+8, docs/05-ui-design.md for UI rules). `agent_findings`/`evidence` persistence (task 7) is done
+-- `agentFindings`/`evidence` rows are now populated per run and idempotently upserted, so task
+8 can query/join them directly. **Read the Blockers section below before starting task 8**: the
+10 pre-existing test failures found this session are in tasks 3, 5 and 6's code (context budget
+dropping, evidence scoping, the `plan` node/state-channel name collision, `riskAgent`'s
+`findings` field), not in task 7's own code, and should be fixed first since task 8 builds UI on
+top of exactly the state (`state.grounding`, specialist findings) those tests cover. After task
+8: cassette recordings (task 9).
 
 ## How to run locally
 
@@ -50,11 +57,42 @@ Open http://localhost:5173 and use a demo account on the sign-in page (password 
 
 ## Blockers
 
-None. Note: in this cloud session, `pnpm test` fails inside the desktop bridge's Linux VM with a
-missing `@rollup/rollup-linux-arm64-gnu` native binary (node_modules in the connected folder has
-only the macOS binary). This is a bridge/environment artifact, not a code issue — `pnpm
-typecheck` and `pnpm lint` are clean across all packages. Run `pnpm test` directly in a Terminal
-on the Mac to verify.
+**`pnpm test` now runs in this environment, and it surfaces 10 real, pre-existing failures --
+fix these before task 8.** Earlier sessions' "cannot run `pnpm test`, missing
+`@rollup/rollup-linux-arm64-gnu`" note is resolved for future cloud sessions the same way: the
+connected folder's `node_modules` was built on macOS (darwin-arm64) and this environment's shell
+is a Linux/arm64 VM bridged to it, so any package with a native binary (rollup, esbuild) is
+missing its linux-arm64 variant. Installing the missing `@esbuild/linux-arm64` and
+`@rollup/rollup-linux-arm64-gnu` binaries into that same `node_modules/.pnpm` layout (via `npm
+install --no-save` into a scratch dir, then copied into place) is a node_modules-only fix --
+nothing committed, nothing in package.json/the lockfile changes, and it does not touch the
+Mac's own copy of `node_modules`. A future cloud session hitting the same rollup/esbuild
+"Cannot find module" error should redo this rather than treating it as an unfixable blocker.
+
+With that in place, `pnpm test` (368 tests) shows **10 failures, none caused by task 7**,
+confirmed by `git stash`-ing this session's changes and re-running the same three failing
+files against the pre-task-7 commit (`363268a`) -- identical failures. These were never caught
+before because `pnpm test` could not run at all in any earlier cloud session (typecheck/lint
+were clean, so tasks 3-6 were marked done on that basis only):
+- `graph.test.ts` (7 of 10 failures): every scenario throws `"plan is already being used as a
+  state attribute (a.k.a. a channel), cannot also be used as a node name"` from
+  `buildGraph`'s `.addNode('plan', nodes.plan)` (graph.ts) -- `state.ts`'s `PayOpsState` also has
+  a `plan` channel (task 3, D036/D037-adjacent), and this LangGraph version rejects a node and a
+  channel sharing a name. Likely fix: rename one of the two (e.g. the state channel to
+  `investigationPlan`, matching this doc's own "gap-targeted re-round" wording in D041) --
+  needs checking every reader of `state.plan` first.
+- `nodes.test.ts` (1 failure): `riskAgent`'s LangGraph state update includes `findings: []`
+  where the test (and `mergeById`'s append-only reducer contract) expects the key omitted
+  entirely when Risk finds nothing -- either the test's expectation or `riskAgent`'s return
+  shape is wrong; needs task 5's author to decide which.
+- `context.test.ts` (2 failures): `applyBudget`'s drop-order test now finds `droppedPeers` true
+  when it expects false after dropping history alone; the reconciliation specialist's context
+  builder is including `ev_02` (payment/gateway evidence) that `sliceEvidenceForAgent` should
+  have scoped out. Both are in task 4's ContextBuilder code, not task 7's.
+
+`pnpm typecheck` and `pnpm lint` are clean across all packages, including this session's
+additions. Task 7's own new test (`store.test.ts`, 4 tests) passes, and confirming it isolates
+correctly from the above (via `git stash`) is how these were found, not introduced.
 
 ## Known gaps (deliberate, later phases)
 
@@ -83,6 +121,52 @@ on the Mac to verify.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 4 task 7: `agentFindings`/`evidence` persistence
+- New Drizzle tables `agentFindings`/`evidence` (`packages/core/src/db/schema/agents.ts`), one
+  row per finding/evidence item, normalized out of `agentRuns.findings`/`agentRuns.evidence`
+  (docs/04-data-model.md's row spec). Both keep the jsonb columns on `agentRuns` as the source
+  the existing trace UI reads (D042) -- the new tables exist so task 8's grounding trace can
+  query/join per finding instead of deserializing a whole run's blob. Generated PK
+  (`newId('agentFinding')`/`newId('evidenceRow')`, two new `ID_PREFIX` entries in
+  `packages/shared/src/ids.ts`) plus a `uniqueIndex` on the natural `(runId, findingId)` /
+  `(runId, evidenceId)` pair, matching this schema's existing house style for a natural
+  composite key (`cases_open_fingerprint_uq`, `disputes_one_open_per_batch_uq`).
+- `grounded` (agentFindings): defaults `true`, flips to `false` only when
+  `state.grounding.violations` names the finding's id -- covers both a real J4 contradiction and
+  "J4 never ran for this finding" (fast path) under one rule, matching D041's "innocent until a
+  violation names it" model for `state.findings` itself. Full rationale in D042.
+- Migration `packages/core/drizzle/0003_aromatic_firelord.sql` (`drizzle-kit generate`, applied
+  and confirmed clean against a fresh local PGlite dev DB via `pnpm db:migrate`).
+- New `syncEvidenceAndFindings` (`packages/agents/src/store.ts`), an idempotent
+  `insert ... onConflictDoUpdate` keyed on the same natural pairs. Called once from `run.ts`'s
+  `syncRunRow`, right after `graph.invoke`/resume returns, using the exact same final
+  `state.evidence`/`state.findings`/`state.grounding` that already goes onto the jsonb columns
+  -- one write point, not one per node. `run.ts`'s two call sites now also pass `caseId` through
+  to `syncRunRow`.
+- Tests: new `packages/agents/src/store.test.ts` (4 tests, PGlite harness like `graph.test.ts`/
+  `migrate.test.ts`) -- one evidence/finding row written and `grounded: true` by default;
+  idempotent re-sync (simulating an interrupt/resume or extra grounding round) updates in place
+  with no duplicate rows; `grounded` computed correctly for a violated finding vs. a surviving
+  one; two different runs reusing the same within-run ids never collide.
+- **Environment fix, not committed:** got `pnpm test`/`pnpm db:generate` actually running in this
+  cloud session for the first time (previously blocked entirely -- see Blockers) by installing
+  the missing linux-arm64 native binaries for esbuild and rollup into `node_modules/.pnpm`
+  (the connected folder's `node_modules` was built on macOS; this session's shell is a bridged
+  Linux/arm64 VM). node_modules-only, nothing in package.json or the lockfile changed.
+- **Found, did not fix (out of scope for this task -- see Blockers, flagged as Next task's
+  reading before starting):** with `pnpm test` finally able to run, 10 pre-existing failures
+  surfaced in tasks 3/4/5/6's code (a `plan` node/state-channel name collision in `graph.ts`/
+  `state.ts`, `riskAgent`'s `findings: []` vs. an expected omitted key, and two `context.test.ts`
+  budget/scoping assertions). Confirmed by `git stash`-ing this session's changes and
+  re-running the same failing files against the pre-task-7 commit -- identical failures, so
+  none of this session's changes caused or need to fix them.
+- Checks: `pnpm typecheck` and `pnpm lint` clean across all packages (this was already true
+  before this session, on the same code that fails at test time -- see Blockers for why that
+  gap existed). `pnpm test`: 358/368 passing, the 10 failures above pre-existing.
+  `pnpm db:migrate` against a fresh local PGlite dev DB: migrations applied cleanly.
+- Not done this session: UI decision/grounding trace (task 8), cassette recordings (task 9), and
+  none of the 10 pre-existing failures above -- see Next task and Blockers.
 
 ### 2026-09-28 · Phase 4 task 6: `groundCheck` + J4 structural/semantic grounding
 - New `packages/agents/src/grounding/predicates.ts`: one fact predicate per `FindingCode`
