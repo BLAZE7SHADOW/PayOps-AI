@@ -1,11 +1,13 @@
 /**
  * Context builder (docs/03-agent-system.md §8): a stable, cache-friendly prefix, the case brief,
- * an evidence slice rendered as compact facts, and the specific task. Kept to one investigator
- * in Phase 3 (no per-agent slice/budget split yet — that is Phase 4's ContextBuilder-per-agent).
+ * an evidence slice rendered as compact facts, and the specific task. `followUpPrompt` takes the
+ * calling specialist's own tool catalog so its follow-up choice can only name its own tools; a
+ * real per-agent budget/projection split (dropping sections, PII masking, token logging) is
+ * Phase 4 task 4's ContextBuilder, not built yet.
  */
 import type { AttemptSummary, CaseBrief, EvidenceItem, Finding } from '@payops/shared';
 import type { LlmMessage } from '@payops/core';
-import { FOLLOWUP_TOOLS } from './tools';
+import { FOLLOWUP_TOOLS, type ToolDef } from './tools';
 
 const SYSTEM_PROMPT = [
   'You are the PayOps AI investigator for a payment-operations product.',
@@ -42,8 +44,12 @@ function evidenceTable(evidence: readonly EvidenceItem[]): string {
     .join('\n');
 }
 
-export function followUpPrompt(brief: CaseBrief, baseline: readonly EvidenceItem[]): LlmMessage[] {
-  const catalog = FOLLOWUP_TOOLS.map((t) => `- ${t.name}: ${t.description}`).join('\n');
+export function followUpPrompt(
+  brief: CaseBrief,
+  baseline: readonly EvidenceItem[],
+  tools: readonly ToolDef[] = FOLLOWUP_TOOLS,
+): LlmMessage[] {
+  const catalog = tools.map((t) => `- ${t.name}: ${t.description}`).join('\n');
   return [
     { role: 'system', content: SYSTEM_PROMPT },
     {

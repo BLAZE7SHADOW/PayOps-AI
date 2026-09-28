@@ -124,3 +124,26 @@ retries. `createCore` gained an optional `decision?: DecisionPort`, defaulting t
 `NullDecisionPort` that always rejects, so tests, the simulator and any caller that doesn't care
 about J1 are unaffected; `apps/server` is the only caller that wires a real one
 (`createDecisionPort(env)`, same adapter and model pin the agent graph uses).
+
+## D037 · Risk specialist's real tools and J3 scoring are deferred to Phase 4 task 5
+`riskAgent` (Phase 4 task 3) is wired into the graph with the same baseline+follow-up+findings
+shape as Payment/Reconciliation, but `tools.ts`'s `RISK_TOOLS` is an empty, typed array: there are
+no risk-specific tools yet (`getCustomerHistory`/`getDeviceSignals`/`getFailedAttempts`/
+`getChargebackHistory`, docs/03 §9) and no J3 atomic-score composite. `riskAgent` therefore always
+skips both its LLM calls and returns zero evidence and zero findings, and `state.risk` stays
+`null`. This is expected, not a bug: it exercises the fan-out/join plumbing end to end without
+inventing a fake risk score. Phase 4 task 5 adds the real tools, J3's Score questions
+(`velocity_abuse`/`identity_mismatch`/`chargeback_pattern`/`merchant_exposure`) and the
+code-weighted tier combination.
+
+## D038 · Specialist prompts are pre-scoped to their own tool group's evidence
+Full per-agent `ContextBuilder`s (budgets, projection, PII masking, token logging) are Phase 4
+task 4. Until then, each specialist's `evidenceForTools` (nodes.ts) filters `state.evidence` down
+to just the facts its own tool group produced before building its follow-up/findings prompts, and
+`buildFollowUpChoiceSchema` (schemas.ts) gives each specialist a Zod enum limited to its own
+group's tool names. This makes docs/03 §3/§8's "never contains" rule true today (a payment
+specialist's prompt cannot contain ledger/settlement evidence, and its follow-up choice cannot
+name a ledger tool) without waiting on task 4's full budget/projection machinery. `triage` still
+gathers the combined baseline evidence for every group up front (unchanged from Phase 3), because
+the fast path (`diagnose` → `resolve` directly) skips `plan` and every specialist entirely and
+still needs evidence to cite in its narrative template.

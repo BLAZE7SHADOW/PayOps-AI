@@ -1,20 +1,32 @@
 import { z } from 'zod';
 import { FINDING_CODES, ROOT_CAUSES } from '@payops/shared';
-import { FOLLOWUP_TOOLS } from './tools';
+import { FOLLOWUP_TOOLS, type ToolDef } from './tools';
 
-const followUpToolNames = FOLLOWUP_TOOLS.map((t) => t.name) as [string, ...string[]];
+/**
+ * Builds a per-specialist follow-up schema (docs/03 §2 "investigative pass") whose Zod enum only
+ * allows tools from that specialist's own group, so a specialist's follow-up choice can never
+ * name another agent's tool (docs/03 §3/§8 "never contains"). Returns `null` when the group has
+ * no follow-up tools at all (Risk, until Phase 4 task 5 adds risk tools) — callers skip the LLM
+ * call entirely in that case rather than building a schema with an empty `z.enum`.
+ */
+export function buildFollowUpChoiceSchema(tools: readonly ToolDef[]) {
+  if (tools.length === 0) return null;
+  const toolNames = tools.map((t) => t.name) as [string, ...string[]];
+  return z.object({
+    followUps: z
+      .array(
+        z.object({
+          tool: z.enum(toolNames),
+          reason: z.string().trim().min(3).max(200),
+        }),
+      )
+      .max(6),
+  });
+}
 
-/** LLM call #1 of `investigate`: which optional tools (if any) to call next, bounded. */
-export const FollowUpChoiceSchema = z.object({
-  followUps: z
-    .array(
-      z.object({
-        tool: z.enum(followUpToolNames),
-        reason: z.string().trim().min(3).max(200),
-      }),
-    )
-    .max(6),
-});
+/** The combined-tool schema, kept for `prompts.test.ts`'s default `followUpPrompt` call; each
+ * specialist node now builds its own narrower schema via `buildFollowUpChoiceSchema`. */
+export const FollowUpChoiceSchema = buildFollowUpChoiceSchema(FOLLOWUP_TOOLS)!;
 export type FollowUpChoice = z.infer<typeof FollowUpChoiceSchema>;
 
 /** LLM call #2 of `investigate`: typed findings citing evidence ids (docs/03 §7). */

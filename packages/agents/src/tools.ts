@@ -1,7 +1,8 @@
 /**
- * Payment + Reconciliation tool groups (docs/03-agent-system.md §9). Phase 3 has one full
- * investigator (no specialist split yet, no Risk group), so tools are grouped only for the
- * context builder's "never contains" rule and for organizing baseline vs. follow-up.
+ * Payment, Reconciliation and Risk tool groups (docs/03-agent-system.md §9), one group per
+ * specialist agent (nodes.ts: `paymentAgent`/`reconciliationAgent`/`riskAgent`). The grouping is
+ * what makes the "never contains" rule (§3/§8) real: each specialist's follow-up LLM call can
+ * only pick from its own group's tools, so it can never call another agent's tool.
  *
  * Each tool is a pure projector over the case's already-loaded `CaseState` (docs/02 §4.2: the
  * gateway and database were already read once by `loadCase`; tools never touch them again).
@@ -21,7 +22,7 @@ export interface ToolEvidenceDraft {
 
 export interface ToolDef {
   name: string;
-  group: 'payment' | 'reconciliation';
+  group: 'payment' | 'reconciliation' | 'risk';
   /** Always called by the baseline (deterministic) pass. */
   baseline: boolean;
   description: string;
@@ -253,7 +254,20 @@ const getFeeBreakdown: ToolDef = {
 
 export const PAYMENT_TOOLS: ToolDef[] = [getInternalPayment, getGatewayPayment, getOrder, getOrderTimeline, getWebhookDeliveries, getPaymentAttempts];
 export const RECONCILIATION_TOOLS: ToolDef[] = [getLedgerEntries, getRefund, getRefundGatewayStatus, getSettlementLines, getFeeBreakdown];
-export const ALL_TOOLS: ToolDef[] = [...PAYMENT_TOOLS, ...RECONCILIATION_TOOLS];
+/**
+ * No risk-specific tools exist yet (Phase 4 task 5 adds `getCustomerHistory`, `getDeviceSignals`,
+ * `getFailedAttempts`, `getChargebackHistory` plus J3 scoring, docs/03 §9). Kept as an empty,
+ * typed group so `riskAgent` (nodes.ts) has the same shape as Payment/Reconciliation and the
+ * graph's per-specialist tool split (docs/03 §3 "never contains") is total over `AgentName`.
+ */
+export const RISK_TOOLS: ToolDef[] = [];
+export const ALL_TOOLS: ToolDef[] = [...PAYMENT_TOOLS, ...RECONCILIATION_TOOLS, ...RISK_TOOLS];
 
 export const BASELINE_TOOLS = ALL_TOOLS.filter((t) => t.baseline);
 export const FOLLOWUP_TOOLS = ALL_TOOLS.filter((t) => !t.baseline);
+
+/** Per-specialist follow-up subsets (docs/03 §2 "investigative pass"): each specialist's `plan`
+ * fan-out node may only pick from its own group, so it can never call another agent's tools. */
+export const PAYMENT_FOLLOWUP_TOOLS = PAYMENT_TOOLS.filter((t) => !t.baseline);
+export const RECONCILIATION_FOLLOWUP_TOOLS = RECONCILIATION_TOOLS.filter((t) => !t.baseline);
+export const RISK_FOLLOWUP_TOOLS = RISK_TOOLS.filter((t) => !t.baseline);

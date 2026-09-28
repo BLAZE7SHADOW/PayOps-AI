@@ -4,10 +4,10 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 task 1 (Jev adapter) and the start of
-task 3 (J1 signal intake) are done; the rest of Phase 4 (specialist split + J2 plan, context
-builders, risk specialist + J3, groundCheck + J4, evidence persistence, UI decision/grounding
-trace, cassette recordings) is not started.
+**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 task 1 (Jev adapter), task 2 (J1 signal
+intake) and task 3 (specialist split + J2 `plan` + `Send` fan-out + `join`) are done; the rest of
+Phase 4 (context builders, risk specialist + J3, groundCheck + J4, evidence persistence, UI
+decision/grounding trace, cassette recordings) is not started.
 
 ## Phase checklist
 
@@ -21,12 +21,13 @@ trace, cassette recordings) is not started.
 
 ## Next task
 
-Continue Phase 4 task 3: split `investigate` into Payment/Reconciliation/Risk specialists with a
-`plan` node (J2) and `Send`-based parallel fan-out + `join` (docs/06-phases.md Phase 4 task 3,
-docs/03-agent-system.md §5 graph, §2 division of labour). Read `docs/06-phases.md` Phase 4 task
-list and the relevant sections of `docs/03-agent-system.md` first. After that: ContextBuilders
-(task 4), Risk specialist + J3 (task 5), groundCheck + J4 (task 6), evidence/finding persistence
-(task 7), UI decision/grounding trace (task 8), cassette recordings (task 9).
+Phase 4 task 4: ContextBuilders per agent (budgets, projection, PII masking, token estimate
+logging), docs/06-phases.md Phase 4 task 4, docs/03-agent-system.md §8. Note for that session:
+`riskAgent` (nodes.ts) currently has an empty tool set (`RISK_TOOLS = []` in tools.ts) by design —
+task 5 (Risk specialist: signal bucketing + J3 atomic scores → tier) is what gives it real tools
+and fills `state.risk`; do not build risk scoring as part of task 4. After task 4: Risk specialist
++ J3 (task 5), groundCheck + J4 (task 6), evidence/finding persistence (task 7), UI
+decision/grounding trace (task 8), cassette recordings (task 9).
 
 ## How to run locally
 
@@ -75,6 +76,55 @@ on the Mac to verify.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 4 task 3: specialist split, J2 plan, Send fan-out, join
+- Replaced the single `investigate` node with the doc's fan-out shape (docs/03 §5): `plan`
+  (Phase 4 task 3, `packages/agents/src/nodes.ts`) asks Jev J2 for a `primary_hypothesis` Choice
+  and `need_payment`/`need_reconciliation`/`need_risk` Nouls, then routes with a new pure function
+  `choosePlanSpecialists` (`packages/agents/src/planning.ts`, unit-tested without a graph or a
+  DecisionPort): confidence < 0.5 runs every specialist (the doc's safe default); otherwise a
+  specialist runs if its own need Noul is >= 0.35, unioned with `mandatorySpecialists` (Payment
+  always, since every case here traces back to a payment; Risk once the amount band reaches
+  HIGH). `graph.ts`'s conditional edge out of `plan` returns a `Send` per selected specialist
+  (`paymentAgent` | `reconciliationAgent` | `riskAgent`), so a specialist `plan` did not choose
+  never runs. All three converge on a new `join` node (a log-only observation point — the state
+  reducers already merged `agentsVisited`/`evidence`/`findings` by the time it runs), which feeds
+  `resolve` exactly where `investigate` used to (`groundCheck` is task 6, not wired yet).
+- Each specialist (`buildSpecialistNode` factory in `nodes.ts`) reuses `investigate`'s two-stage
+  pattern (baseline already gathered by `triage`, then a bounded follow-up LLM call + a findings
+  LLM call) but scoped to its own tool group only: `evidenceForTools` filters the specialist's own
+  prompt down to evidence its own tools produced, and `buildFollowUpChoiceSchema`
+  (`schemas.ts`) gives each specialist a Zod enum that can only name its own group's tools — a
+  payment specialist call can never resolve to a ledger/settlement tool. `tools.ts` gained
+  `PAYMENT_FOLLOWUP_TOOLS`/`RECONCILIATION_FOLLOWUP_TOOLS`/`RISK_FOLLOWUP_TOOLS` and a `'risk'`
+  `ToolDef.group` member with an empty `RISK_TOOLS = []` (see D037/D038 in DECISIONS.md — Risk's
+  real tools + J3 scoring are Phase 4 task 5, not this task). A specialist with no follow-up tools
+  or no evidence in its own slice skips both LLM calls and returns zero evidence/findings, which
+  is the expected shape for `riskAgent` right now.
+- `triage` is unchanged: it still gathers the combined baseline evidence for every group up front,
+  because the fast path (`diagnose` returning a diagnosis directly to `resolve`, skipping `plan`
+  and every specialist) still needs evidence to cite in its narrative template.
+- Tests: `packages/agents/src/planning.test.ts` (new) covers the confidence-floor fallback (run
+  ALL), the settlement_mismatch-shaped routing case (Reconciliation included via its own Noul, not
+  Payment-only), the 0.35 inclusion threshold on both sides, the Payment/Risk mandatory rules, and
+  stable output ordering. `graph.test.ts`'s four scenarios and three cassette replays are
+  unchanged and still pass conceptually (all exercise only the fast path, which never touches
+  `plan`/specialists/`join` — verified by re-reading the fixture: its `DecisionPort` fixture always
+  answers with high `root_cause` confidence and `needs_human: 0`, i.e. J6 fast). No new graph-level
+  integration test for the full path (Jev-backed `plan` + real specialists) was added this session
+  — the existing `noLlm`/single-shape `decision` test fixtures in `graph.test.ts` answer J6's
+  question shape only; extending them for J2 is left as part of task 4 (ContextBuilders), when the
+  full path's prompts actually need real per-agent context slices to test against meaningfully.
+- Checks: `pnpm typecheck` and `pnpm lint` clean across all packages (root, via `pnpm -r --if-present typecheck`
+  and `pnpm lint`). `pnpm test` still cannot run in this cloud session — the connected folder's
+  `node_modules` only has the macOS Rollup native binary
+  (`Cannot find module '@rollup/rollup-linux-arm64-gnu'`), the same bridge issue noted in
+  Blockers. Ask Shivam to run `pnpm test` (including the new `planning.test.ts`) locally on the
+  Mac before trusting this session's test additions fully.
+- Not done this session: ContextBuilders (task 4), Risk specialist + J3 (task 5), groundCheck +
+  J4 (task 6), evidence/finding persistence (task 7), UI trace (task 8), cassettes (task 9) — see
+  Next task.
+
 
 ### 2026-09-28 · Phase 4 start: Jev smoke test + J1 signal intake
 - Confirmed Phase 4 task 1 (`DecisionPort` + `JevDecisionAdapter`) was already built during Phase
