@@ -9,6 +9,8 @@ export const OPS_EVENTS = {
   caseUpdated: 'case.updated',
   approvalRequested: 'approval.requested',
   approvalResolved: 'approval.resolved',
+  /** A resolution attempt changed state (executing, validated, rejected...). Payload: ResolutionItem. */
+  resolutionUpdated: 'resolution.updated',
 } as const;
 
 export const RUN_EVENTS = [

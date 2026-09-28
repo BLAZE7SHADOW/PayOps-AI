@@ -19,3 +19,6 @@ test-results/
 # local database
 .data/
 .sync/
+
+# Cowork app output folder
+Claude outputs/

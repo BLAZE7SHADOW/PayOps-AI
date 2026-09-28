@@ -21,7 +21,7 @@ Drizzle schema lives in `packages/core/src/db/schema/`. Tables use snake_case; T
 | `orders` | `orderId`, `merchantId`, `customerId`, `amountMinor`, `status` (PENDING/PAID/FAILED/CANCELLED/FULFILLED), `paymentId?`, `version` (optimistic lock), `timeline[{at, from, to, by}]` |
 | `payments` | `paymentId`, `gwPaymentId`, `orderId`, `amountMinor`, `status` (mirror of what we believe), `hold`, `attemptCount` |
 | `payment_attempts` | `paymentId?`, `customerId`, `deviceId`, `result`, `failureCode`, `cardCountry`, `at` |
-| `refunds` | `refundId`, `paymentId`, `gwRefundId?`, `amountMinor`, `status`, `reason`, `requestedAt` |
+| `refunds` | `id`, `gwPaymentId` (always), `paymentId?` (null when the captured payment never reached our system, e.g. a duplicate capture), `gwRefundId?`, `amountMinor`, `status`, `reason`, `requestedAt` |
 | `ledger_entries` | `entryId`, `paymentId?`, `refundId?`, `account` (CUSTOMER_RECEIVABLE, MERCHANT_PAYABLE, FEES, REFUNDS), `direction` (DEBIT/CREDIT), `amountMinor`, `postedAt`, `source` (system/manual/agent-executor), `reversalOf?` (append-only) |
 | `settlements` | `batchId`, `merchantId`, `expectedNetMinor`, `reportedNetMinor`, `status` (MATCHED/MISMATCH/PENDING) |
 | `disputes` | `type` (SETTLEMENT/CHARGEBACK), `refs`, `amountMinor`, `status` |
@@ -37,9 +37,11 @@ Drizzle schema lives in `packages/core/src/db/schema/`. Tables use snake_case; T
 | `agent_steps` | `runId`, `seq`, `node`, `kind` (NODE/TOOL/LLM/DECISION), `name`, `input` (projected), `output` (projected), `contextTokens?`, `contextHash?`, `usage?`, `latencyMs`, `error?`, `at` (append-only) |
 | `agent_findings` | `runId`, `caseId`, `findingId`, `agent`, `code`, `statement`, `evidenceIds[]`, `confidence`, `grounded` |
 | `evidence` | `runId`, `evidenceId`, `source`, `system`, `entityRef`, `facts`, `stepId` |
-| `approvals` | `caseId`, `runId?`, `tier` (OPS/MANAGER), `proposal`, `policyRuleIds[]`, `status` (PENDING/APPROVED/REJECTED/ESCALATED), `requestedBy`, `decidedBy?`, `comment?`, `decidedAt?` |
-| `executions` | `idempotencyKey` unique, `caseId`, `runId?`, `action`, `params`, `status` (SUCCEEDED/FAILED), `result`, `error?`, `at` |
-| `validation_results` | `caseId`, `runId?`, `attempt`, `verdict`, `checks[{ id, description, expected, actual, pass }]`, `at` |
+| `resolutions` | one attempt to resolve a case: `caseId`, `runId?`, `attempt`, `actions` (CatalogAction[]), `rationale`, `proposedBy {type,id,name}`, `policy` (PolicyDecision), `status` (BLOCKED/AWAITING_APPROVAL/REJECTED/ESCALATED/EXECUTING/EXECUTION_FAILED/VALIDATED) |
+| `approvals` | `resolutionId`, `caseId`, `tier` (OPS/MANAGER), `status` (PENDING/APPROVED/REJECTED/ESCALATED), `requestedBy`, `decidedBy?`, `comment?`, `decidedAt?` (one pending approval per case) |
+| `executions` | `idempotencyKey` unique, `resolutionId`, `caseId`, `actionIndex`, `action`, `params`, `status` (STARTED/SUCCEEDED/FAILED), `summary`, `result`, `error?`, `startedAt`, `finishedAt` |
+| `validation_results` | `resolutionId`, `caseId`, `attempt`, `verdict`, `checks[{ id, subject, description, expected, actual, pass, kind, actionIndex }]`, `at` |
+| `disputes` | `type` (SETTLEMENT), `batchId`, `gwPaymentId?`, `amountMinor`, `status` (OPEN/WON/LOST), `reason`, `resolutionId` |
 | `audit_events` | `actorType` (USER/AGENT/SYSTEM), `actorId`, `action`, `entityType`, `entityId`, `before?`, `after?`, `runId?`, `at` (append-only) |
 
 LangGraph checkpoints: `PostgresSaver` (`@langchain/langgraph-checkpoint-postgres`) manages its own tables in the same database. pg-boss manages the `pgboss` schema.

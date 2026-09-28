@@ -18,6 +18,7 @@ import {
   type SystemKey,
 } from '../enums';
 import { SCENARIO_KEYS, type ScenarioKey } from '../scenarios';
+import type { CaseResolutionView } from './resolution';
 
 // ── Envelope types ───────────────────────────────────────────────────────────
 export interface ApiErrorBody {
@@ -188,6 +189,8 @@ export interface CaseDetail extends CaseListItem {
   lifecycle: LifecycleEvent[];
   resolvedAt: string | null;
   resolution: { by: ActorType; summary: string } | null;
+  /** Manual resolution context and history (Phase 2). */
+  resolutionView: CaseResolutionView;
 }
 
 // ── Overview ─────────────────────────────────────────────────────────────────

@@ -301,11 +301,13 @@ Every execution uses an idempotency key `hash(caseId, runId, attempt, actionInde
 
 ## 11. Policy engine
 
-Pure TypeScript in `packages/core/src/policy/`. Versioned rules, each returns `{ tier, ruleId, reason }`; the strictest tier wins. Policy version is stored on every decision.
+Pure TypeScript in `packages/core/src/policy/`. Versioned rules, each returns `{ tier, ruleId, reason }`; the strictest tier wins. Policy version is stored on every decision. The rule table shown to users lives in `packages/shared/src/policy.ts` (`POLICY_RULES`) and must match the code.
+
+Actions have a class (`shared/actions.ts`): `STATE_CORRECTION`, `MONEY_MOVEMENT`, `CLAIM`, `CONTROL`. The same engine evaluates proposals from people and from the agent; rules marked "agent" use model confidence and are skipped for people (a person's proposal has no model confidence). For people, "gateway capture verified" in P6 is checked by the action's preconditions instead of cited evidence. A person's proposal that needs approval must be approved by **someone else** (four-eyes).
 
 | Rule | Condition | Tier |
 |---|---|---|
-| P0 | grounding has violations on findings used by the proposal, or proposal empty | BLOCKED |
+| P0 | proposal empty, a precondition fails, or grounding has violations on findings used by the proposal | BLOCKED |
 | P1 | risk tier CRITICAL | BLOCKED (only HOLD / ESCALATE allowed) |
 | P2 | risk tier HIGH | MANAGER |
 | P3 | money-moving, amount > ₹10,000 | MANAGER |
@@ -313,7 +315,9 @@ Pure TypeScript in `packages/core/src/policy/`. Versioned rules, each returns `{
 | P5 | money-moving, amount ≤ ₹1,000, risk LOW, diagnosis confidence ≥ 0.9 | AUTO |
 | P6 | state-correction only (replay, mark paid, post ledger), gateway CAPTURED is cited evidence, confidence ≥ 0.85 | AUTO |
 | P7 | attempt ≥ 2 | at least OPS |
-| P8 | diagnosis confidence < 0.6 | at least OPS |
+| P8 | diagnosis confidence < 0.6 (agent only) | at least OPS |
+| P9 | any CLAIM action (settlement dispute) | OPS |
+| P10 | only CONTROL actions (hold, escalate) | AUTO |
 
 Approval rules: MANAGER tier needs role MANAGER. An approver cannot approve a run they manually started (four-eyes), enforced in the approvals service.
 
