@@ -386,6 +386,26 @@ export class ResolutionService {
     return this.queries.item(resolutionId);
   }
 
+  /**
+   * Closes a resolution as ESCALATED when `execute()` itself throws before ever returning an
+   * `ExecutionOutcome` (docs/06-phases.md Phase 5 task 6's "database serialization conflict
+   * during execute" drill) -- e.g. a database error surfacing from `ExecutorService` after
+   * `withSerializationRetry` (`packages/core/src/db/retry.ts`) exhausts its attempts, or any
+   * other error the executor could not turn into a normal FAILED step. Unlike
+   * `closeExecutionFailed`, there is no `ExecutionOutcome`/`execution.steps` to report a failed
+   * step from. Unlike `escalateWithoutProposal` (docs/DECISIONS.md D049), a resolution already
+   * exists here -- `policyGate` created it before `execute` ever ran -- so there is a real
+   * resolution row to close, just no execution outcome to close it with.
+   */
+  async escalateExecutionError(resolutionId: string, message: string, write: WriteContext): Promise<ResolutionItem> {
+    const resolution = await this.queries.row(resolutionId);
+    const ctx: WriteContext = { ...write, caseId: resolution.caseId, runId: resolution.runId };
+    await this.close(resolution, 'EXECUTION_FAILED', 'ESCALATED', `Execution could not complete: ${message}. Case escalated to a person`, ctx, null);
+    await this.refreshDetection(resolution.caseId);
+    await this.publish(resolutionId, resolution.caseId);
+    return this.queries.item(resolutionId);
+  }
+
   /** Closes a resolution that ran the validator (PASS resolves; PARTIAL/FAIL reopens or escalates). */
   async closeValidated(resolutionId: string, verdict: ValidationVerdict, write: WriteContext, opts: { onFailure?: 'OPEN' | 'ESCALATE' } = {}): Promise<ResolutionItem> {
     const resolution = await this.queries.row(resolutionId);
@@ -406,6 +426,25 @@ export class ResolutionService {
     await this.refreshDetection(resolution.caseId);
     await this.publish(resolutionId, resolution.caseId);
     return this.queries.item(resolutionId);
+  }
+
+  /**
+   * Moves the case straight to ESCALATED with no resolution ever having existed (docs/06-phases.md
+   * Phase 5 task 5's budget guard, docs/DECISIONS.md D049): `packages/agents/src/nodes.ts`'s
+   * `guardBudget` can trip anywhere before `policyGate` creates a resolution row, so there is
+   * nothing for `closeValidated`/`closeExecutionFailed` to close -- just the case itself.
+   * `cases.setStatus` already writes the case's audit event; this only adds the same live
+   * publish every other close path in this file does.
+   */
+  async escalateWithoutProposal(caseId: string, summary: string, write: WriteContext): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await this.cases.setStatus(tx, caseId, 'ESCALATED', summary, write);
+    });
+    const [caseItem] = await this.cases.listItems([caseId]);
+    if (caseItem) {
+      this.events.publish(ROOMS.ops, OPS_EVENTS.caseUpdated, caseItem);
+      this.events.publish(ROOMS.case(caseId), OPS_EVENTS.caseUpdated, caseItem);
+    }
   }
 
   private async close(

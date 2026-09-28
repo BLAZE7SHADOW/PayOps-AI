@@ -350,3 +350,57 @@ describe('replan: J5 replan strategy and its caps/fallback (docs/03 §4 "J5", §
     expect(update.budget?.jevCalls).toBe(1);
   });
 });
+
+describe('execute: a database-layer failure escaping the executor escalates cleanly (docs/06-phases.md Phase 5 task 6, "database serialization conflict during execute")', () => {
+  /** `execute` only ever calls `core.resolutions.execute`/`closeExecutionFailed`/
+   * `escalateExecutionError` (nodes.ts) -- no direct `core.db` access -- so a fake `resolutions`
+   * object is enough to drive it without a database, same spirit as `riskAgent`'s fake ports
+   * above. */
+  function executeState(): PayOpsStateType {
+    return { caseId: 'case_a', runId: 'run_a', resolutionId: 'res_a', aiMode: 'REPLAY' } as unknown as PayOpsStateType;
+  }
+
+  it('escalates the resolution and never throws when core.resolutions.execute itself rejects', async () => {
+    const serializationError = Object.assign(new Error('could not serialize access due to concurrent update'), { code: '40001' });
+    const escalateExecutionError = vi.fn(async () => ({}) as never);
+    const core = {
+      resolutions: {
+        execute: vi.fn(async () => { throw serializationError; }),
+        closeExecutionFailed: vi.fn(),
+        escalateExecutionError,
+      },
+    } as unknown as Core;
+    const nodes = buildNodes({ core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+
+    const update = await nodes.execute(executeState()) as Partial<PayOpsStateType>;
+
+    expect(update.status).toBe('ESCALATED');
+    expect(update.error).toContain('could not serialize access');
+    expect(escalateExecutionError).toHaveBeenCalledTimes(1);
+    expect(escalateExecutionError).toHaveBeenCalledWith('res_a', expect.stringContaining('could not serialize access'), expect.anything());
+    // The normal execution-failure path (an execution that *ran* but a step failed) must not
+    // also fire -- this is a different, DB-layer failure with no ExecutionOutcome at all.
+    expect(core.resolutions.closeExecutionFailed).not.toHaveBeenCalled();
+  });
+
+  it('still uses the normal closeExecutionFailed path when execute() returns a clean FAILED outcome (unchanged by this task)', async () => {
+    const closeExecutionFailed = vi.fn(async () => ({}) as never);
+    const core = {
+      resolutions: {
+        execute: vi.fn(async () => ({
+          resolution: {},
+          execution: { ok: false, steps: [{ index: 0, status: 'FAILED', error: { code: 'PRECONDITION_FAILED', message: 'stale' } }] },
+        })),
+        closeExecutionFailed,
+        escalateExecutionError: vi.fn(),
+      },
+    } as unknown as Core;
+    const nodes = buildNodes({ core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+
+    const update = await nodes.execute(executeState()) as Partial<PayOpsStateType>;
+
+    expect(update.status).toBe('ESCALATED');
+    expect(closeExecutionFailed).toHaveBeenCalledTimes(1);
+    expect(core.resolutions.escalateExecutionError).not.toHaveBeenCalled();
+  });
+});

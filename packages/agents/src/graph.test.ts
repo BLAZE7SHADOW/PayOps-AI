@@ -129,6 +129,182 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
 });
 
 
+describe('budget guard (docs/06-phases.md Phase 5 task 5, docs/DECISIONS.md D049)', () => {
+  it('escalates cleanly with no resolution when a single call\'s estimated cost alone exceeds MAX_COST_USD', async () => {
+    // A real J6_DIAGNOSE answer, but with an absurd token count -- enough on its own (via
+    // estimateCallCostUsd) to exceed AGENT_BUDGET_LIMITS.maxCostUsd before `plan` or `resolve`
+    // ever run. `diagnose` is the very first Jev/LLM call on the graph, so this proves the guard
+    // fires as early as the very first checkpoint, not just after many rounds.
+    const hugeCostDecision: DecisionPort = {
+      ask: vi.fn(async () => ({
+        answers: {
+          root_cause: { choice: 'WEBHOOK_PROCESSING_FAILURE', confidence: 0.99 },
+          evidence_consistent: { noul: 0.99, confidence: 0.99 },
+          needs_human: { noul: 0, confidence: 0.99 },
+        },
+        usage: { input_tokens: 5_000_000, output_tokens: 1_000_000 },
+      })) as unknown as DecisionPort['ask'],
+    };
+    const generated = await generateScenario(core, { scenario: 'captured_order_failed', seed: 704 });
+    const caseId = generated.casesOpened[0]!.id;
+    const runId = newId('run');
+    await createRunRow(core, { id: runId, caseId });
+    const deps = { core, llm: noLlm, decision: hugeCostDecision, onEvent: createEventSink(core, runId, caseId) };
+    const graph = buildGraph(deps, saver);
+    const result = await graph.invoke({ caseId, runId, aiMode: 'REPLAY' }, { configurable: { thread_id: runId } });
+
+    expect(result.status).toBe('ESCALATED');
+    expect(result.resolutionId).toBeNull();
+    expect(result.error).toContain('Budget guard');
+    expect(result.error).toContain('cost an estimated');
+    expect(result.budget.jevCalls).toBe(1); // the guard stops the run after the call that tripped it, not before
+
+    // No resolution ever existed -- only the case itself moved to ESCALATED
+    // (`resolution.service.ts`'s `escalateWithoutProposal`, not `closeValidated`).
+    const detail = await core.cases.get(caseId);
+    expect(detail.status).toBe('ESCALATED');
+    expect(detail.resolutionView.pendingApprovalId ?? null).toBeNull();
+  });
+});
+
+describe('failure drills (docs/06-phases.md Phase 5 task 6): each ends in a defined state, never an uncaught rejection', () => {
+  /** A `DecisionPort` that answers every Jev tag the full path can reach (J2/J3/J4/J6) with a
+   * real, valid shape -- unlike the top-of-file `decision()` fixture (fast-path/replan only), so
+   * this drill can isolate "Gemini fails" from "Jev also happens to fail on a shape mismatch".
+   * J6 deliberately answers with low `evidence_consistent` so `diagnose` always takes the full
+   * path (`resolve` needs the LLM), regardless of which root cause a given scenario expects. */
+  function fullPathDecision(): DecisionPort {
+    return {
+      ask: vi.fn(async (req: { tag: string }) => {
+        switch (req.tag) {
+          case 'J6_DIAGNOSE':
+            return {
+              answers: {
+                root_cause: { choice: 'UNKNOWN', confidence: 0.99 },
+                evidence_consistent: { noul: 0, confidence: 0.9 },
+                needs_human: { noul: 0, confidence: 0.9 },
+              },
+              usage: { input_tokens: 10, output_tokens: 3 },
+            };
+          case 'J2_PLAN':
+            return {
+              answers: {
+                primary_hypothesis: { choice: 'settlement_reconciliation', confidence: 0.9 },
+                need_payment: { noul: 1, confidence: 0.9 },
+                need_reconciliation: { noul: 1, confidence: 0.9 },
+                need_risk: { noul: 0, confidence: 0.9 },
+              },
+              usage: { input_tokens: 10, output_tokens: 3 },
+            };
+          case 'J3_RISK':
+            return {
+              answers: {
+                velocity_abuse: { score: 0, confidence: 0.95 },
+                identity_mismatch: { score: 0, confidence: 0.95 },
+                chargeback_pattern: { score: 0, confidence: 0.95 },
+                merchant_exposure: { score: 0, confidence: 0.95 },
+              },
+              usage: { input_tokens: 10, output_tokens: 3 },
+            };
+          case 'J4_GROUND':
+            return { answers: { sufficient: { type: 'noul', noul: 1, confidence: 0.9 } }, usage: { input_tokens: 10, output_tokens: 3 } };
+          default:
+            throw new Error(`fullPathDecision fixture: unexpected Jev tag ${req.tag}`);
+        }
+      }) as unknown as DecisionPort['ask'],
+    };
+  }
+
+  it('Gemini timeout: a specialist LLM call throwing contributes nothing (never crashes); resolve\'s own diagnosis call throwing escalates cleanly with no resolution', async () => {
+    // settlement_mismatch always takes the full path (docs/PROGRESS.md: its FINDING template
+    // never yields citable ids on the fast path), so `resolve` is guaranteed to need the LLM.
+    // Jev (`fullPathDecision` above) answers every tag normally -- only Gemini is down here.
+    const generated = await generateScenario(core, { scenario: 'settlement_mismatch', seed: 5001 });
+    const caseId = generated.casesOpened[0]!.id;
+    const runId = newId('run');
+    await createRunRow(core, { id: runId, caseId, scenarioKey: 'settlement_mismatch' });
+    const deps = { core, llm: noLlm, decision: fullPathDecision(), onEvent: createEventSink(core, runId, caseId) };
+    const graph = buildGraph(deps, saver);
+    const result = await graph.invoke({ caseId, runId, aiMode: 'REPLAY', scenarioKey: 'settlement_mismatch' }, { configurable: { thread_id: runId } });
+
+    expect(result.status).toBe('ESCALATED');
+    expect(result.resolutionId).toBeNull(); // never reached policyGate -- resolve failed before proposing anything
+    expect(result.error).toContain('Gemini call failed');
+    // Both specialists ran and contributed nothing (their own LLM calls threw and were caught),
+    // not zero agents visited -- `plan`'s J2 answer above routes both in.
+    expect(result.agentsVisited).toEqual(expect.arrayContaining(['payment', 'reconciliation']));
+    expect(result.findings).toHaveLength(0);
+
+    const detail = await core.cases.get(caseId);
+    expect(detail.status).toBe('ESCALATED');
+    expect(detail.resolutionView.pendingApprovalId ?? null).toBeNull();
+  });
+
+  it('Jev timeout: every Jev call throwing throughout a full run still resolves cleanly via each decision point\'s own documented fallback', async () => {
+    // diagnose (J6) throws -> forced FULL path; plan (J2) throws -> DEFAULT_ALL (every
+    // specialist runs); riskAgent (J3) throws -> rules-only tier, no LLM; groundCheck (J4) throws
+    // -> structural-only check. None of that stops the run: Gemini is healthy here (the mirror
+    // image of the drill above), so the full path still investigates and resolves normally --
+    // this is the "defined state" for a persistent Jev outage: the product keeps working, per
+    // CLAUDE.md's "the product must work with AI turned off".
+    const alwaysThrowsDecision: DecisionPort = { ask: vi.fn(async () => { throw new Error('Jev unreachable (simulated persistent timeout)'); }) as unknown as DecisionPort['ask'] };
+    const fullPathLlm: LlmPort = {
+      invokeStructured: vi.fn(async (_schema: unknown, _messages: unknown, meta: { node: string; callIndex: number }) => {
+        if (meta.node === 'resolve') {
+          return { data: { rootCause: 'WEBHOOK_PROCESSING_FAILURE', narrative: 'Diagnosed via Gemini while Jev was unreachable throughout the run.', confidence: 0.9, supportingFindingIds: [] }, usage: { inputTokens: 50, outputTokens: 20 } };
+        }
+        if (meta.callIndex === 0) return { data: { followUps: [] }, usage: { inputTokens: 20, outputTokens: 5 } };
+        return { data: { findings: [{ code: 'OTHER' as const, statement: 'Specialist finding produced while Jev was unreachable.', evidenceIds: ['ev_placeholder'], confidence: 0.6 }] }, usage: { inputTokens: 30, outputTokens: 10 } };
+      }) as unknown as LlmPort['invokeStructured'],
+    };
+    const generated = await generateScenario(core, { scenario: 'captured_order_failed', seed: 5002 });
+    const caseId = generated.casesOpened[0]!.id;
+    const runId = newId('run');
+    await createRunRow(core, { id: runId, caseId });
+    const deps = { core, llm: fullPathLlm, decision: alwaysThrowsDecision, onEvent: createEventSink(core, runId, caseId) };
+    const graph = buildGraph(deps, saver);
+    const result = await graph.invoke({ caseId, runId, aiMode: 'REPLAY' }, { configurable: { thread_id: runId } });
+
+    expect(result.status).toBe('RESOLVED');
+    expect(result.validation?.verdict).toBe('PASS');
+    expect(result.diagnosis?.path).toBe('FULL'); // J6 throwing always forces the full path
+    const detail = await core.cases.get(caseId);
+    expect(detail.status).toBe('RESOLVED');
+  });
+
+  it('database serialization conflict during execute: core.resolutions.execute throwing after the executor\'s own retries are exhausted escalates the existing resolution instead of crashing the run', async () => {
+    // `packages/core/src/db/retry.test.ts` already covers `withSerializationRetry` retrying and
+    // eventually giving up on a persistent 40001 in isolation. Reproducing a genuine Postgres
+    // serialization conflict here would need real concurrent SERIALIZABLE transactions racing
+    // each other -- slow and inherently flaky. Spying on `core.resolutions.execute` to reject
+    // once, the same way, tests exactly the part this drill is actually about: what the graph
+    // does once that call is exhausted and still fails.
+    const generated = await generateScenario(core, { scenario: 'captured_order_failed', seed: 5004 });
+    const caseId = generated.casesOpened[0]!.id;
+    const runId = newId('run');
+    await createRunRow(core, { id: runId, caseId });
+    const deps = { core, llm: noLlm, decision: decision('WEBHOOK_PROCESSING_FAILURE'), onEvent: createEventSink(core, runId, caseId) };
+    const graph = buildGraph(deps, saver);
+
+    const serializationError = Object.assign(new Error('could not serialize access due to concurrent update'), { code: '40001' });
+    const executeSpy = vi.spyOn(core.resolutions, 'execute').mockRejectedValueOnce(serializationError);
+    let result;
+    try {
+      result = await graph.invoke({ caseId, runId, aiMode: 'REPLAY' }, { configurable: { thread_id: runId } });
+    } finally {
+      executeSpy.mockRestore();
+    }
+
+    expect(result.status).toBe('ESCALATED');
+    expect(result.error).toContain('could not serialize access');
+    expect(result.resolutionId).not.toBeNull(); // policyGate did create a resolution before execute failed
+
+    const detail = await core.cases.get(caseId);
+    expect(detail.status).toBe('ESCALATED');
+    expect(detail.resolutionView.pendingApprovalId ?? null).toBeNull();
+  });
+});
+
 describe('recorded Phase 3 scenarios', () => {
   // Re-recorded for Phase 4 task 9 (docs/06-phases.md) against the current specialist-split
   // graph (`paymentAgent`/`reconciliationAgent`/`riskAgent`) and ContextBuilder prompts via

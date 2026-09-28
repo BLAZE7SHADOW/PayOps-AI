@@ -19,6 +19,7 @@ import type { Db } from '../db/client';
 import type { ExecutionRow, ResolutionRow } from '../db/rows';
 import { executions, type ExecutionError } from '../db/schema';
 import { AppError } from '../errors';
+import { withSerializationRetry } from '../db/retry';
 import type { ClockPort } from '../ports/clock';
 import type { EventPublisherPort } from '../ports/events';
 import { idempotencyKey } from '../actions/idempotency';
@@ -120,24 +121,34 @@ export class ExecutorService {
       summary = `${ACTION_META[action.type].label} failed: ${error.message}`;
     }
 
-    const row = await this.db.transaction(async (tx) => {
-      const [updated] = await tx
-        .update(executions)
-        .set({ status, summary, result, error, finishedAt: this.clock.now() })
-        .where(and(eq(executions.id, claimed.id), eq(executions.status, 'STARTED')))
-        .returning();
-      await this.audit.record(
-        auditFrom(ctx, {
-          action: 'action.executed',
-          entityType: 'resolution',
-          entityId: resolution.id,
-          summary: `Step ${index + 1} ${ACTION_META[action.type].label}: ${status === 'SUCCEEDED' ? summary : `FAILED. ${summary}`}`,
-          after: { index, type: action.type, status, idempotencyKey: key, error },
-        }),
-        tx,
-      );
-      return updated ?? claimed;
-    });
+    // Recording the outcome (not running the action -- that already happened above) is the one
+    // write in this method that could plausibly see a genuine Postgres serialization failure
+    // (docs/06-phases.md Phase 5 task 6): retried a couple of times in place since the whole
+    // transaction is safe to redo from scratch (it only re-reads `status`/`summary`/`result`/
+    // `error`, already computed above, and re-applies the same conditional update). Anything
+    // other than a `40001`, or a `40001` that outlives the retries, still propagates -- the
+    // caller (`execute`, below) has its own defined fallback for that (docs/DECISIONS.md, the
+    // `nodes.ts` `execute` node's catch block).
+    const row = await withSerializationRetry(() =>
+      this.db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(executions)
+          .set({ status, summary, result, error, finishedAt: this.clock.now() })
+          .where(and(eq(executions.id, claimed.id), eq(executions.status, 'STARTED')))
+          .returning();
+        await this.audit.record(
+          auditFrom(ctx, {
+            action: 'action.executed',
+            entityType: 'resolution',
+            entityId: resolution.id,
+            summary: `Step ${index + 1} ${ACTION_META[action.type].label}: ${status === 'SUCCEEDED' ? summary : `FAILED. ${summary}`}`,
+            after: { index, type: action.type, status, idempotencyKey: key, error },
+          }),
+          tx,
+        );
+        return updated ?? claimed;
+      }),
+    );
     this.publish(resolution.id);
     return row;
   }

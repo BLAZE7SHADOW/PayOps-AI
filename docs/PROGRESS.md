@@ -4,18 +4,21 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 5 · in progress.** Phase 4 is complete (see below). Phase 5 task 1 (replan node, J5,
-attempt tabs) is done (D047). Task 2 (`replay_fails_then_replan` passes on attempt 2) was
-confirmed already covered by task 1's own `graph.test.ts` rewrite -- no separate work needed.
-Task 3 (`packages/evals`: golden expectations, runner, markdown report) and task 4 (injection
-eval) are both done together (D048): 7 of 9 scenarios have golden expectations (status/verdict/
-tier gated; root-cause/action-set measured, not gated), `pnpm eval` (REPLAY) is a real CI gate
-that exits non-zero on a hard-gate failure, `pnpm eval:live` writes `docs/evals/<date>.md`, and
-the injection scenario (`injected_refund_request`) proves both halves of docs/03 §15's safety
-property (no refund proposed; the note is quarantined by the real J1 pipeline) as hard gates on
-the same golden run. `pnpm typecheck`, `pnpm lint`, `pnpm test` (402 passed, 0 skipped) all clean.
-Tasks 5-6 (budget guard escalation, failure drills: Gemini/Jev timeout, DB serialization
-conflict) are not started.
+**Phase 5 · all 6 tasks done (D047-D050).** Phase 4 is complete (see below). Tasks 1-5 are done
+(D047, D048, D049, see prior session logs). Task 6 (failure drills: Gemini timeout, Jev timeout,
+database serialization conflict during execute; each ends in a defined state) is done (D050):
+Jev timeout needed no new production code (every J2-J6 decision point already had a documented
+fallback) beyond one new graph-level drill proving a full run still resolves when Jev is down
+throughout. Gemini timeout was a real gap -- two `llm.invokeStructured` call sites (the specialist
+node factory, `resolve`'s diagnosis call) had no `try`/`catch` at all and would have crashed the
+run uncaught; both now have a defined fallback (a specialist contributes nothing; `resolve`
+escalates with no resolution, reusing D049's `state.error` branch). Database serialization
+conflict got a new small `withSerializationRetry` helper (`packages/core/src/db/retry.ts`) wired
+around the executor's result-recording transaction, plus a new `ResolutionService.
+escalateExecutionError` for when retries are exhausted. `pnpm typecheck`, `pnpm lint`, `pnpm test`
+(425 passed, 0 skipped) all clean; `pnpm eval` (REPLAY) still 7/7. Phase 5's own "Done when" also
+names a `pnpm eval:live` report committed under `docs/evals/` -- still outstanding, needs a real
+Gemini/Jev call from Shivam's Mac (see Next task).
 
 ## Phase checklist
 
@@ -24,28 +27,29 @@ conflict) are not started.
 - [x] Phase 2 · Resolution spine
 - [x] Phase 3 · First agent (resume-ready milestone)
 - [x] Phase 4 · Multi-agent, context, evidence, Jev
-- [ ] Phase 5 · Replan, evals, hardening (task 1 of 6 done)
+- [ ] Phase 5 · Replan, evals, hardening (6 of 6 tasks done; phase's own "Done when" still needs a `pnpm eval:live` report committed, see Next task)
 - [ ] Phase 6 · Polish, public demo, deploy
 
 ## Next task
 
-**Phase 5 tasks 1-4 are done (D047, D048). Start a new chat session for Phase 5 task 5**
-(budget guard: exceeding `MAX_TOOL_CALLS`/`MAX_COST_USD` per run escalates cleanly) **or task 6**
-(failure drills: Gemini timeout, Jev timeout, database serialization conflict during execute;
-each must end in a defined state). Read `docs/06-phases.md`'s Phase 5 section and
-`docs/DECISIONS.md`'s D048 first. Worth deciding early whether `MAX_TOOL_CALLS`/`MAX_COST_USD`
-already exist anywhere in the codebase (a quick grep first) or need to be added to
-`AGENT_BUDGET_LIMITS` (`packages/shared/src/agents.ts`) alongside the existing
-`maxFollowupToolCalls`/`recursionLimit`/`maxAttempts` -- docs/03 §2/§5 name them but task 5 is the
-first task that actually needs them enforced.
+**Phase 5's six tasks are all done (D047-D050). Start a new chat session for Phase 6**
+(docs/06-phases.md), but first close Phase 5's own "Done when" gap: a real `pnpm eval:live` run
+(needs live Gemini/Jev, so it must run on Shivam's Mac, same as Phase 4's `pnpm cassette:record`
+did) with its markdown report committed under `docs/evals/`. That is bookkeeping, not new agent
+code -- everything the report measures already passes in REPLAY (`pnpm eval`, 7/7).
 
-Separately, not urgent: `packages/evals`'s golden set covers 7 of 9 scenarios by design (D048) --
-`settlement_mismatch` and `suspicious_payment` both take the full path (plan -> specialists ->
-groundCheck) and were deliberately left out rather than guessing J2/J3/J4/LLM-findings fixtures
-with no existing full-path integration test to model them on. Extending the golden set to those
-two (or moving them under a `driver: 'cassette'` once cassettes exist for them) is fair game for
-whichever future session ends up writing the first real full-path integration test, but should
-not block tasks 5/6.
+Two small, known, deliberately-not-done-speculatively items carried over, neither blocking:
+- D049's narrow edge case: a budget trip during a `reinvestigate` loop's second pass can
+  attribute the close to the wrong branch of `closeEscalated` (still ends ESCALATED either way).
+  A one-line pickup (clearing `state.validation` on `reinvestigate` in `nodes.ts`'s `replan`) if
+  a future session touches the replan loop.
+- `packages/evals`'s golden set still covers 7 of 9 scenarios by design (D048) --
+  `settlement_mismatch` and `suspicious_payment` both take the full path and were deliberately
+  left out rather than guessing fixtures with no full-path integration test to model them on.
+  D050's new `graph.test.ts` failure-drill tests do now exercise `settlement_mismatch`'s full path
+  end to end (with a hand-built decision/LLM fixture, not golden-set fixtures) -- a real golden
+  scenario for it is still fair game for whichever future session extends the golden set, using
+  D050's fixture as a starting point.
 
 ## How to run locally
 
@@ -121,6 +125,81 @@ Shivam's Mac directly, same as task 9 did.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 5 task 6 (last task in the phase): failure drills -- Gemini timeout, Jev timeout, DB serialization conflict, see D050
+- Confirmed Jev timeout needed no new production code: every Jev decision point (J2/J3/J4/J5/J6)
+  already had a documented fallback (docs/03 §4), each already unit-tested. Added one new
+  graph-level drill instead (`graph.test.ts`): a `DecisionPort` throwing on every tag throughout a
+  full `captured_order_failed` run still ends `RESOLVED`/`verdict: PASS` -- the strongest form of
+  "the product must work with AI turned off" exercised end to end, not just per-node.
+- Found and fixed a real gap for Gemini timeout: `buildSpecialistNode`'s two `llm.invokeStructured`
+  calls and `resolve`'s diagnosis call (`nodes.ts`) had no `try`/`catch` at all -- confirmed (not
+  assumed) that this would have crashed a run uncaught, via the new `settlement_mismatch` drill
+  using the test file's existing `noLlm` fixture. Specialist fallback: contributes nothing (same
+  shape as the pre-existing "no evidence" skip branch) rather than crash. `resolve`'s fallback:
+  escalates with no resolution created, reusing D049's `state.error`/`closeEscalated` branch
+  rather than inventing a new one.
+- New `packages/core/src/db/retry.ts`: `isSerializationFailure` + `withSerializationRetry`, a
+  small generic retry-only-on-40001 helper (standard Postgres advice for a serialization
+  conflict). Wired around the one write in `ExecutorService.runStep` not already inside its
+  existing action-failure `try`/`catch` -- the result-recording transaction. New
+  `ResolutionService.escalateExecutionError` closes the resolution `policyGate` already created
+  when `core.resolutions.execute` itself throws after retries are exhausted (no `ExecutionOutcome`
+  to hand `closeExecutionFailed` in that case); `nodes.ts`'s `execute` node now catches and calls
+  it instead of letting the run crash.
+- Tests: `packages/core/src/db/retry.test.ts` (9, pure). `nodes.test.ts` gained a describe block
+  for `execute`'s new catch branch (2, fake `core.resolutions`, no database). `graph.test.ts`
+  gained three end-to-end drills, one per failure this task names: Gemini timeout on
+  `settlement_mismatch` (full path, specialists contribute nothing, `resolve` escalates with
+  `resolutionId: null`); Jev timeout throughout a full run (resolves normally); simulated exhausted
+  DB retries via `vi.spyOn(core.resolutions, 'execute').mockRejectedValueOnce(...)` (escalates the
+  already-created resolution, `resolutionId` still set) -- spied rather than a genuine concurrent
+  `40001`, since reproducing a real one needs actual racing `SERIALIZABLE` transactions for no
+  extra coverage over what `retry.test.ts` already proves about the retry loop in isolation.
+- Verification: `pnpm typecheck`, `pnpm lint` clean across all 8 packages. `pnpm test`: 425
+  passed, 0 skipped (was 411; +9/+2/+3 from the tests above). `pnpm eval` (REPLAY): still 7/7,
+  unaffected (none of the golden scenarios exercise these new catch branches -- that is what the
+  new drills are for).
+- Not done this session: Phase 5's own "Done when" also names a `pnpm eval:live` report committed
+  under `docs/evals/`, which needs a real Gemini/Jev call and so cannot run from this cloud
+  session (Blockers below, D045) -- needs Shivam's Mac. See Next task.
+
+### 2026-09-29 · Phase 5 task 5: budget guard (MAX_TOOL_CALLS/MAX_COST_USD), see D049
+- Added `maxToolCalls: 60` / `maxCostUsd: 0.05` to `AGENT_BUDGET_LIMITS` (`packages/shared/src/
+  agents.ts`), plus `COST_PER_1K_TOKENS_USD` and a new pure `estimateCallCostUsd(kind, tokensIn,
+  tokensOut)` -- `costUsd` on `RunBudget` existed since Phase 3 but was dead code (always 0,
+  confirmed by grep before assuming); every budget update with token usage in `nodes.ts` now
+  computes a real (if approximate, documented as such) cost.
+- New `packages/agents/src/budget-guard.ts`: pure `checkBudgetGuard(budget)` checking tool calls
+  then cost against the limits above.
+- `nodes.ts`: new `guardBudget(nodeName, state, update)` wrapper, called at the end of `triage`,
+  `diagnose`, `plan`, `join` and `groundCheck`, and `resolve` -- every node up to and including
+  `resolve`, i.e. everything before `policyGate` ever creates a resolution row. When tripped, sets
+  `status: 'ESCALATED'` and `state.error` (an unused Phase-3 placeholder field, now written for
+  the first time) to the guard's reason. Deliberately not applied to `execute`/`validate`/
+  `replan`/`policyGate` or to the three specialists individually -- see D049 for the full scoping
+  rationale (mirrors D048's precedent of an explicit, justified scope decision).
+- `graph.ts`: every conditional edge from `triage` through `resolve` now checks `state.status ===
+  'ESCALATED'` first and routes to `closeEscalated`; `triage->diagnose`, `join->groundCheck` and
+  `resolve->policyGate` became conditional edges (previously fixed) to allow this.
+- `closeEscalated` (nodes.ts) gained a third dispatch branch: `resolutionId` null + `state.error`
+  set → `resolutionService.escalateWithoutProposal` (new method, `resolution.service.ts`) --
+  moves the case straight to ESCALATED with no resolution ever having existed, the same
+  `cases.setStatus` + live publish shape every other close path in that file already uses.
+- Tests: `packages/agents/src/budget-guard.test.ts` (5, pure), `packages/shared/src/
+  agents.test.ts` (3, pure, new file), and one new `graph.test.ts` case driving a real graph run
+  with an absurd `J6_DIAGNOSE` token count that trips the cost limit on the very first Jev call --
+  asserts `ESCALATED`/`resolutionId: null`/`state.error`, and separately confirms via
+  `core.cases.get(caseId)` that the case itself actually moved to ESCALATED with no pending
+  approval (i.e. `escalateWithoutProposal` really ran, not just that the graph stopped).
+- Verification: `pnpm typecheck`, `pnpm lint` clean across all 8 packages. `pnpm test`: 411
+  passed, 0 skipped (was 402; +9). `pnpm eval` (REPLAY): still 7/7, and now reports a real
+  non-zero `totalCost` instead of the `$0` D048 recorded (that was REPLAY genuinely being free
+  coinciding with `costUsd` being dead code -- now it's real and still small, as expected).
+- Not done this session: Phase 5 task 6 (failure drills) -- the last task in the phase. One
+  known, narrow, documented edge case left open on purpose -- see D049's last section and this
+  file's Next task note.
+
 
 ### 2026-09-29 · Phase 5 tasks 2-4: confirmed task 2, built packages/evals (task 3) + injection eval (task 4), see D048
 - Confirmed Phase 5 task 2 (`replay_fails_then_replan` passes on attempt 2) needs no separate

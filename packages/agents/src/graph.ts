@@ -9,7 +9,10 @@
  * (J5, PARTIAL/FAIL) after it: `replan` either closes via `closeEscalated`
  * (`escalate_to_human`) or loops back to `resolve` (`retry_same_action`/`alternative_action`) or
  * `plan` (`reinvestigate`). The fast path (`diagnose` -> `resolve` directly) never touches
- * `plan`, the specialists, `join` or `groundCheck` -- unchanged by this task.
+ * `plan`, the specialists, `join` or `groundCheck` -- unchanged by this task. Phase 5 task 5
+ * (docs/DECISIONS.md D049) adds a budget guard checked at every node up to and including
+ * `resolve`: any of them can route to `closeEscalated` early via `state.status ===
+ * 'ESCALATED'`, set by `nodes.ts`'s `guardBudget` rather than by a new state field.
  */
 import { END, Send, START, StateGraph, type BaseCheckpointSaver } from '@langchain/langgraph';
 import { AGENT_NAMES, type AgentName } from '@payops/shared';
@@ -49,26 +52,45 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     .addNode('closeEscalated', nodes.closeEscalated)
     .addEdge(START, 'loadCase')
     .addEdge('loadCase', 'triage')
-    .addEdge('triage', 'diagnose')
+    // Phase 5 task 5 budget guard (docs/DECISIONS.md D049): every conditional edge from here up
+    // to and including `resolve` checks `state.status === 'ESCALATED'` first and routes to
+    // `closeEscalated` -- `guardBudget` (nodes.ts) is the only thing that can set that status on
+    // this stretch of the graph before `policyGate` ever runs.
+    .addConditionalEdges(
+      'triage',
+      (state: PayOpsStateType) => (state.status === 'ESCALATED' ? 'closeEscalated' : 'diagnose'),
+      { diagnose: 'diagnose', closeEscalated: 'closeEscalated' },
+    )
     .addConditionalEdges(
       'diagnose',
-      (state: PayOpsStateType) => (state.diagnosis ? 'resolve' : 'plan'),
-      { resolve: 'resolve', plan: 'plan' },
+      (state: PayOpsStateType) => {
+        if (state.status === 'ESCALATED') return 'closeEscalated';
+        return state.diagnosis ? 'resolve' : 'plan';
+      },
+      { resolve: 'resolve', plan: 'plan', closeEscalated: 'closeEscalated' },
     )
     // Parallel fan-out: only the specialists `plan` selected receive a `Send`, so a specialist
     // `plan` did not choose never runs (and therefore never contributes evidence/findings).
     .addConditionalEdges(
       'plan',
       (state: PayOpsStateType) => {
+        if (state.status === 'ESCALATED') return 'closeEscalated';
         const specialists = state.investigationPlan?.specialists ?? [...AGENT_NAMES];
         return specialists.map((s) => new Send(SPECIALIST_NODE[s], state));
       },
-      ['paymentAgent', 'reconciliationAgent', 'riskAgent'],
+      ['paymentAgent', 'reconciliationAgent', 'riskAgent', 'closeEscalated'],
     )
     .addEdge('paymentAgent', 'join')
     .addEdge('reconciliationAgent', 'join')
     .addEdge('riskAgent', 'join')
-    .addEdge('join', 'groundCheck')
+    // `join` is the first point after the parallel fan-out where the specialists' combined
+    // tool/LLM spend is visible on the merged state, so this is where the budget guard is
+    // actually checked for that spend (nodes.ts's `join`, docs/DECISIONS.md D049).
+    .addConditionalEdges(
+      'join',
+      (state: PayOpsStateType) => (state.status === 'ESCALATED' ? 'closeEscalated' : 'groundCheck'),
+      { groundCheck: 'groundCheck', closeEscalated: 'closeEscalated' },
+    )
     // docs/03 §5: "groundCheck -+-> (gaps & rounds<2) -> plan / -> resolve". `groundCheck`
     // (nodes.ts) only ever populates `gaps` when `applyGroundingRules` decided a targeted extra
     // round is warranted (insufficient evidence and the round cap not yet spent), so a non-empty
@@ -76,10 +98,19 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     // re-checked here.
     .addConditionalEdges(
       'groundCheck',
-      (state: PayOpsStateType) => (state.gaps.length > 0 ? 'plan' : 'resolve'),
-      { plan: 'plan', resolve: 'resolve' },
+      (state: PayOpsStateType) => {
+        if (state.status === 'ESCALATED') return 'closeEscalated';
+        return state.gaps.length > 0 ? 'plan' : 'resolve';
+      },
+      { plan: 'plan', resolve: 'resolve', closeEscalated: 'closeEscalated' },
     )
-    .addEdge('resolve', 'policyGate')
+    // Still before `policyGate` creates a resolution row, so a guard trip inside `resolve`
+    // itself (its own LLM diagnosis call) also routes here rather than to `policyGate`.
+    .addConditionalEdges(
+      'resolve',
+      (state: PayOpsStateType) => (state.status === 'ESCALATED' ? 'closeEscalated' : 'policyGate'),
+      { policyGate: 'policyGate', closeEscalated: 'closeEscalated' },
+    )
     .addConditionalEdges(
       'policyGate',
       (state: PayOpsStateType) => {

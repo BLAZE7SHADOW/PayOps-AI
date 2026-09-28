@@ -686,3 +686,181 @@ into the existing `node_modules/.pnpm/...` store entries) -- node_modules-only, 
 itself is a real, committed new file declaring these as real dependencies). A future session (or
 Shivam locally) should run a real `pnpm install` once, which will produce the same links properly
 and make this workaround moot.
+
+
+## D049 · Phase 5 task 5: budget guard (`MAX_TOOL_CALLS`/`MAX_COST_USD`)
+
+**Scoped to every node up to and including `resolve` -- not literally every node, and not the
+replan loop.** docs/03-agent-system.md §5 says "Global budgets in state (`budget`) are checked in
+a wrapper every node uses; exceeding → escalate." Applied literally that would also cover
+`execute`/`validate`/`replan`/`policyGate`, but those already have their own well-defined budget
+control: the attempt cap (`AGENT_BUDGET_LIMITS.maxAttempts`, already 2) and J5's confidence floor
+(0.5) bound further Jev/LLM spend once a resolution exists, and `execute`/`validate` make no
+Jev/LLM/tool calls of their own to budget. The real risk this task names -- a runaway
+investigation -- lives entirely before `policyGate` ever creates a resolution row: `loadCase`
+(no budget of its own) → `triage` → `diagnose` → `plan` → the specialist fan-out → `join` →
+`groundCheck` → `resolve`. `guardBudget` (nodes.ts) is called at the end of each of these (not
+`loadCase`, which spends nothing, and not the three specialists individually -- see below), and
+every conditional edge on this stretch of `graph.ts` checks `state.status === 'ESCALATED'` first
+and routes to `closeEscalated` when it is. This is a real, verified narrowing, not an oversight --
+recorded here the same way D048 recorded its own scope decision.
+
+**Checked at `join`, not at each specialist.** `paymentAgent`/`reconciliationAgent`/`riskAgent`
+run in parallel via LangGraph `Send` and converge on `join`; their combined `budget` update
+(follow-up tool calls, two LLM calls each) is only visible on the merged state once `join` runs,
+so that is where the guard actually catches their total, rather than guarding three edges that
+don't exist as such today (`paymentAgent`/etc. → `join` are plain edges, unconditional on
+purpose -- adding a fourth conditional-edge branch to each would duplicate the same check `join`
+already makes once).
+
+**No resolution exists yet on this stretch, so escalating needs a new, simpler close: the case
+moves to ESCALATED, nothing else.** `closeEscalated` (nodes.ts) already had two dispatch branches
+keyed off state shape (D047): `state.validation` set → `closeValidated` (a `replan` escalation);
+otherwise (a policy/approval escalation) → already closed by another service call, no-op here.
+A budget-guard trip adds a third: `resolutionId` is still null and `state.error` is set (the only
+other writer of `state.error`) → `core.resolutions.escalateWithoutProposal(caseId, state.error,
+write)`, a new `ResolutionService` method that does only `cases.setStatus(tx, caseId,
+'ESCALATED', summary, write)` plus the same live `caseUpdated` publish every other close path in
+that file already does (`setStatus` itself writes the audit event -- no separate audit call
+needed, matching `resolution.service.ts:227`'s existing BLOCKED-tier precedent for moving a case
+to ESCALATED with no resolution row at all).
+
+**`state.error` (state.ts) was an unused Phase-3 placeholder field -- this is its first real
+writer.** Reusing it rather than adding a new state channel: it already exists for exactly this
+purpose ("every field from the doc's full shape is present, even where Phase 3 never writes it"),
+and it doubles as the signal `closeEscalated` uses to tell a budget-guard escalation apart from
+the other two paths, without a new boolean flag.
+
+**`costUsd` was dead code before this task -- always 0, nowhere computed.** Every `RunBudget`
+already had a `costUsd` field (Phase 3), but no call site ever set it to anything but 0 (checked
+by grep before writing this task, not assumed) -- `packages/evals`'s `docs/evals` report has been
+printing `$0` cost for exactly that reason, not because REPLAY is genuinely free (it is, but that
+coincidence was hiding a real gap). Added `COST_PER_1K_TOKENS_USD` (`packages/shared/src/
+agents.ts`) and `estimateCallCostUsd(kind, tokensIn, tokensOut)`, wired into every budget update
+that has token usage (LLM calls via Gemini, Jev calls via `SystemOneResult.usage` -- Jev's usage
+shape already carries `input_tokens`/`output_tokens`, same as an LLM call, confirmed by reading
+`nodes.ts`'s existing J2-J5 call sites before assuming it). These rates are an explicit
+approximation for the guard's own purposes, not real provider billing (documented on the constant
+itself) -- provider prices change over time and this project doesn't track them elsewhere. After
+this change, `pnpm eval`'s REPLAY report shows a real (if small) `totalCost` instead of `$0` --
+confirmed by running it, not assumed.
+
+**Limit values (`maxToolCalls: 60`, `maxCostUsd: 0.05`) are deliberately generous, chosen to
+never trip during normal operation.** A single investigation round costs at most 11 (triage) + 3
+specialists × 6 (`maxFollowupToolCalls`) = 29 tool calls; `groundCheck`'s round cap allows one
+more targeted round, so a legitimate two-round investigation can reach ~47. `maxToolCalls: 60`
+sits above that. `maxCostUsd: 0.05` is generous relative to a real run's actual cost under the
+rates above (a full two-round investigation is a few cents at most, per the `pnpm eval` run
+above) -- this guard's job is to catch a genuine runaway (a bug, not normal use), not to be a
+tight production cost cap, which would be a business decision out of scope here.
+
+**Known narrow edge case, not engineered around: a budget trip during a `reinvestigate` loop's
+second pass through `plan`/`join`/`groundCheck`/`resolve` would hit `closeEscalated`'s
+`state.validation` branch (attempt 1's stale PARTIAL/FAIL verdict) instead of the new
+`escalateWithoutProposal` branch, because `replan`'s `reinvestigate` route never clears
+`state.validation`.** The run still ends ESCALATED either way (a stale PARTIAL/FAIL verdict with
+`onFailure: 'ESCALATE'` also escalates), so this doesn't produce an incorrect final state, only a
+slightly imprecise attribution in which close path ran. Reaching it requires attempt 1 to fail
+validation, J5 to choose `reinvestigate` (not the common `escalate_to_human`), and then attempt
+2's own investigation to independently trip the budget guard before a second `resolve` -- narrow
+enough that closing it properly (clearing `state.validation` on `reinvestigate`, itself a
+one-line change) is left as a follow-up rather than done speculatively here, since it touches
+`replan`'s existing, already-tested behavior for a scenario this session did not reproduce.
+
+**Verified, not assumed.** New tests: `packages/agents/src/budget-guard.test.ts` (5, the pure
+`checkBudgetGuard` function), `packages/shared/src/agents.test.ts` (3, `estimateCallCostUsd`
+arithmetic), and one new `graph.test.ts` case that drives a real graph run with an absurd
+`J6_DIAGNOSE` token count (5M in / 1M out) and confirms: the run ends `ESCALATED` with
+`resolutionId: null` and `state.error` naming the budget guard; `core.cases.get(caseId)` shows the
+case itself moved to `ESCALATED` with no pending approval -- i.e. `escalateWithoutProposal`
+actually ran, not just that the graph stopped. `pnpm typecheck`, `pnpm lint`, `pnpm test` (411
+passed, 0 skipped -- +9 from the tests above, +1 existing `graph.test.ts` file gaining a case) all
+clean across all 8 packages. `pnpm eval` (REPLAY) still 7/7 with real, non-zero cost figures.
+
+
+## D050 · Phase 5 task 6: failure drills (Gemini timeout, Jev timeout, DB serialization conflict during execute)
+
+**Jev timeout needed no new production code -- every Jev decision point (J2/J3/J4/J5/J6) already
+had a documented, tested fallback (docs/03 §4 "Jev adapter contract"; `nodes.test.ts` already
+covered each one at the node level).** This task's contribution there is one new graph-level drill
+(`graph.test.ts`'s "failure drills" describe block): a `DecisionPort` that throws on every tag
+throughout one full run of `captured_order_failed`, proving the *whole run* still ends `RESOLVED`
+with `verdict: PASS`, not just that each node individually degrades. This is the strongest form of
+the doc's "the product must work with AI turned off" claim actually exercised end to end for the
+Jev half of that sentence.
+
+**Gemini timeout was a real gap: two call sites had no fallback at all.** `buildSpecialistNode`'s
+two `llm.invokeStructured` calls (`nodes.ts`) and `resolve`'s diagnosis call ran with no
+`try`/`catch` -- unlike every Jev call site, an uncaught rejection there would have propagated out
+of the async node function, out of `graph.invoke`, and crashed the run with no defined final
+state (confirmed, not assumed: before this task's fix, `graph.test.ts`'s new
+`settlement_mismatch` drill using the file's existing `noLlm` fixture would have rejected the
+`graph.invoke(...)` call directly instead of returning a result).
+
+- **Specialist fallback:** a specialist has no code-computed answer to fall back to the way Jev
+  does, but the codebase already has the right shape for "this specialist found nothing" -- the
+  existing `ownBaseline.length === 0` skip branch just above. Wrapping the whole two-call body in
+  `try`/`catch` and returning `{ agentsVisited: [agentName] }` on error reuses that same shape:
+  `join`, `groundCheck` and `resolve` already tolerate any specialist contributing zero
+  evidence/findings (that's what "legitimately contributes nothing" already meant), so this adds
+  no new state-shape burden anywhere downstream.
+- **`resolve`'s fallback:** here there genuinely is nothing safe to fall back to -- no diagnosis
+  means no proposal, and (unlike the specialist case) skipping ahead with an empty diagnosis would
+  reach `buildProposal` with a null diagnosis, which is not a state the rest of the pipeline
+  expects. Reused the exact branch D049 already built for the budget guard: no resolution exists
+  yet at this point in the graph (`resolve` runs before `policyGate`), so `return { status:
+  'ESCALATED', error: message }` routes through the same `resolve -> policyGate` conditional edge
+  and the same `closeEscalated` `state.error` branch (`escalateWithoutProposal`) the budget guard
+  already exercises -- no new graph wiring needed, only a new writer of an existing signal.
+
+**Database serialization conflict during execute is two separate, deliberately separated pieces:
+a small generic retry helper, and a new "the executor couldn't even report an outcome" close
+path.** New `packages/core/src/db/retry.ts`: `isSerializationFailure` (checks `.code === '40001'`,
+the SQLSTATE both `pg` and PGlite attach) and `withSerializationRetry` (retries only that code, a
+small fixed number of times, standard Postgres advice for a `SERIALIZABLE`-style write-write
+conflict). Wired around exactly one place: the result-recording transaction at the end of
+`ExecutorService.runStep` (`executor.service.ts`) -- the step that updates the `executions` row
+and writes the audit event, chosen because it is the one write in that method not already inside
+the existing `try`/`catch` around `executeAction` (a `40001` there was always going to propagate
+uncaught before this task). Not applied anywhere else in `core` speculatively -- this project's DB
+usage is READ COMMITTED almost everywhere, so a real `40001` is not expected outside this one
+place, and adding retry loops around writes that can't actually see this error would be dead code.
+
+**When retries are exhausted (or a different DB error entirely propagates), `execute` (nodes.ts)
+now catches it and calls a new `ResolutionService.escalateExecutionError`, not
+`closeExecutionFailed`.** `closeExecutionFailed` needs a real `ExecutionOutcome`/`execution.steps`
+to name which step failed; there is none here because `core.resolutions.execute` itself never
+returned. Unlike D049's `escalateWithoutProposal` (no resolution ever existed), a resolution
+*does* already exist at this point (`policyGate` created it before `execute` ever ran), so the new
+method closes that real resolution row as `EXECUTION_FAILED`/`ESCALATED` directly (mirroring
+`closeExecutionFailed`'s own ESCALATED branch, minus the failed-step lookup it can't do here). The
+`execute -> validate` edge (`graph.ts`, D047) already routes an `ESCALATED` status straight to
+`END` without visiting `closeEscalated` -- unchanged by this task, since `execute` already closes
+everything itself on this path, same as the pre-existing `execution.ok === false` branch beside
+it.
+
+**Verified, not assumed.** `packages/core/src/db/retry.test.ts` (9 tests, pure): recognizes/
+rejects a `40001` shape without throwing on non-object input, retries exactly while the error
+keeps being `40001`, rethrows immediately on any other code, and respects a custom attempt count.
+`nodes.test.ts` gained a describe block for `execute`'s new catch branch (2 tests, fake
+`core.resolutions`, no database): a thrown error escalates via the new
+`escalateExecutionError` and never reaches `closeExecutionFailed`; the pre-existing clean
+`execution.ok === false` path is unchanged and still uses `closeExecutionFailed`. `graph.test.ts`
+gained three end-to-end drills (docs/06-phases.md Phase 5 task 6, one per failure named there):
+Gemini timeout on `settlement_mismatch` (both specialists contribute nothing, `resolve` escalates
+with no resolution ever created); Jev timeout throughout a full `captured_order_failed` run
+(still resolves, `verdict: PASS`, `diagnosis.path: 'FULL'`); and a simulated exhausted-retry DB
+failure via `vi.spyOn(core.resolutions, 'execute').mockRejectedValueOnce(...)` (escalates the
+already-created resolution, `resolutionId` still set). The DB drill spies rather than reproducing
+a genuine concurrent `40001` on purpose -- a real one needs actual racing `SERIALIZABLE`
+transactions, which would make the test slow and nondeterministic for no extra coverage over what
+`retry.test.ts` already proves about the retry loop itself. `pnpm typecheck`, `pnpm lint` clean
+across all 8 packages. `pnpm test`: 425 passed, 0 skipped (was 411; +9 `retry.test.ts`, +2
+`nodes.test.ts`, +3 `graph.test.ts`). `pnpm eval` (REPLAY) still 7/7, unaffected (none of the
+golden scenarios exercise these new catch branches -- they were never meant to; that is what the
+new drills above are for).
+
+**Not done, and out of scope for this task:** Phase 5's "Done when" also names a `pnpm eval:live`
+report committed under `docs/evals/`, which needs a real Gemini/Jev call and so cannot run from
+this cloud session (docs/PROGRESS.md's Blockers section, D045) -- still outstanding, needs
+Shivam's Mac, same as Phase 4's cassette recording did.

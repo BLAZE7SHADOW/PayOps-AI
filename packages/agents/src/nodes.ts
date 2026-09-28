@@ -18,8 +18,10 @@
 import { interrupt } from '@langchain/langgraph';
 import { agentWriteContext, choice, loadCaseState, noul, score, type AttemptHistory, type CaseState } from '@payops/core';
 import {
+  addBudgets,
   AGENT_BUDGET_LIMITS,
   AGENT_NAMES,
+  estimateCallCostUsd,
   zeroBudget,
   type AgentApprovalDecision,
   type AgentName,
@@ -32,6 +34,7 @@ import {
   type ReplanStrategy,
   type RiskAssessment,
   type RootCause,
+  type RunBudget,
   type RunStatus,
 } from '@payops/shared';
 import type { AgentDeps } from './deps';
@@ -62,6 +65,7 @@ import {
   type ToolDef,
 } from './tools';
 import { nextEvidenceId, nextFindingId } from './run-ids';
+import { checkBudgetGuard } from './budget-guard';
 
 const ROOT_CAUSE_CRITERIA: Record<RootCause, string> = {
   WEBHOOK_PROCESSING_FAILURE: 'A webhook for this payment was delivered but our consumer failed to process it (non-2xx response).',
@@ -121,6 +125,25 @@ function evidenceFrom(existing: readonly EvidenceItem[], caseState: CaseState, t
 export function buildNodes(deps: AgentDeps) {
   const { core, llm, decision, onEvent } = deps;
 
+  /**
+   * Budget guard (docs/06-phases.md Phase 5 task 5, docs/DECISIONS.md D049). Called at every
+   * node on the pre-`policyGate` path (docs/03 §5's node order up to and including `resolve`) --
+   * before `policyGate` ever creates a resolution row, so an escalation here has nothing to
+   * close but the case itself (`closeEscalated` below, `resolution.service.ts`'s
+   * `escalateWithoutProposal`). Not applied past `policyGate`: once a resolution exists, the
+   * replan loop's own attempt cap (`AGENT_BUDGET_LIMITS.maxAttempts`) and confidence floor
+   * already bound further Jev/LLM spend (D049 records this as a deliberate scope, not a gap).
+   * The call that pushes the run over a limit still completes -- this can only stop the *next*
+   * one -- which is the normal shape for a budget guard checked after the fact, not before.
+   */
+  async function guardBudget(nodeName: string, state: PayOpsStateType, update: PayOpsUpdate): Promise<PayOpsUpdate> {
+    const total = addBudgets(state.budget ?? zeroBudget(), (update.budget ?? zeroBudget()) as RunBudget);
+    const guard = checkBudgetGuard(total);
+    if (!guard.exceeded) return update;
+    await onEvent(nodeName, 'NODE_COMPLETED', { budgetExceeded: true, reason: guard.reason, budget: total });
+    return { ...update, status: 'ESCALATED', error: guard.reason };
+  }
+
   async function loadCase(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('loadCase', 'NODE_STARTED', {});
     const caseState = await loadCaseState(core.db, core.gateway, state.caseId, core.clock.now());
@@ -135,7 +158,7 @@ export function buildNodes(deps: AgentDeps) {
     const evidence = evidenceFrom(state.evidence, caseState, BASELINE_TOOLS, 'triage');
     await onEvent('triage', 'TOOL_COMPLETED', { tools: BASELINE_TOOLS.map((t) => t.name), evidenceIds: evidence.map((e) => e.id) });
     await onEvent('triage', 'NODE_COMPLETED', { brief });
-    return { case: brief, evidence, budget: { ...zeroBudget(), toolCalls: BASELINE_TOOLS.length } };
+    return await guardBudget('triage', state, { case: brief, evidence, budget: { ...zeroBudget(), toolCalls: BASELINE_TOOLS.length } });
   }
 
   async function diagnose(state: PayOpsStateType): Promise<PayOpsUpdate> {
@@ -166,13 +189,19 @@ export function buildNodes(deps: AgentDeps) {
         ? { rootCause: result.answers.root_cause.choice, narrative: '', confidence, supportingFindingIds: [], path: 'FAST' }
         : null;
       await onEvent('diagnose', 'NODE_COMPLETED', { path: fast ? 'FAST' : 'FULL', rootCause: result.answers.root_cause.choice, confidence });
-      return {
+      return await guardBudget('diagnose', state, {
         diagnosis,
-        budget: { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens },
-      };
+        budget: {
+          ...zeroBudget(),
+          jevCalls: 1,
+          tokensIn: result.usage.input_tokens,
+          tokensOut: result.usage.output_tokens,
+          costUsd: estimateCallCostUsd('jev', result.usage.input_tokens, result.usage.output_tokens),
+        },
+      });
     } catch (err) {
       await onEvent('diagnose', 'NODE_COMPLETED', { path: 'FULL', fallback: true, error: err instanceof Error ? err.message : String(err) });
-      return { diagnosis: null, budget: { ...zeroBudget(), jevCalls: 1 } };
+      return await guardBudget('diagnose', state, { diagnosis: null, budget: { ...zeroBudget(), jevCalls: 1 } });
     }
   }
 
@@ -198,7 +227,7 @@ export function buildNodes(deps: AgentDeps) {
         confidence: state.investigationPlan?.confidence ?? 0,
       };
       await onEvent('plan', 'NODE_COMPLETED', { specialists, routedBy: 'GAP_TARGETED', targeted: true, gaps: state.gaps });
-      return { investigationPlan, investigationRound: state.investigationRound + 1 };
+      return await guardBudget('plan', state, { investigationPlan, investigationRound: state.investigationRound + 1 });
     }
 
     try {
@@ -236,11 +265,17 @@ export function buildNodes(deps: AgentDeps) {
         confidence,
       };
       await onEvent('plan', 'NODE_COMPLETED', { specialists, routedBy: 'JEV', primaryHypothesis: investigationPlan.primaryHypothesis });
-      return {
+      return await guardBudget('plan', state, {
         investigationPlan,
         investigationRound: state.investigationRound + 1,
-        budget: { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens },
-      };
+        budget: {
+          ...zeroBudget(),
+          jevCalls: 1,
+          tokensIn: result.usage.input_tokens,
+          tokensOut: result.usage.output_tokens,
+          costUsd: estimateCallCostUsd('jev', result.usage.input_tokens, result.usage.output_tokens),
+        },
+      });
     } catch (err) {
       // J2 fallback (docs/03 §4 "Jev adapter contract"): on error/timeout, run every specialist
       // rather than guess — the safe default the doc calls for.
@@ -251,7 +286,7 @@ export function buildNodes(deps: AgentDeps) {
         fallback: true,
         error: err instanceof Error ? err.message : String(err),
       });
-      return { investigationPlan, investigationRound: state.investigationRound + 1, budget: { ...zeroBudget(), jevCalls: 1 } };
+      return await guardBudget('plan', state, { investigationPlan, investigationRound: state.investigationRound + 1, budget: { ...zeroBudget(), jevCalls: 1 } });
     }
   }
 
@@ -279,80 +314,95 @@ export function buildNodes(deps: AgentDeps) {
       const caseState = await loadCaseState(core.db, core.gateway, state.caseId, core.clock.now());
       const brief = state.case!;
 
-      const followUpContext = buildSpecialistContext({
-        agent: agentName,
-        callType: 'followUp',
-        brief,
-        evidence: state.evidence,
-        ownTools,
-        followUpTools,
-      });
-      const choiceResult = await llm.invokeStructured(followUpSchema, followUpContext.messages, {
-        node: nodeName,
-        callIndex: 0,
-        scenarioKey: state.scenarioKey,
-      });
-      const wanted = choiceResult.data.followUps.slice(0, AGENT_BUDGET_LIMITS.maxFollowupToolCalls);
-      await onEvent(nodeName, 'LLM_CALLED', {
-        call: 'followUps',
-        followUps: wanted,
-        usage: choiceResult.usage,
-        // docs/03 §8: "every built context is hashed and its token estimate stored on the agentStep".
-        contextTokenEstimate: followUpContext.tokenEstimate,
-        contextHash: followUpContext.contentHash,
-      });
+      // Gemini timeout/error fallback (docs/06-phases.md Phase 5 task 6): unlike a Jev decision
+      // point, a specialist's two LLM calls have no code-computed answer to fall back to -- the
+      // safe default is the same one an empty evidence group already gets above ("this
+      // specialist contributes nothing"), not a crash of the whole investigation. The other
+      // specialists, `groundCheck` and `resolve` all already tolerate a specialist contributing
+      // zero evidence/findings, so this never leaves the graph in an undefined state.
+      try {
+        const followUpContext = buildSpecialistContext({
+          agent: agentName,
+          callType: 'followUp',
+          brief,
+          evidence: state.evidence,
+          ownTools,
+          followUpTools,
+        });
+        const choiceResult = await llm.invokeStructured(followUpSchema, followUpContext.messages, {
+          node: nodeName,
+          callIndex: 0,
+          scenarioKey: state.scenarioKey,
+        });
+        const wanted = choiceResult.data.followUps.slice(0, AGENT_BUDGET_LIMITS.maxFollowupToolCalls);
+        await onEvent(nodeName, 'LLM_CALLED', {
+          call: 'followUps',
+          followUps: wanted,
+          usage: choiceResult.usage,
+          // docs/03 §8: "every built context is hashed and its token estimate stored on the agentStep".
+          contextTokenEstimate: followUpContext.tokenEstimate,
+          contextHash: followUpContext.contentHash,
+        });
 
-      const chosenTools = followUpTools.filter((t) => wanted.some((w) => w.tool === t.name));
-      const followUpEvidence = evidenceFrom(state.evidence, caseState, chosenTools, nodeName);
-      if (followUpEvidence.length > 0) {
-        await onEvent(nodeName, 'TOOL_COMPLETED', { tools: chosenTools.map((t) => t.name), evidenceIds: followUpEvidence.map((e) => e.id) });
+        const chosenTools = followUpTools.filter((t) => wanted.some((w) => w.tool === t.name));
+        const followUpEvidence = evidenceFrom(state.evidence, caseState, chosenTools, nodeName);
+        if (followUpEvidence.length > 0) {
+          await onEvent(nodeName, 'TOOL_COMPLETED', { tools: chosenTools.map((t) => t.name), evidenceIds: followUpEvidence.map((e) => e.id) });
+        }
+        const ownEvidence = [...ownBaseline, ...followUpEvidence];
+
+        const findingsContext = buildSpecialistContext({
+          agent: agentName,
+          callType: 'findings',
+          brief,
+          evidence: [...state.evidence, ...followUpEvidence],
+          ownTools,
+        });
+        const findingsResult = await llm.invokeStructured(FindingsSchema, findingsContext.messages, {
+          node: nodeName,
+          callIndex: 1,
+          scenarioKey: state.scenarioKey,
+        });
+        await onEvent(nodeName, 'LLM_CALLED', {
+          call: 'findings',
+          usage: findingsResult.usage,
+          contextTokenEstimate: findingsContext.tokenEstimate,
+          contextHash: findingsContext.contentHash,
+        });
+        const validIds = new Set(ownEvidence.map((e) => e.id));
+        let pool = state.findings;
+        const findings: Finding[] = [];
+        for (const f of findingsResult.data.findings) {
+          const evidenceIds = f.evidenceIds.filter((id) => validIds.has(id));
+          if (evidenceIds.length === 0) continue; // structural grounding: a finding must cite this agent's own evidence
+          const id = nextFindingId(pool);
+          const finding: Finding = { id, agent: agentName, code: f.code, statement: f.statement, evidenceIds, confidence: f.confidence };
+          findings.push(finding);
+          pool = [...pool, finding];
+        }
+        await onEvent(nodeName, 'FINDING_CREATED', { findingIds: findings.map((f) => f.id) });
+        await onEvent(nodeName, 'NODE_COMPLETED', { evidenceCount: ownEvidence.length, findingCount: findings.length });
+
+        const tokensIn = choiceResult.usage.inputTokens + findingsResult.usage.inputTokens;
+        const tokensOut = choiceResult.usage.outputTokens + findingsResult.usage.outputTokens;
+        return {
+          evidence: followUpEvidence,
+          findings,
+          agentsVisited: [agentName],
+          budget: {
+            ...zeroBudget(),
+            llmCalls: 2,
+            toolCalls: chosenTools.length,
+            tokensIn,
+            tokensOut,
+            costUsd: estimateCallCostUsd('gemini', tokensIn, tokensOut),
+          },
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await onEvent(nodeName, 'NODE_COMPLETED', { evidenceCount: ownBaseline.length, findingCount: 0, fallback: true, error: message });
+        return { agentsVisited: [agentName] };
       }
-      const ownEvidence = [...ownBaseline, ...followUpEvidence];
-
-      const findingsContext = buildSpecialistContext({
-        agent: agentName,
-        callType: 'findings',
-        brief,
-        evidence: [...state.evidence, ...followUpEvidence],
-        ownTools,
-      });
-      const findingsResult = await llm.invokeStructured(FindingsSchema, findingsContext.messages, {
-        node: nodeName,
-        callIndex: 1,
-        scenarioKey: state.scenarioKey,
-      });
-      await onEvent(nodeName, 'LLM_CALLED', {
-        call: 'findings',
-        usage: findingsResult.usage,
-        contextTokenEstimate: findingsContext.tokenEstimate,
-        contextHash: findingsContext.contentHash,
-      });
-      const validIds = new Set(ownEvidence.map((e) => e.id));
-      let pool = state.findings;
-      const findings: Finding[] = [];
-      for (const f of findingsResult.data.findings) {
-        const evidenceIds = f.evidenceIds.filter((id) => validIds.has(id));
-        if (evidenceIds.length === 0) continue; // structural grounding: a finding must cite this agent's own evidence
-        const id = nextFindingId(pool);
-        const finding: Finding = { id, agent: agentName, code: f.code, statement: f.statement, evidenceIds, confidence: f.confidence };
-        findings.push(finding);
-        pool = [...pool, finding];
-      }
-      await onEvent(nodeName, 'FINDING_CREATED', { findingIds: findings.map((f) => f.id) });
-      await onEvent(nodeName, 'NODE_COMPLETED', { evidenceCount: ownEvidence.length, findingCount: findings.length });
-
-      return {
-        evidence: followUpEvidence,
-        findings,
-        agentsVisited: [agentName],
-        budget: {
-          ...zeroBudget(),
-          llmCalls: 2,
-          toolCalls: chosenTools.length,
-          tokensIn: choiceResult.usage.inputTokens + findingsResult.usage.inputTokens,
-          tokensOut: choiceResult.usage.outputTokens + findingsResult.usage.outputTokens,
-        },
-      };
     };
   }
 
@@ -414,7 +464,13 @@ export function buildNodes(deps: AgentDeps) {
       const meanConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
       risk = combineRiskScores(scores, meanConfidence);
       await onEvent('riskAgent', 'DECISION_MADE', { tag: 'J3_RISK', answers: result.answers, usage: result.usage, tier: risk.tier });
-      budget = { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens };
+      budget = {
+        ...zeroBudget(),
+        jevCalls: 1,
+        tokensIn: result.usage.input_tokens,
+        tokensOut: result.usage.output_tokens,
+        costUsd: estimateCallCostUsd('jev', result.usage.input_tokens, result.usage.output_tokens),
+      };
 
       const findings: Finding[] = [];
       let llmFallbackRan = false;
@@ -444,7 +500,13 @@ export function buildNodes(deps: AgentDeps) {
           pool = [...pool, finding];
         }
         if (findings.length > 0) await onEvent('riskAgent', 'FINDING_CREATED', { findingIds: findings.map((f) => f.id) });
-        budget = { ...budget, llmCalls: 1, tokensIn: budget.tokensIn + findingsResult.usage.inputTokens, tokensOut: budget.tokensOut + findingsResult.usage.outputTokens };
+        budget = {
+          ...budget,
+          llmCalls: 1,
+          tokensIn: budget.tokensIn + findingsResult.usage.inputTokens,
+          tokensOut: budget.tokensOut + findingsResult.usage.outputTokens,
+          costUsd: budget.costUsd + estimateCallCostUsd('gemini', findingsResult.usage.inputTokens, findingsResult.usage.outputTokens),
+        };
       }
 
       await onEvent('riskAgent', 'NODE_COMPLETED', { tier: risk.tier, meanConfidence: risk.meanConfidence, findingCount: findings.length });
@@ -474,7 +536,10 @@ export function buildNodes(deps: AgentDeps) {
       evidenceCount: state.evidence.length,
       findingCount: state.findings.length,
     });
-    return {};
+    // The specialists' own tool/LLM spend only becomes visible on the merged state once their
+    // parallel `Send` branches converge here (docs/DECISIONS.md D049) -- this is the first point
+    // after `plan` that can see the round's real total, so the budget guard is checked here.
+    return await guardBudget('join', state, {});
   }
 
   /**
@@ -516,11 +581,17 @@ export function buildNodes(deps: AgentDeps) {
       });
       const grounding: GroundingReport = { checked: state.findings.length, violations: rules.violations, sufficient: rules.sufficient, needsHumanReview: rules.needsHumanReview };
       await onEvent('groundCheck', 'NODE_COMPLETED', { violations: grounding.violations, sufficient: rules.sufficient, gaps: rules.gaps });
-      return {
+      return await guardBudget('groundCheck', state, {
         grounding,
         gaps: rules.gaps,
-        budget: { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens },
-      };
+        budget: {
+          ...zeroBudget(),
+          jevCalls: 1,
+          tokensIn: result.usage.input_tokens,
+          tokensOut: result.usage.output_tokens,
+          costUsd: estimateCallCostUsd('jev', result.usage.input_tokens, result.usage.output_tokens),
+        },
+      });
     } catch (err) {
       // J4 fallback (docs/03 §4 "Jev adapter contract"): "structural check only + mark
       // needsHumanReview" -- semantic checking is skipped entirely (never guessed), and the
@@ -536,7 +607,7 @@ export function buildNodes(deps: AgentDeps) {
       });
       const grounding: GroundingReport = { checked: state.findings.length, violations: rules.violations, sufficient: rules.sufficient, needsHumanReview: rules.needsHumanReview };
       await onEvent('groundCheck', 'NODE_COMPLETED', { violations: grounding.violations, fallback: true, error: err instanceof Error ? err.message : String(err) });
-      return { grounding, gaps: [], budget: { ...zeroBudget(), jevCalls: 1 } };
+      return await guardBudget('groundCheck', state, { grounding, gaps: [], budget: { ...zeroBudget(), jevCalls: 1 } });
     }
   }
 
@@ -561,13 +632,34 @@ export function buildNodes(deps: AgentDeps) {
         grounding: state.grounding,
         history: state.history,
       });
-      const result = await llm.invokeStructured(DiagnosisSchema, resolveContext.messages, {
-        node: 'resolve',
-        callIndex: 0,
-        scenarioKey: state.scenarioKey,
-      });
+      // Gemini timeout/error fallback (docs/06-phases.md Phase 5 task 6): unlike Jev's decision
+      // points, there is no code-computed diagnosis to fall back to here -- the fast-path
+      // template (`narrativeFor`, the other branch below) only ever runs for a diagnosis Jev (J6)
+      // already produced, and this branch is reached precisely because there isn't one. Nothing
+      // downstream (`buildProposal`, policy, the validator) can act on a missing diagnosis, so
+      // the only defined outcome is the same one a pre-`policyGate` budget-guard trip already
+      // uses (docs/DECISIONS.md D049): no resolution has been created yet, so escalate the case
+      // itself via `state.error` + `status: 'ESCALATED'`, which `closeEscalated` already handles.
+      let result;
+      try {
+        result = await llm.invokeStructured(DiagnosisSchema, resolveContext.messages, {
+          node: 'resolve',
+          callIndex: 0,
+          scenarioKey: state.scenarioKey,
+        });
+      } catch (err) {
+        const message = `Gemini call failed while diagnosing the case: ${err instanceof Error ? err.message : String(err)}`;
+        await onEvent('resolve', 'NODE_COMPLETED', { fallback: true, error: message });
+        return { status: 'ESCALATED', error: message };
+      }
       diagnosis = { ...result.data, path: 'FULL' };
-      budget = { ...zeroBudget(), llmCalls: 1, tokensIn: result.usage.inputTokens, tokensOut: result.usage.outputTokens };
+      budget = {
+        ...zeroBudget(),
+        llmCalls: 1,
+        tokensIn: result.usage.inputTokens,
+        tokensOut: result.usage.outputTokens,
+        costUsd: estimateCallCostUsd('gemini', result.usage.inputTokens, result.usage.outputTokens),
+      };
       await onEvent('resolve', 'LLM_CALLED', {
         call: 'diagnosis',
         diagnosis,
@@ -587,7 +679,9 @@ export function buildNodes(deps: AgentDeps) {
     const proposal = buildProposal(diagnosis, caseState, toAttemptHistory(state.history));
     await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal });
     await onEvent('resolve', 'NODE_COMPLETED', {});
-    return { diagnosis, proposal, findings, budget };
+    // Still before `policyGate` creates a resolution row (docs/DECISIONS.md D049), so a trip
+    // here also has nothing to close but the case itself.
+    return await guardBudget('resolve', state, { diagnosis, proposal, findings, budget });
   }
 
   async function policyGate(state: PayOpsStateType): Promise<PayOpsUpdate> {
@@ -629,15 +723,30 @@ export function buildNodes(deps: AgentDeps) {
   async function execute(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('execute', 'NODE_STARTED', { resolutionId: state.resolutionId });
     const write = agentWriteContext(state.caseId, state.runId);
-    const { execution } = await core.resolutions.execute(state.resolutionId!, write);
-    await onEvent('execute', 'EXECUTION_STEP', { executions: execution.steps });
-    if (!execution.ok) {
-      await core.resolutions.closeExecutionFailed(state.resolutionId!, execution, write, { onFailure: 'ESCALATE' });
-      await onEvent('execute', 'RUN_COMPLETED', { status: 'ESCALATED' });
-      return { executions: execution.steps, status: 'ESCALATED' };
+    try {
+      const { execution } = await core.resolutions.execute(state.resolutionId!, write);
+      await onEvent('execute', 'EXECUTION_STEP', { executions: execution.steps });
+      if (!execution.ok) {
+        await core.resolutions.closeExecutionFailed(state.resolutionId!, execution, write, { onFailure: 'ESCALATE' });
+        await onEvent('execute', 'RUN_COMPLETED', { status: 'ESCALATED' });
+        return { executions: execution.steps, status: 'ESCALATED' };
+      }
+      await onEvent('execute', 'NODE_COMPLETED', {});
+      return { executions: execution.steps };
+    } catch (err) {
+      // A database-layer failure escaping the executor itself (docs/06-phases.md Phase 5 task 6
+      // "database serialization conflict during execute") -- not an individual action failing
+      // cleanly (that is `execution.ok === false` above, already handled), but the executor
+      // unable to even report an outcome. `withSerializationRetry` (packages/core/src/db/
+      // retry.ts) already retries a transient 40001 inside `ExecutorService`; anything still
+      // thrown here has exhausted that or is a different error entirely -- either way the run
+      // must not crash. A resolution already exists (`policyGate` created it), so escalate it
+      // directly rather than leaving it open with no defined outcome.
+      const message = err instanceof Error ? err.message : String(err);
+      await core.resolutions.escalateExecutionError(state.resolutionId!, message, write);
+      await onEvent('execute', 'RUN_COMPLETED', { status: 'ESCALATED', fallback: true, error: message });
+      return { status: 'ESCALATED', error: message };
     }
-    await onEvent('execute', 'NODE_COMPLETED', {});
-    return { executions: execution.steps };
   }
 
   /** Validates the executed resolution against fresh state (docs/03 §5 "validate"). Does not close. */
@@ -727,18 +836,29 @@ export function buildNodes(deps: AgentDeps) {
   }
 
   /**
-   * Reached two ways (docs/03 §5): `awaitApproval`'s ESCALATE decision (that path's own service
-   * call already closed the resolution and case -- `state.validation` is still `null`, since
-   * `validate` never ran, so there is nothing more to close here), or `replan`'s
+   * Reached three ways (docs/03 §5): `awaitApproval`'s ESCALATE decision (that path's own
+   * service call already closed the resolution and case -- `state.validation` is still `null`,
+   * since `validate` never ran, so there is nothing more to close here); `replan`'s
    * `escalate_to_human` route (validate did run and left the current attempt un-closed on
-   * purpose -- close it now, the same way `closeResolved` closes a PASS).
+   * purpose -- close it now, the same way `closeResolved` closes a PASS); or the budget guard
+   * tripping anywhere before `policyGate` (docs/06-phases.md Phase 5 task 5, D049) -- no
+   * resolution ever existed, so only the case itself needs to move to ESCALATED.
    */
   async function closeEscalated(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    const write = agentWriteContext(state.caseId, state.runId);
     if (state.validation) {
-      const write = agentWriteContext(state.caseId, state.runId);
       await core.resolutions.closeValidated(state.resolutionId!, state.validation.verdict, write, { onFailure: 'ESCALATE' });
+    } else if (!state.resolutionId && state.error) {
+      // Budget guard tripped before `policyGate` ever created a resolution (docs/06-phases.md
+      // Phase 5 task 5, docs/DECISIONS.md D049) -- `guardBudget` (above) is the only other writer
+      // of `state.error`, and it only runs on the pre-`policyGate` path, so `resolutionId` is
+      // reliably still null here. There is no resolution to close, only the case itself.
+      await core.resolutions.escalateWithoutProposal(state.caseId, state.error, write);
     }
-    await onEvent('close', 'RUN_COMPLETED', { status: 'ESCALATED' });
+    // Any other route to this node (`awaitApproval`'s ESCALATE decision, `policyGate`'s BLOCKED
+    // tier via `closeBlocked`) already closed the resolution/case elsewhere -- see the header
+    // comment above and D047.
+    await onEvent('close', 'RUN_COMPLETED', { status: 'ESCALATED', ...(state.error ? { reason: state.error } : {}) });
     return { status: 'ESCALATED' };
   }
 

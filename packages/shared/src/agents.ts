@@ -227,12 +227,46 @@ export const addBudgets = (a: RunBudget, b: RunBudget): RunBudget => ({
   costUsd: a.costUsd + b.costUsd,
 });
 
-// ── Budget guard limits (docs/03 §2, §5) ────────────────────────────────────
+// ── Budget guard limits (docs/03 §2, §5; docs/06-phases.md Phase 5 task 5) ──
 export const AGENT_BUDGET_LIMITS = {
   maxFollowupToolCalls: 6,
   recursionLimit: 40,
   maxAttempts: 2,
+  /**
+   * docs/06-phases.md Phase 5 task 5's "MAX_TOOL_CALLS": a normal single investigation round
+   * costs `triage`'s 11 baseline tools plus up to 3 specialists x `maxFollowupToolCalls` (6) = 29;
+   * `groundCheck` can trigger one more targeted round (docs/03 §4 "J4", round cap 2), so a
+   * legitimate two-round investigation can reach ~47. Set above that so normal operation never
+   * trips it, while a genuine runaway (a bug looping tool calls, not normal operation) still
+   * does. See docs/DECISIONS.md D049 for where this is actually checked.
+   */
+  maxToolCalls: 60,
+  /**
+   * docs/06-phases.md Phase 5 task 5's "MAX_COST_USD": generous relative to a real run's actual
+   * cost under `estimateCallCostUsd` below (a full two-round investigation is a few cents at
+   * most) — this guard exists to catch a genuine runaway, not to be a tight per-case cost cap;
+   * a tighter production cap is a business decision, out of scope here (docs/DECISIONS.md D049).
+   */
+  maxCostUsd: 0.05,
 } as const;
+
+/**
+ * Approximate USD-per-1000-token rates, for the budget guard's cost estimate only -- not exact
+ * provider billing, which changes over time and isn't tracked here (docs/DECISIONS.md D049).
+ * Jev's `SystemOneResult.usage` reports token counts the same shape as an LLM call (nodes.ts
+ * already reads `result.usage.input_tokens`/`output_tokens` for J2-J5), so both call kinds are
+ * priced the same way, just with their own rate.
+ */
+export const COST_PER_1K_TOKENS_USD: Record<'gemini' | 'jev', { input: number; output: number }> = {
+  gemini: { input: 0.000075, output: 0.0003 }, // gemini-3.6-flash tier, approximate
+  jev: { input: 0.00005, output: 0.00005 }, // TypeSafe System One, approximate
+};
+
+/** Pure cost estimate for one LLM or Jev call's token usage (docs/DECISIONS.md D049). */
+export function estimateCallCostUsd(kind: 'gemini' | 'jev', tokensIn: number, tokensOut: number): number {
+  const rate = COST_PER_1K_TOKENS_USD[kind];
+  return (tokensIn / 1000) * rate.input + (tokensOut / 1000) * rate.output;
+}
 
 /**
  * Per-agent context token budgets (docs/03 §8 "Budgets"). Token counts are the chars/4 heuristic
