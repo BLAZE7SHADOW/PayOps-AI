@@ -1,0 +1,19 @@
+{
+  "name": "@payops/evals",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@payops/agents": "workspace:*",
+    "@payops/core": "workspace:*",
+    "@payops/shared": "workspace:*",
+    "@langchain/langgraph": "^1.4.18",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.5"
+  }
+}

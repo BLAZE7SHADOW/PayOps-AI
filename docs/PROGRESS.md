@@ -5,12 +5,17 @@ Update at the end of every session. Newest session log entry on top.
 ## Current phase
 
 **Phase 5 · in progress.** Phase 4 is complete (see below). Phase 5 task 1 (replan node, J5,
-attempt tabs) is done: `execute`/`validate`/`closeResolved`/`replan` graph nodes, J5 decision +
-its two code caps, `AttemptSummary`/history now actually feeds `resolve`'s proposal (see D047),
-and the Investigation screen splits its trace into per-attempt tabs once a run has replanned.
-`pnpm typecheck`, `pnpm lint`, `pnpm test` (395 passed, 0 skipped) all clean. Tasks 2-6 of
-docs/06-phases.md's Phase 5 (evals package, injection eval, budget guard, failure drills) are not
-started.
+attempt tabs) is done (D047). Task 2 (`replay_fails_then_replan` passes on attempt 2) was
+confirmed already covered by task 1's own `graph.test.ts` rewrite -- no separate work needed.
+Task 3 (`packages/evals`: golden expectations, runner, markdown report) and task 4 (injection
+eval) are both done together (D048): 7 of 9 scenarios have golden expectations (status/verdict/
+tier gated; root-cause/action-set measured, not gated), `pnpm eval` (REPLAY) is a real CI gate
+that exits non-zero on a hard-gate failure, `pnpm eval:live` writes `docs/evals/<date>.md`, and
+the injection scenario (`injected_refund_request`) proves both halves of docs/03 §15's safety
+property (no refund proposed; the note is quarantined by the real J1 pipeline) as hard gates on
+the same golden run. `pnpm typecheck`, `pnpm lint`, `pnpm test` (402 passed, 0 skipped) all clean.
+Tasks 5-6 (budget guard escalation, failure drills: Gemini/Jev timeout, DB serialization
+conflict) are not started.
 
 ## Phase checklist
 
@@ -24,16 +29,23 @@ started.
 
 ## Next task
 
-**Phase 5 task 1 is done (replan/J5/attempt-tabs, see D047 and the session log below). Start a
-new chat session for Phase 5 task 2** ("`replay_fails_then_replan` passes on attempt 2" --
-already proven true by `graph.test.ts`'s new test, but docs/06-phases.md lists it as its own
-task; worth re-checking whether there's anything left there beyond what task 1 already covers) or
-task 3 (`packages/evals`: golden expectations, runner, markdown report). Read
-`docs/06-phases.md`'s Phase 5 section and `docs/DECISIONS.md`'s D047 first. Per CLAUDE.md's
-one-phase-per-chat rule this is still within Phase 5, but each task is its own reasonable
-session-sized chunk (same granularity Phase 4's tasks 3-9 each got their own session) --
-consider starting a fresh chat per task rather than doing the rest of Phase 5 in one sitting,
-same as every prior phase.
+**Phase 5 tasks 1-4 are done (D047, D048). Start a new chat session for Phase 5 task 5**
+(budget guard: exceeding `MAX_TOOL_CALLS`/`MAX_COST_USD` per run escalates cleanly) **or task 6**
+(failure drills: Gemini timeout, Jev timeout, database serialization conflict during execute;
+each must end in a defined state). Read `docs/06-phases.md`'s Phase 5 section and
+`docs/DECISIONS.md`'s D048 first. Worth deciding early whether `MAX_TOOL_CALLS`/`MAX_COST_USD`
+already exist anywhere in the codebase (a quick grep first) or need to be added to
+`AGENT_BUDGET_LIMITS` (`packages/shared/src/agents.ts`) alongside the existing
+`maxFollowupToolCalls`/`recursionLimit`/`maxAttempts` -- docs/03 §2/§5 name them but task 5 is the
+first task that actually needs them enforced.
+
+Separately, not urgent: `packages/evals`'s golden set covers 7 of 9 scenarios by design (D048) --
+`settlement_mismatch` and `suspicious_payment` both take the full path (plan -> specialists ->
+groundCheck) and were deliberately left out rather than guessing J2/J3/J4/LLM-findings fixtures
+with no existing full-path integration test to model them on. Extending the golden set to those
+two (or moving them under a `driver: 'cassette'` once cassettes exist for them) is fair game for
+whichever future session ends up writing the first real full-path integration test, but should
+not block tasks 5/6.
 
 ## How to run locally
 
@@ -95,6 +107,10 @@ Shivam's Mac directly, same as task 9 did.
   always-on rules-only tier in `core/policy/risk.ts`), not the agent's J3 `RiskAssessment`
   (`state.risk`, now genuinely populated by `riskAgent`). `state.risk` is available on the run
   and in `agent_steps` but nothing downstream reads it yet — flagged, not wired, per D040.
+- `packages/evals`'s golden set covers 7 of 9 `ScenarioKey`s. `settlement_mismatch` and
+  `suspicious_payment` both take the full path (`plan` → specialists → `groundCheck`) and were
+  deliberately left out rather than guessing J2/J3/J4/LLM-findings fixtures with no existing
+  full-path integration test to model them on (docs/DECISIONS.md D048).
 
 ## Later (parked ideas, do not build yet)
 
@@ -105,6 +121,50 @@ Shivam's Mac directly, same as task 9 did.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 5 tasks 2-4: confirmed task 2, built packages/evals (task 3) + injection eval (task 4), see D048
+- Confirmed Phase 5 task 2 (`replay_fails_then_replan` passes on attempt 2) needs no separate
+  work: task 1's own `graph.test.ts` rewrite already drives a real attempt-2 resolution end to
+  end (D047). Read `docs/06-phases.md`'s Phase 5 section and D047 first, per the Next task note.
+- Explored which of the 9 `ScenarioKey`s the existing fast-path deterministic-decision-fixture
+  pattern (`graph.test.ts`'s `decision()`) actually reaches, by really running each one (a
+  throwaway script, not guessed from reading the code): `settlement_mismatch` turns out to hit
+  the full path (`plan` -> a specialist's LLM call) even with a confident J6 answer, and
+  `suspicious_payment`'s `SUSPECTED_FRAUD` template always returns empty `citedIds` so it can
+  never go fast by construction. `duplicate_capture` and `injected_refund_request` do go fast and
+  were previously unverified. This is why the golden set below covers 7 scenarios, not 9 -- see
+  D048 for the full reasoning (this was a deliberate scope decision, not an oversight).
+- New workspace package `packages/evals` (`package.json`, `tsconfig.json`, `vitest.config.ts`,
+  added to root `vitest.config.ts`'s `projects`): `golden.ts` (7 `GoldenScenario`s: the Phase 3
+  demo trio via real recorded cassettes, the replan loop's two branches + `duplicate_capture` +
+  `injected_refund_request` via a new deterministic `fixtures.ts` DecisionPort/LlmPort pair that
+  generalizes `graph.test.ts`'s fixture to also answer `J1_INTAKE`), `runner.ts` (drives each
+  scenario through the real graph against a fresh ephemeral PGlite database, same shape as
+  `record-cassettes.ts`/`graph.test.ts`), `types.ts` (`RunOutcome`/`EvalSummary`/`summarize()`),
+  `report.ts` (the docs/03 §17 markdown report), and `scripts/run-eval.ts` (the `pnpm eval` /
+  `pnpm eval:live` CLI entry point, REPLAY vs. LIVE).
+- Root `package.json` gained `"eval"` and `"eval:live"` scripts. `pnpm eval` exits non-zero on any
+  golden scenario's hard-gate failure (status/verdict/tier/forbidden actions/quarantine/max tool
+  calls); root-cause and action-set match are measured, never gated, since they're model guesses
+  (see D048 on why, and on `refund_stuck`'s documented root-cause mismatch specifically).
+- Injection eval (task 4) is the `injected_refund_request` golden scenario's own extra hard
+  gates (`forbiddenActionTypes`, `expectQuarantinedNoteIncluding`, checked against the real J1
+  `SignalIntakeService` pipeline via `core.cases.get`) rather than a separate mechanism -- see
+  D048 for why that scenario needs no new graph/pipeline machinery.
+- Tests: `packages/evals/src/types.test.ts` (7 tests, `summarize()`'s accuracy/rate/mean math).
+- Verification: `pnpm eval` run for real -- 7/7 golden scenarios pass, 100% root-cause accuracy
+  (after excluding `refund_stuck`'s documented caveat), mean 12.6 tool calls, ~220ms mean latency,
+  $0 REPLAY cost. `pnpm typecheck`, `pnpm lint`, `pnpm test` (402 passed, 0 skipped, +7 from
+  `packages/evals`) all clean across all 8 packages.
+- Environment note, not committed: `pnpm install` could not run in this cloud session for this
+  new package (a new class of the same macOS/Linux bridge gap already documented below for
+  rollup/esbuild -- this time `pnpm install` itself, `EPERM`/`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`
+  against the bridge's temp-file probes). Worked around by hand-linking
+  `packages/evals/node_modules/@payops/*` and the two `@langchain/*` deps the same way
+  `packages/agents/node_modules` already does it. A real `pnpm install` (works fine on Shivam's
+  Mac) supersedes this the next time one runs. See D048 for the full account.
+- Not done this session: Phase 5 tasks 5-6 (budget guard, failure drills) -- see Next task. The
+  `settlement_mismatch`/`suspicious_payment` golden-set gap noted above is flagged, not blocking.
 
 ### 2026-09-29 · Phase 5 task 1: replan node (J5), execute/validate/close split, attempt tabs (see D047)
 - Split `ResolutionService.finish()` (core) into `execute` / `validate` / `closeExecutionFailed` /

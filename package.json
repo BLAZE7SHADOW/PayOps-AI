@@ -19,7 +19,9 @@
     "db:generate": "pnpm --filter @payops/core db:generate",
     "seed": "pnpm --filter @payops/server seed",
     "jev:ping": "tsx scripts/jev-ping.ts",
-    "cassette:record": "tsx packages/agents/scripts/record-cassettes.ts"
+    "cassette:record": "tsx packages/agents/scripts/record-cassettes.ts",
+    "eval": "tsx packages/evals/scripts/run-eval.ts",
+    "eval:live": "tsx packages/evals/scripts/run-eval.ts --mode=live"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
