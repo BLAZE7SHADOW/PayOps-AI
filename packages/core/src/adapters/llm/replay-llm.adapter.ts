@@ -10,8 +10,9 @@ export class ReplayLlmAdapter implements LlmPort {
     this.reader = new CassetteReader(cassettePath(scenarioKey, dir));
   }
 
-  async invokeStructured<T>(_schema: z.ZodType<T>, messages: LlmMessage[], meta: LlmCallMeta): Promise<LlmResult<T>> {
+  async invokeStructured<T>(schema: z.ZodType<T>, messages: LlmMessage[], meta: LlmCallMeta): Promise<LlmResult<T>> {
     const key = cassetteKey(meta.node, meta.callIndex, stableHash(messages));
-    return (await this.reader.read(key, 'llm')) as LlmResult<T>;
+    const result = (await this.reader.read(key, 'llm')) as LlmResult<T>;
+    return { ...result, data: schema.parse(result.data) };
   }
 }

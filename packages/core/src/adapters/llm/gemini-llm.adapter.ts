@@ -26,7 +26,7 @@ export class GeminiLlmAdapter implements LlmPort {
     };
     const usage = result.raw?.usage_metadata ?? result.raw?.response_metadata?.usage;
     return {
-      data: result.parsed,
+      data: schema.parse(result.parsed),
       usage: { inputTokens: usage?.input_tokens ?? 0, outputTokens: usage?.output_tokens ?? 0 },
     };
   }

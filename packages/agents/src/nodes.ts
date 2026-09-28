@@ -78,7 +78,7 @@ export function buildNodes(deps: AgentDeps) {
     const evidence = evidenceFrom(state.evidence, caseState, BASELINE_TOOLS, 'triage');
     await onEvent('triage', 'TOOL_COMPLETED', { tools: BASELINE_TOOLS.map((t) => t.name), evidenceIds: evidence.map((e) => e.id) });
     await onEvent('triage', 'NODE_COMPLETED', { brief });
-    return { case: brief, evidence, budget: { ...zeroBudget(), toolCalls: evidence.length } };
+    return { case: brief, evidence, budget: { ...zeroBudget(), toolCalls: BASELINE_TOOLS.length } };
   }
 
   async function diagnose(state: PayOpsStateType): Promise<PayOpsUpdate> {
@@ -103,7 +103,8 @@ export function buildNodes(deps: AgentDeps) {
       await onEvent('diagnose', 'DECISION_MADE', { tag: 'J6_DIAGNOSE', answers: result.answers, usage: result.usage });
       const confidence = result.answers.root_cause.confidence;
       const needsHuman = result.answers.needs_human.noul;
-      const fast = confidence >= 0.8 && needsHuman <= 0.5;
+      const fast = confidence >= 0.8 && needsHuman <= 0.5 && result.answers.evidence_consistent.noul > 0.5
+        && narrativeFor(result.answers.root_cause.choice, state.evidence).citedIds.length > 0;
       const diagnosis: Diagnosis | null = fast
         ? { rootCause: result.answers.root_cause.choice, narrative: '', confidence, supportingFindingIds: [], path: 'FAST' }
         : null;
@@ -114,7 +115,7 @@ export function buildNodes(deps: AgentDeps) {
       };
     } catch (err) {
       await onEvent('diagnose', 'NODE_COMPLETED', { path: 'FULL', fallback: true, error: err instanceof Error ? err.message : String(err) });
-      return { diagnosis: null };
+      return { diagnosis: null, budget: { ...zeroBudget(), jevCalls: 1 } };
     }
   }
 
@@ -163,7 +164,7 @@ export function buildNodes(deps: AgentDeps) {
       budget: {
         ...zeroBudget(),
         llmCalls: 2,
-        toolCalls: followUpEvidence.length,
+        toolCalls: followUpTools.length,
         tokensIn: choiceResult.usage.inputTokens + findingsResult.usage.inputTokens,
         tokensOut: choiceResult.usage.outputTokens + findingsResult.usage.outputTokens,
       },
@@ -177,6 +178,7 @@ export function buildNodes(deps: AgentDeps) {
 
     let diagnosis = state.diagnosis;
     let budget = zeroBudget();
+    const findings: Finding[] = [];
     if (!diagnosis) {
       const result = await llm.invokeStructured(DiagnosisSchema, diagnosisPrompt(brief, state.findings, state.evidence, state.history), {
         node: 'resolve',
@@ -189,13 +191,16 @@ export function buildNodes(deps: AgentDeps) {
     } else if (!diagnosis.narrative) {
       // Fast path: code narrative template, no LLM (docs/03 §4a).
       const narrative = narrativeFor(diagnosis.rootCause, state.evidence);
-      diagnosis = { ...diagnosis, narrative: narrative.text, supportingFindingIds: narrative.citedIds };
+      const finding: Finding = { id: nextFindingId(state.findings), agent: 'payment', code: 'OTHER', statement: narrative.text, evidenceIds: narrative.citedIds, confidence: diagnosis.confidence };
+      findings.push(finding);
+      diagnosis = { ...diagnosis, narrative: narrative.text, supportingFindingIds: [finding.id] };
+      await onEvent('resolve', 'FINDING_CREATED', { findingIds: [finding.id] });
     }
 
     const proposal = buildProposal(diagnosis, caseState, []);
     await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal });
     await onEvent('resolve', 'NODE_COMPLETED', {});
-    return { diagnosis, proposal, budget };
+    return { diagnosis, proposal, findings, budget };
   }
 
   async function policyGate(state: PayOpsStateType): Promise<PayOpsUpdate> {

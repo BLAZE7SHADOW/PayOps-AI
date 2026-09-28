@@ -46,7 +46,8 @@ export const ServerEnvSchema = z.object({
   AI_MODEL: z.string().default('gemini-3.6-flash'),
   GEMINI_API_KEY: z.string().optional(),
   TYPESAFE_JEV_API_KEY: z.string().optional(),
-  JEV_MODEL: z.string().default('jev-1.13'),
+  // Accept the original local configuration while pinning the provider's actual version id.
+  JEV_MODEL: z.string().default('jev-1.13.0').transform((model) => model === 'jev-1.13' ? 'jev-1.13.0' : model),
 
   GATEWAY_ADAPTER: z.enum(['simulator', 'razorpay']).default('simulator'),
   /** Background reconciliation sweep interval. 0 disables it. */

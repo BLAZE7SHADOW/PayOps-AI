@@ -32,7 +32,7 @@ export class OverviewService {
     const trendStart = new Date(today.getTime() - (TREND_DAYS - 1) * DAY_MS);
     const day = sql<string>`to_char(${cases.openedAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
-    const [captured, openRows, resolvedRows, trendRows, oldest, pending] = await Promise.all([
+    const [captured, openRows, resolvedRows, trendRows, oldest, pending, agentResolved] = await Promise.all([
       this.gateway.summarizeCaptures({ from: today, to: new Date(today.getTime() + DAY_MS) }),
       this.db
         .select({ status: cases.status, n: count() })
@@ -56,6 +56,10 @@ export class OverviewService {
         .orderBy(asc(cases.openedAt), asc(cases.id))
         .limit(5),
       this.db.select({ n: count() }).from(approvals).where(eq(approvals.status, 'PENDING')),
+      this.db.select({ n: count() }).from(cases).where(and(
+        eq(cases.status, 'RESOLVED'), gte(cases.resolvedAt, new Date(now.getTime() - 7 * DAY_MS)),
+        sql`${cases.resolution}->>'by' = 'AGENT'`,
+      )),
     ]);
 
     const byDay = new Map<string, Partial<Record<CaseType, number>>>();
@@ -73,7 +77,7 @@ export class OverviewService {
       openExceptions: openRows.reduce((acc, r) => acc + r.n, 0),
       awaitingApproval: pending[0]?.n ?? 0,
       resolved7d: resolvedRows[0]?.n ?? 0,
-      resolvedByAgent7d: 0, // Phase 3: agent resolutions
+      resolvedByAgent7d: agentResolved[0]?.n ?? 0,
       exceptionsByType: [...byDay.entries()].map(([date, counts]) => ({ date, ...counts })),
       oldestOpen: oldest.map((r) => toCaseListItem(r.row, r.assigneeName)),
     };

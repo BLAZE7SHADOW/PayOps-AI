@@ -3,7 +3,7 @@ import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from './schema';
 
 export { schema };
-export type Db = NodePgDatabase<typeof schema>;
+export type Db = NodePgDatabase<typeof schema> & { $client: pg.Pool };
 /** The handle passed to `db.transaction(async (tx) => ...)`. Services accept either. */
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 export type DbOrTx = Db | Tx;

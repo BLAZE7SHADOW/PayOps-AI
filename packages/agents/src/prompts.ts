@@ -17,7 +17,7 @@ const SYSTEM_PROMPT = [
 
 function briefLines(brief: CaseBrief): string {
   return [
-    `case ${brief.displayId} (${brief.type})`,
+    `case type: ${brief.type}`,
     `detection rules: ${brief.detectionRuleIds.join(', ') || 'none'}`,
     `amount band: ${brief.amountBand}`,
     `mismatched systems: ${brief.mismatchedSystems.join(', ') || 'none'}`,
@@ -25,10 +25,20 @@ function briefLines(brief: CaseBrief): string {
   ].join('\n');
 }
 
+/** IDs and observation dates are audit metadata, not reasoning inputs. Keep semantic facts
+ * unchanged so a regenerated scenario replays, while different amounts/statuses still miss. */
+function promptFacts(facts: EvidenceItem['facts']): EvidenceItem['facts'] {
+  return Object.fromEntries(Object.entries(facts).map(([key, value]) => {
+    if (key === 'capturedAt' || key === 'processedAt') return [key === 'capturedAt' ? 'captured' : 'processed', typeof value === 'string' && !value.startsWith('not ')];
+    if (key.endsWith('Id')) return [`${key}Present`, value !== 'none'];
+    return [key, value];
+  }));
+}
+
 function evidenceTable(evidence: readonly EvidenceItem[]): string {
   if (evidence.length === 0) return '(no evidence yet)';
   return evidence
-    .map((e) => `${e.id} [${e.system}] ${e.source} on ${e.entityRef}: ${JSON.stringify(e.facts)} (observed ${e.observedAt})`)
+    .map((e) => `${e.id} [${e.system}] ${e.source}: ${JSON.stringify(promptFacts(e.facts))}`)
     .join('\n');
 }
 

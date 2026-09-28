@@ -15,14 +15,20 @@ import type { PayOpsStateType } from './state';
 
 export type AgentEnv = Pick<ServerEnv, 'AI_MODE' | 'AI_MODEL' | 'GEMINI_API_KEY' | 'JEV_MODEL' | 'TYPESAFE_JEV_API_KEY' | 'DATABASE_URL'>;
 
-let checkpointerPromise: Promise<PostgresSaver> | null = null;
-async function getCheckpointer(databaseUrl: string): Promise<PostgresSaver> {
-  checkpointerPromise ??= (async () => {
-    const saver = PostgresSaver.fromConnString(databaseUrl, { schema: 'checkpoints' });
-    await saver.setup();
-    return saver;
-  })();
-  return checkpointerPromise;
+// Reuse the app pool: PGlite requires one connection across graph, jobs, and domain queries.
+const checkpointers = new WeakMap<Core['db'], Promise<PostgresSaver>>();
+async function getCheckpointer(core: Core): Promise<PostgresSaver> {
+  let pending = checkpointers.get(core.db);
+  if (!pending) {
+    pending = (async () => {
+      const saver = new PostgresSaver(core.db.$client, undefined, { schema: 'checkpoints' });
+      await saver.setup();
+      return saver;
+    })();
+    checkpointers.set(core.db, pending);
+    pending.catch(() => checkpointers.delete(core.db));
+  }
+  return pending;
 }
 
 function buildDeps(core: Core, env: AgentEnv, runId: string, caseId: string, scenarioKey?: string): AgentDeps {
@@ -62,7 +68,7 @@ export async function createAgentRun(core: Core, caseId: string, scenarioKey?: s
 /** Called from the `agent-run` pg-boss job: builds this run's ports and invokes the graph. */
 export async function investigateAgentRun(core: Core, env: AgentEnv, runId: string, caseId: string, scenarioKey?: string): Promise<void> {
   const deps = buildDeps(core, env, runId, caseId, scenarioKey);
-  const checkpointer = await getCheckpointer(env.DATABASE_URL);
+  const checkpointer = await getCheckpointer(core);
   const graph = buildGraph(deps, checkpointer);
   const config = { configurable: { thread_id: runId }, recursionLimit: AGENT_BUDGET_LIMITS.recursionLimit };
 
@@ -86,7 +92,7 @@ export async function resumeAgentRun(core: Core, env: AgentEnv, runId: string, d
   const row = await getRunRow(core, runId);
   if (!row) throw new Error(`agent run ${runId} not found`);
   const deps = buildDeps(core, env, runId, row.caseId, row.scenarioKey ?? undefined);
-  const checkpointer = await getCheckpointer(env.DATABASE_URL);
+  const checkpointer = await getCheckpointer(core);
   const graph = buildGraph(deps, checkpointer);
   const config = { configurable: { thread_id: runId }, recursionLimit: AGENT_BUDGET_LIMITS.recursionLimit };
 

@@ -4,23 +4,21 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 3 · First agent** (backend and investigation UI implemented; verification found blockers, cassette recording remaining). Phases 0, 1 and 2 are done.
+**Phase 3 · First agent is complete.** Phases 0–3 are done; Phase 4 has not started.
 
 ## Phase checklist
 
 - [x] Phase 0 · Foundations
 - [x] Phase 1 · Product core without AI
 - [x] Phase 2 · Resolution spine
-- [ ] Phase 3 · First agent (resume-ready milestone)
+- [x] Phase 3 · First agent (resume-ready milestone)
 - [ ] Phase 4 · Multi-agent, context, evidence, Jev
 - [ ] Phase 5 · Replan, evals, hardening
 - [ ] Phase 6 · Polish, public demo, deploy
 
 ## Next task
 
-Phase 3 verification found two fast-path evidence failures. Before changing the implementation, confirm the correction with Shivam per `CLAUDE.md` (code/docs disagreement): collect the webhook and gateway-refund evidence needed by fast-path narratives before resolving. These tools currently run only as full-investigation follow-ups, so fast-path narratives have no citations.
-
-Then fix the existing shared type-import lint error and server build command (`tsup` rejects `--noExternal`), verify the investigation UI in one browser pass, and record real cassettes for `captured_order_failed`, `refund_stuck`, `refund_never_initiated`. Re-verify all Phase 3 acceptance criteria: LIVE AUTO → PASS; MANAGER approval → actual server/browser restart → APPROVE → PASS; REPLAY using recorded responses with zero provider network calls. Do not start Phase 4 yet.
+Start Phase 4 in a new chat. Read its task list in `docs/06-phases.md`, then the applicable sections of `docs/03-agent-system.md`. The detailed Phase 3 handoff and verification evidence are in `docs/PHASE3-HANDOFF.md`.
 
 ## How to run locally
 
@@ -44,17 +42,13 @@ Open http://localhost:5173 and use a demo account on the sign-in page (password 
 
 ## Blockers
 
-- Two graph integration tests fail: captured-payment and stuck-refund fast-path narratives omit evidence citations.
-- Lint fails at `packages/shared/src/agents.ts:7` (type-only import).
-- Server build fails because the installed tsup CLI rejects `--noExternal`.
-- No scenario cassettes exist; LIVE/recorded REPLAY and approval-to-PASS across an actual server/browser restart remain unverified.
+None for Phase 3.
 
 ## Known gaps (deliberate, later phases)
 
 - Detection never closes a case by itself; cases close through a verified resolution.
 - Login rate limiting is in memory (single server process).
 - Signals column (complaint type, urgency, quarantine) stays empty until Jev J1 in Phase 4.
-- Overview "Resolved by investigation" reads 0 until the web UI (task 7) lands.
 - Agent graph now has four integration tests against PGlite + PostgresSaver. Full Gemini path and adapter fallback unit coverage remain incomplete.
 
 ## Later (parked ideas, do not build yet)
@@ -67,12 +61,12 @@ Open http://localhost:5173 and use a demo account on the sign-in page (password 
 
 ## Session log
 
-### 2026-09-28 · Phase 3 UI and verification (incomplete)
+### 2026-09-28 · Phase 3 UI and verification (complete)
 - Added case investigation UI: run/attempt header, start control, step trace, findings/proposal, evidence panel, and keyboard-accessible `EvidenceRef` links. Socket events invalidate persisted run/step reads; reconnect rebuilds from the API. Added guards for approval payloads sharing agent event names. Browser verification remains pending.
-- Added the agents Vitest project and four graph integration tests using real deterministic services and PostgresSaver. AUTO resolution and stuck-refund synchronization reach PASS, but both tests fail on missing narrative citations. A newly constructed graph resumes a persisted MANAGER interrupt with REJECT without repeating investigation; failed execution escalates without replanning. This does not establish the required APPROVE-to-PASS flow after an actual process restart.
-- Verification: all six packages typecheck; 254/256 tests pass (the original 252 remain green); web production build succeeds with a circular-chunk warning; lint fails on a pre-existing type import; server production build fails on unsupported `--noExternal`; `git diff --check` passes.
+- Added agents graph and prompt tests: fast path reaches AUTO/PASS with cited evidence; stuck-refund sync reaches PASS; manager interrupts resume from a newly constructed graph; execution failure escalates without replanning; all three recordings replay on fresh data with provider fetches blocked.
+- Verification: typecheck, lint, all 261 tests, server/web production builds, and `git diff --check` pass. Live browser verification confirms AUTO/PASS, MANAGER approval after the browser closed and server restarted, no repeated triage, socket reconnect step recovery, and evidence-link keyboard navigation.
 - Local tooling: used `corepack pnpm` because `pnpm` is absent from PATH. Reinstalled the frozen lockfile dependencies for macOS (previous node_modules contained Linux binaries). Confirmed both provider keys are configured through `loadServerEnv`; no secret values were printed and no live provider calls were made.
-- Phase 3 is not complete. Paused correction of the demonstrated evidence/code-doc disagreement for Shivam's direction, as required by `CLAUDE.md`. Phase 4 has not started.
+- Fixed the invalid Jev model pin after a real 400 response (`jev-1.13.0`), shared checkpointer pool, prompt cassette stability, schema validation on recorded LLM responses, tsup config, and agent resolution overview count. No secret values were printed; `.env` was not edited. Phase 3 is complete; Phase 4 has not started. See `docs/PHASE3-HANDOFF.md`.
 
 ### 2026-09-28 · Phase 3 (backend)
 - `shared`: full agent vocabulary (`agents.ts`) — run/step status, decision tags, root causes, finding codes, evidence/finding/proposal shapes, `RunBudget`, `AGENT_BUDGET_LIMITS`, `CreateRunBody`/`RunListQuery` DTOs.

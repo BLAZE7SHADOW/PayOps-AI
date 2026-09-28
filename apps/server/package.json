@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "start": "node dist/main.js",
-    "build": "tsup src/main.ts --format esm --target node22 --out-dir dist --clean --no-splitting --noExternal @payops/shared --noExternal @payops/core --noExternal @payops/simulator --noExternal @payops/agents",
+    "build": "tsup",
     "typecheck": "tsc -p tsconfig.json",
     "seed": "tsx src/scripts/seed.ts"
   },

@@ -104,3 +104,12 @@ LangGraph re-runs a node from its top on resume, so any node that writes to the 
 
 ## D032 · `scenarioKey` is optional and only meaningful for RECORD/REPLAY
 Production cases have no natural scenario key. `CreateRunBody` and the agent job payloads carry an optional `scenarioKey`, defaulting to `'default'` when omitted; `LIVE` mode ignores it, `RECORD`/`REPLAY` use it to select the cassette file.
+
+## D033 · Fast-path evidence and typed findings
+Webhook delivery and gateway-refund status are baseline tools so zero-Gemini narratives can cite the facts they describe. Fast-path narratives create a real `Finding`; `supportingFindingIds` holds finding ids, not evidence ids. J6 requires consistent evidence and a citable template in addition to the existing confidence/human-review gates. Tool counts count executed tools, including empty results, rather than evidence rows. Authorized while completing Phase 3 after citation tests exposed the gap.
+
+## D034 · Stable reasoning inputs for record/replay
+Prompts omit case display ids, entity refs and observation times. Timestamp facts become code-computed presence booleans, and link ids become presence flags. Money, statuses and other semantic facts remain unchanged and hashed, so altered financial facts cannot reuse a recording. Replay uses the recorded scenario seed; different seeds can change ordering among evidence rows and cause an intentional miss. This keeps changing audit metadata out of model context without weakening the cassette lookup to a scenario-only match.
+
+## D035 · Share the checkpointer pool and correct the Jev pin
+PostgresSaver uses the application's pg pool, just like pg-boss (D023). A second pool can interleave operations on PGlite's single backend. The setup cache is scoped to that database and cleared after a failed setup. Jev's provider accepts `jev-1.13.0`, not the initial `jev-1.13` configuration; env parsing translates that legacy spelling to the pinned version without editing secrets. Confirmed by a live 400 response and https://docs.typesafe.ai/models.

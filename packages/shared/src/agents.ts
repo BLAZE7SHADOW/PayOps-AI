@@ -4,7 +4,7 @@
  * (packages/agents/src/state.ts) is built from z.infer types instead of ad-hoc interfaces.
  */
 import { z } from 'zod';
-import { CatalogAction } from './actions';
+import type { CatalogAction } from './actions';
 import type { PolicyDecision } from './policy';
 import type { ActorRef, ExecutionStep, ValidationCheck, ValidationVerdict } from './dto/resolution';
 import type { AmountBand } from './money';

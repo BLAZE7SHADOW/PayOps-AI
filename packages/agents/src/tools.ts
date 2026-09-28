@@ -115,7 +115,7 @@ const getOrderTimeline: ToolDef = {
 const getWebhookDeliveries: ToolDef = {
   name: 'getWebhookDeliveries',
   group: 'payment',
-  baseline: false,
+  baseline: true,
   description: 'Every webhook delivery attempt for this order: event type, final status, HTTP codes seen by our consumer.',
   run(state) {
     const s = state.order;
@@ -192,7 +192,7 @@ const getRefund: ToolDef = {
 const getRefundGatewayStatus: ToolDef = {
   name: 'getRefundGatewayStatus',
   group: 'reconciliation',
-  baseline: false,
+  baseline: true,
   description: 'What the gateway says about each refund: status and when it was processed.',
   run(state) {
     const s = state.order;
