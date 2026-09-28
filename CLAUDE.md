@@ -48,7 +48,7 @@ Do **not** add: MongoDB, Redis, BullMQ, a separate worker service, Supabase Auth
 
 - LLM: `AI_PROVIDER=gemini`, `AI_MODEL` (currently `gemini-3.6-flash`), key `GEMINI_API_KEY`. Access only through `LlmPort`.
 - Jev (TypeSafe System One): key `TYPESAFE_JEV_API_KEY` (pass it explicitly to `new TypeSafeClient({ apiKey })`; the SDK default env name is different). Pin `JEV_MODEL`. Access only through `DecisionPort`. Docs: https://docs.typesafe.ai (API: `POST https://api.typesafe.ai/v1/systemone`, primitives Choice / Score / Noul, answers include probabilities and confidence).
-- Jev is used at exactly five points (J1 intake, J2 plan, J3 risk, J4 grounding, J5 replan). Do not add more without a `DECISIONS.md` entry. Never ask Jev to count, compare numbers or order dates.
+- Jev is used at six points (J1 intake, J2 plan, J3 risk, J4 grounding, J5 replan, J6 fast-path diagnosis, see docs/03 §4a). Prefer Jev + code over an LLM call wherever a typed decision is enough; Gemini is for reasoning Jev cannot do. Do not add points without a `DECISIONS.md` entry. Never ask Jev to count, compare numbers or order dates.
 - `AI_MODE`: `LIVE` · `RECORD` · `REPLAY`. Tests and CI use `REPLAY`. Never call live APIs from unit tests.
 
 ## Secrets
@@ -73,6 +73,14 @@ pnpm eval           # evals in REPLAY (Phase 5)
 pnpm jev:ping       # Jev smoke test (Phase 4)
 ```
 
+## Token budget rules (for coding sessions)
+
+- One phase per chat. Start each chat with: "Read CLAUDE.md and docs/PROGRESS.md, then continue." Do not re-read other docs unless the task touches them, and read only the relevant sections.
+- No parallel subagents. At most one subagent, only for a large self-contained chunk, with `model: sonnet`.
+- Read files with targeted ranges or grep, not whole directories. Do not re-read a file you just wrote.
+- Verify with typecheck + tests on touched packages during work; one browser pass with at most 3 screenshots at the end of a phase.
+- Keep replies short: what changed, what to check, what is next.
+
 ## How to work in a session
 
 1. Read this file and `docs/PROGRESS.md`. State the current phase and the next task before coding.
@@ -90,4 +98,5 @@ pnpm jev:ping       # Jev smoke test (Phase 4)
 - **Evidence item (`ev_xx`):** projected facts from one tool call. **Finding (`fd_xx`):** a typed claim citing evidence.
 - **Tier:** policy outcome `AUTO | OPS | MANAGER | BLOCKED`.
 - **Verdict:** validator outcome `PASS | PARTIAL | FAIL`.
-- **J1–J5:** the five Jev decision points.
+- **J1–J6:** the Jev decision points (J6 = fast-path diagnosis).
+- **Fast path / full path:** a run diagnosed by Jev + code templates (no Gemini) vs. a full LLM investigation.

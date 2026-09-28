@@ -65,7 +65,26 @@ This keeps the system agentic (it chooses follow-ups, forms hypotheses, replans)
 | What next after failure | **Jev** Choice + code caps | Narrow decision; code enforces retry limit |
 | Workflow, persistence, pause/resume | LangGraph | Checkpointed state machine |
 
-## 4. Where Jev is used (exactly five decision points)
+## 4a. Jev-first fast path (token budget)
+
+Most cases in this product are recognisable patterns. Code already computes the facts (state matrix, rule hits, amount band, webhook codes), so a typed decision is usually enough and a long LLM investigation is waste. Every run first tries the fast path:
+
+```
+facts (code) ─► J6 diagnosis (Jev: Choice over RootCause + Nouls) ─► confidence ≥ 0.80 ?
+   yes ─► resolution template (code: RootCause → catalog actions + params from facts)
+          ─► narrative template (code) ─► grounding J4 ─► policy ─► …          0 Gemini calls
+   no  ─► full investigation (specialists with Gemini, as §2/§5) ─► …           Gemini used
+```
+
+- **J6 · Diagnosis** (graph node `diagnose`): state = code-built case brief (enums, bands, booleans; never raw numbers or dates). One call: `root_cause` Choice over `RootCause`, plus Nouls `evidence_consistent` ("the facts point to one cause") and `needs_human` ("this looks unusual or risky"). Fallback on error: go to the full investigation.
+- **Resolution templates** live in `packages/agents/src/templates.ts`: pure functions `RootCause → CatalogAction[]`, reusing the manual-path recommendations in `core/actions/options.ts`. `UNKNOWN` never has a template.
+- **Narratives** are code templates that cite evidence ids, so the UI still shows "The captured webhook failed 3 times with HTTP 500 [ev_02]".
+- Policy treats fast-path proposals like any agent proposal (J6 confidence is the diagnosis confidence for P5/P6/P8).
+- Gemini is used only when Jev is unsure, the case is novel, a replan needs reasoning, or `needs_human` fires. The Agent Runs screen shows `path: FAST | FULL` and tokens per run, so the saving is visible and measurable in evals.
+
+Target: at least 70% of seeded scenarios resolved on the fast path with zero Gemini tokens; the remaining cases (replay fails then replan, suspicious payment) exercise the full agent.
+
+## 4. Where Jev is used (six decision points: J1–J5 below, J6 in §4a)
 
 Jev (TypeSafe, "System One" model) returns typed answers with calibrated probabilities and a confidence value. Primitives: **Choice** (pick one option), **Score** (ordered levels), **Noul** (probability a statement is true). We follow TypeSafe's guidance: narrow atomic questions, minimal state, batch independent questions in one call, route on confidence, keep control flow in code.
 

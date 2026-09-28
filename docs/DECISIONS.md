@@ -83,3 +83,6 @@ Queue and approval views read `cases.matrix/mismatched`. After a resolution fini
 
 ## D025 · Realtime approval events carry ApprovalItem
 `approval.requested` and `approval.resolved` publish a full `ApprovalItem` (viewer-independent), matching the shared contract the UI consumes.
+
+## D026 · Jev-first fast path before any LLM investigation
+Most cases match known patterns that code can describe as facts. A Jev diagnosis (J6) plus code resolution and narrative templates resolves them with zero Gemini tokens; the full multi-agent investigation runs only when Jev confidence is below 0.80, the case is novel, or it needs reasoning (replan, risk). Why: lower cost and latency, more deterministic evals, and it follows TypeSafe's guidance (code in control, narrow typed decisions). The agent stays agentic where it matters: uncertainty, failures and replanning.

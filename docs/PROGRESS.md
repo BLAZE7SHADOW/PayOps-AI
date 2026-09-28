@@ -18,7 +18,7 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Next task
 
-Phase 3, task 1: `LlmPort` + `GeminiLlmAdapter` (`@langchain/google-genai`, `AI_MODEL`, temperature 0, `withStructuredOutput`), then the record/replay wrappers and `AI_MODE` switch. The seam for resuming an agent run after approval is `ApprovalContinuation.onApproved` in `packages/core/src/container.ts` (`TODO(Phase 3)`); the LangGraph checkpointer must reuse the shared database pool (D023).
+Phase 3, task 1: `DecisionPort` + `JevDecisionAdapter` (pulled forward from Phase 4 for the J6 fast path, D026), then `LlmPort` + `GeminiLlmAdapter` (`@langchain/google-genai`, `AI_MODEL`, temperature 0, `withStructuredOutput`), then the record/replay wrappers and `AI_MODE` switch. The seam for resuming an agent run after approval is `ApprovalContinuation.onApproved` in `packages/core/src/container.ts` (`TODO(Phase 3)`); the LangGraph checkpointer must reuse the shared database pool (D023).
 
 ## How to run locally
 

@@ -82,7 +82,7 @@ Tasks
 1. `LlmPort` + `GeminiLlmAdapter` (`@langchain/google-genai`, `AI_MODEL`, temperature 0, `withStructuredOutput`).
 2. Recording/replay wrappers and cassette format; `AI_MODE` switch.
 3. `packages/agents`: state (full shape from agent doc §6, even if some fields unused yet), tools for Payment + Reconciliation groups with projection and evidence writing.
-4. Graph v1: `loadCase → triage → investigate (single agent, all tools, baseline + ≤6 follow-ups) → resolve → policyGate → awaitApproval(interrupt) → execute → validate → close`. No replan yet (FAIL → escalate).
+4. Graph v1: `loadCase → triage → diagnose (J6 fast path, docs/03 §4a; needs the Jev adapter from Phase 4 task 1 pulled forward) → [fast: template | full: investigate]`. Full path: `investigate (single agent, all tools, baseline + ≤6 follow-ups) → resolve → policyGate → awaitApproval(interrupt) → execute → validate → close`. No replan yet (FAIL → escalate).
 5. `PostgresSaver` checkpointer; `agent-run` and `agent-resume` pg-boss jobs; `agent_runs` / `agent_steps` persistence.
 6. Socket.IO events from the in-process publisher; event names from agent doc §16.
 7. Web: Investigation column streams live; Findings & resolution panel with `EvidenceRef`s; Evidence panel; attempt header; reconnect rebuilds from `/runs/:id/steps`.
