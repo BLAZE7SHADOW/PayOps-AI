@@ -4,6 +4,7 @@ import type {
   auditEvents,
   cases,
   customers,
+  devices,
   disputes,
   executions,
   ledgerEntries,
@@ -36,3 +37,4 @@ export type ApprovalRow = typeof approvals.$inferSelect;
 export type ExecutionRow = typeof executions.$inferSelect;
 export type ValidationResultRow = typeof validationResults.$inferSelect;
 export type DisputeRow = typeof disputes.$inferSelect;
+export type DeviceRow = typeof devices.$inferSelect;

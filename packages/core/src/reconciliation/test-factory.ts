@@ -260,6 +260,8 @@ export function healthySnapshot(o: { amountMinor?: number } = {}): OrderSnapshot
     merchant,
     customer: customerRow(),
     recentAttempts: [attempt({ result: 'SUCCESS', failureCode: null, at: ago(26 * HOUR_MS), orderId: 'ord_1' })],
+    devices: [],
+    merchantDisputes: [],
   };
 }
 

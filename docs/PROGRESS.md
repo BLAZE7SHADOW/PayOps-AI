@@ -4,11 +4,10 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 task 1 (Jev adapter), task 2 (J1 signal
-intake), task 3 (specialist split + J2 `plan` + `Send` fan-out + `join`) and task 4 (per-agent
-ContextBuilders: budgets, projection, PII masking, token estimate logging) are done; the rest of
-Phase 4 (risk specialist + J3, groundCheck + J4, evidence persistence, UI decision/grounding
-trace, cassette recordings) is not started.
+**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-5 (Jev adapter, J1 signal
+intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, and now the Risk
+specialist + J3 atomic scores + weighted tier) are done; the rest of Phase 4 (groundCheck + J4,
+evidence persistence, UI decision/grounding trace, cassette recordings) is not started.
 
 ## Phase checklist
 
@@ -22,18 +21,14 @@ trace, cassette recordings) is not started.
 
 ## Next task
 
-Phase 4 task 5: Risk specialist (signal bucketing in code + J3 atomic scores + weights → tier),
-docs/06-phases.md Phase 4 task 5, docs/03-agent-system.md §4 "J3" and §9 (risk tool group).
-`RISK_TOOLS`/`RISK_FOLLOWUP_TOOLS` are still empty arrays (tools.ts) and `riskAgent` still skips
-both its LLM calls — this task adds the real tools (`getCustomerHistory`/`getDeviceSignals`/
-`getFailedAttempts`/`getChargebackHistory`) and J3's Score questions
-(`velocity_abuse`/`identity_mismatch`/`chargeback_pattern`/`merchant_exposure`), then a
-code-weighted composite into `state.risk` (`RiskAssessment`, already defined in
-`packages/shared/src/agents.ts`). The new tools slot straight into task 4's
-`buildSpecialistContext({ agent: 'risk', ... })` — no context-builder changes should be needed,
-only `CONTEXT_BUDGET.risk` (1200) to revisit if real risk evidence turns out to need more room.
-After task 5: groundCheck + J4 (task 6), evidence/finding persistence (task 7), UI
-decision/grounding trace (task 8), cassette recordings (task 9).
+Phase 4 task 6: `groundCheck` + J4 (docs/06-phases.md Phase 4 task 6, docs/03-agent-system.md §4
+"J4"). Structural predicates over each finding's cited evidence, one batched Jev `support`
+Choice per claim plus a `sufficient` Noul, code rules (any `contradicted` at confidence ≥ 0.5
+drops that finding and records a `GroundingViolation`; `sufficient < 0.5` and
+`investigationRound < 2` routes back to `plan` for one targeted extra round, only the specialists
+owning the gaps). `state.grounding`/`state.gaps` are still always `null`/`[]` — `join` currently
+feeds `resolve` directly (see nodes.ts's header comment). After task 6: evidence/finding
+persistence (task 7), UI decision/grounding trace (task 8), cassette recordings (task 9).
 
 ## How to run locally
 
@@ -72,6 +67,14 @@ on the Mac to verify.
   when Jev errors, times out, or (REPLAY/no cassette) has nothing recorded for `J1_INTAKE` — this
   is the documented J1 fallback, not a bug.
 - Agent graph now has four integration tests against PGlite + PostgresSaver. Full Gemini path and adapter fallback unit coverage remain incomplete.
+- `chargeback_pattern` (J3, docs/03 §4) is scored from `customers.riskFlags` (currently always
+  empty in seed data) rather than real per-customer chargeback history: the schema only tracks
+  settlement disputes, keyed by merchant/batch, not by customer (docs/DECISIONS.md D040). A real
+  per-customer chargeback record is a schema addition for a later phase if needed.
+- The policy engine's P1/P2 risk-tier check still reads `riskTierFromRules` (the pre-existing,
+  always-on rules-only tier in `core/policy/risk.ts`), not the agent's J3 `RiskAssessment`
+  (`state.risk`, now genuinely populated by `riskAgent`). `state.risk` is available on the run
+  and in `agent_steps` but nothing downstream reads it yet — flagged, not wired, per D040.
 
 ## Later (parked ideas, do not build yet)
 
@@ -82,6 +85,62 @@ on the Mac to verify.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 4 task 5: Risk specialist, code bucketing, J3 Score composite, weighted tier
+- `riskAgent` (nodes.ts) is now a real, bespoke node instead of a stub built from
+  `buildSpecialistNode`: it slices its own baseline evidence, runs two pure code steps
+  (`extractRiskSignals` then `bucketRiskSignals`, new `packages/agents/src/risk.ts`) to turn raw
+  counts into the doc's descriptive buckets (docs/03 §4 "J3", e.g. `failed_attempts_24h_bucket:
+  "6-10"`), then one batched Jev `score()` call (tag `J3_RISK`, already reserved in
+  `DecisionTag`) for `velocity_abuse`/`identity_mismatch`/`chargeback_pattern`/
+  `merchant_exposure`. `combineRiskScores` (new `packages/agents/src/risk.weights.ts`) does the
+  weighted composite (`risk = Σ wᵢ·scoreᵢ`, weights summing to 1) → `LOW|MEDIUM|HIGH|CRITICAL`,
+  then raises the tier by one level (clamped at `CRITICAL`) when Jev's mean confidence across the
+  four Scores is under 0.5 — `state.risk` (`RiskAssessment`) is genuinely populated now, no
+  longer always `null`.
+- Gemini enters only as a fallback, matching the node-reference table's "(+LLM only if
+  confidence < 0.5)": on a low-confidence Jev read, one findings-only LLM call (same
+  `buildSpecialistContext`/`FindingsSchema` shape the other two specialists' second call uses)
+  writes up findings citing Risk's own evidence, with the same structural-grounding drop rule
+  (a finding that cites no valid risk evidence id is dropped). On Jev error/timeout, the J3
+  fallback the doc's adapter-contract table already names ("J3 → rules-only tier") runs instead —
+  `rulesOnlyRiskTier` (risk.ts), a fixed conservative per-signal rule set with no Jev call and no
+  LLM call, reporting `meanConfidence: 0` so a fallback assessment is distinguishable from a real
+  low-confidence one. `riskAgent` never leaves `state.risk` unset once it has evidence to reason
+  over, and never crashes the graph on a Jev outage.
+- Real risk tools (`tools.ts`): `getCustomerHistory`, `getDeviceSignals`, `getFailedAttempts`,
+  `getChargebackHistory`, all baseline (no follow-up subset — Risk never runs an LLM tool-choice
+  pass, so there is nothing to bound with a narrower group). `RISK_TOOLS`/`RISK_FOLLOWUP_TOOLS`
+  are no longer empty placeholders.
+- `packages/core` additions to support the real tools: `OrderSnapshot` gained `devices` (the
+  `devices` table, by customer, all-time) and `merchantDisputes` (settlement disputes joined
+  through `settlements.merchantId`, the merchant-exposure proxy — see below), both loaded by
+  `snapshot.loader.ts` with two more batched, constant-count queries; `db/rows.ts` gained
+  `DeviceRow`; `test-factory.ts`'s `healthySnapshot()` defaults both to `[]`.
+- **Known-gap decision, not a silent fix**: this schema has no per-customer chargeback record
+  (`disputes` is settlement-only, keyed by merchant/batch). `chargeback_pattern` is scored from
+  `customers.riskFlags` instead (always empty in today's seed data); `merchant_exposure` uses the
+  new merchant-level settlement-dispute count. Full reasoning in docs/DECISIONS.md D040.
+- Checked the policy engine (`core/src/policy/*`, docs/03 §11 P1/P2): it already consults a risk
+  tier for BLOCKED/MANAGER, but that's the separate, pre-existing `riskTierFromRules` (rules-only,
+  always on, computed from order/attempt data for every proposal), not the agent's new J3
+  `state.risk`. Left as-is per the task's own instruction not to invent new policy behavior — the
+  gap is recorded above and in D040, not wired.
+- Tests: new `packages/agents/src/risk.test.ts` (bucketing at each boundary, the weighted
+  composite + tier thresholds + confidence-raise-by-one + CRITICAL clamp, the rules-only
+  fallback) and new `packages/agents/src/nodes.test.ts` (`riskAgent` in isolation: confident Jev
+  read with no LLM call, low-confidence Jev read triggering exactly one LLM findings call,
+  structural grounding dropping an unsupported LLM finding, Jev throwing into the rules-only
+  fallback without crashing, and the no-evidence skip path never calling Jev at all) — both pure
+  logic, no database or graph needed, since all risk tools are baseline.
+- Checks: `pnpm typecheck` and `pnpm lint` clean across all packages after these changes.
+  `pnpm test` still cannot run in this session — same documented bridge issue (`Cannot find
+  module '@rollup/rollup-linux-arm64-gnu'`), confirmed by re-reading the error text again before
+  assuming it was the known one. Ask Shivam to run `pnpm test` locally on the Mac (including the
+  two new test files) before trusting the new risk logic fully.
+- Not done this session: groundCheck + J4 (task 6), evidence/finding persistence (task 7), UI
+  trace (task 8), cassette recordings (task 9) — see Next task.
+
 
 ### 2026-09-28 · Phase 4 task 4: ContextBuilders (budgets, projection, PII masking, token logging)
 - New `packages/agents/src/context.ts` (docs/03 §8) is now the single place every model call's

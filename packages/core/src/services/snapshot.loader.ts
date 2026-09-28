@@ -7,6 +7,7 @@ import { DAY_MS } from '@payops/shared';
 import type { DbOrTx } from '../db/client';
 import type {
   CustomerRow,
+  DeviceRow,
   DisputeRow,
   LedgerEntryRow,
   MerchantRow,
@@ -17,6 +18,7 @@ import type {
 } from '../db/rows';
 import {
   customers,
+  devices,
   disputes,
   ledgerEntries,
   merchants,
@@ -71,8 +73,8 @@ export async function loadOrderSnapshots(
       RULE_THRESHOLDS.riskWindowMs,
   );
 
-  // 4–11: everything keyed by those ids, in parallel.
-  const [webhooks, gwRefundRows, lines, ledgerRows, refundRows, merchantRows, customerRows, attemptRows] =
+  // 4–12: everything keyed by those ids, in parallel.
+  const [webhooks, gwRefundRows, lines, ledgerRows, refundRows, merchantRows, customerRows, attemptRows, deviceRows] =
     await Promise.all([
       gateway.listWebhookDeliveries(gwIds),
       gateway.listRefunds(gwIds),
@@ -110,13 +112,33 @@ export async function loadOrderSnapshots(
             lt(paymentAttempts.at, new Date(now.getTime() + DAY_MS)),
           ),
         ),
+      // Risk (docs/03 §9 "getDeviceSignals"): every device seen for these customers, all-time —
+      // there is no window here because a customer's device history (not just this window's
+      // attempts) is exactly what identity-mismatch scoring needs.
+      customerIds.length ? db.select().from(devices).where(inArray(devices.customerId, customerIds)) : Promise.resolve<DeviceRow[]>([]),
     ]);
 
-  // 12: internal settlement rows for the batches we saw.
+  // 13: internal settlement rows for the batches we saw.
   const batchIds = uniq(lines.map((l) => l.batchId));
   const settlementRows = batchIds.length
     ? await db.select().from(settlements).where(inArray(settlements.id, batchIds))
     : [];
+
+  // 14-15: merchant exposure (docs/03 §9 "getChargebackHistory"). Every settlement batch that
+  // belongs to one of these merchants, then every dispute raised against any of those batches —
+  // this is the closest signal this schema has to "how often has this merchant's money been
+  // disputed", used as the merchant_exposure input to J3 (see docs/DECISIONS.md for why this is
+  // a merchant-level proxy rather than a per-customer chargeback history, which the schema does
+  // not model yet).
+  const merchantSettlementRows = merchantIds.length
+    ? await db.select({ id: settlements.id, merchantId: settlements.merchantId }).from(settlements).where(inArray(settlements.merchantId, merchantIds))
+    : [];
+  const merchantIdByBatch = new Map(merchantSettlementRows.map((s) => [s.id, s.merchantId]));
+  const merchantBatchIds = uniq(merchantSettlementRows.map((s) => s.id));
+  const merchantDisputeRows = merchantBatchIds.length
+    ? await db.select().from(disputes).where(inArray(disputes.batchId, merchantBatchIds))
+    : [];
+  const disputesByMerchant = groupBy(merchantDisputeRows, (d) => merchantIdByBatch.get(d.batchId) ?? null);
 
   const paymentsByOrder = groupBy(paymentRows, (p) => p.orderId);
   const gwByOrder = groupBy(gwRows, (g) => g.orderRef);
@@ -127,6 +149,7 @@ export async function loadOrderSnapshots(
   const ledgerByRefund = groupBy(ledgerRows, (e) => e.refundId);
   const refundsByGw = groupBy(refundRows, (r) => r.gwPaymentId);
   const attemptsByCustomer = groupBy(attemptRows, (a) => a.customerId);
+  const devicesByCustomer = groupBy(deviceRows, (d) => d.customerId);
   const merchantById = new Map<string, MerchantRow>(merchantRows.map((m) => [m.id, m]));
   const customerById = new Map<string, CustomerRow>(customerRows.map((c) => [c.id, c]));
   const settlementById = new Map<string, SettlementRow>(settlementRows.map((s) => [s.id, s]));
@@ -174,6 +197,8 @@ export async function loadOrderSnapshots(
       recentAttempts: (attemptsByCustomer.get(customer.id) ?? [])
         .filter((a: PaymentAttemptRow) => a.at.getTime() >= windowStart && a.at.getTime() < windowEnd)
         .sort((a, b) => a.at.getTime() - b.at.getTime()),
+      devices: devicesByCustomer.get(customer.id) ?? [],
+      merchantDisputes: disputesByMerchant.get(order.merchantId) ?? [],
     });
   }
   return snapshots;

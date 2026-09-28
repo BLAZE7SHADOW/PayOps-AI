@@ -192,3 +192,64 @@ sections and per-agent budgets (`CONTEXT_BUDGET`, `packages/shared/src/agents.ts
   internal ids — so today this is a safety net with nothing to catch, not dead functionality: the
   day a tool starts projecting `customerEmail`/`customerPhone`, it is masked without that tool's
   author having to remember to do it.
+
+## D040 · Risk specialist: real tools, code-side bucketing, J3 Score composite, deterministic fallback
+Phase 4 task 5. `riskAgent` (nodes.ts) is now a bespoke function, not built from the
+`buildSpecialistNode` factory the other two specialists share — J3 (docs/03 §4) is code
+bucketing + one batched Jev `score()` call + code combination, not a two-LLM-call investigation.
+- **Risk tools are all baseline, no follow-up subset.** `getCustomerHistory`/`getDeviceSignals`/
+  `getFailedAttempts`/`getChargebackHistory` (tools.ts) are marked `baseline: true`, so `triage`
+  gathers all of Risk's evidence up front like every other baseline tool, and `RISK_FOLLOWUP_TOOLS`
+  stays an empty (but still typed and exported) array. There is no LLM tool-choice step for Risk
+  to bound with a follow-up subset — Jev gets a single fixed bucket object every time, not a menu
+  of tools to ask for. This means `riskAgent` itself never calls `loadCaseState`, which is also
+  why it is cheap to unit test without a database (`nodes.test.ts`).
+- **`packages/agents/src/risk.weights.ts`, not `packages/core/src/policy`.** The doc's literal
+  path is `policies/risk.weights.ts` with no package prefix. J3's composition happens inside the
+  agent graph's `riskAgent` node — it is a Risk-specialist concern, not a policy-engine concern —
+  so it stays in `agents`. `core/src/policy/risk.ts`'s `riskTierFromRules` is a different,
+  pre-existing system: the policy engine's own always-on rules-only risk input (P1/P2, `policy/
+  rules.ts`), computed straight from `OrderSnapshot.primaryGw`/`recentAttempts` for every
+  proposal, human or agent. Reusing it for J3 would blur "the policy engine's risk tier" and "what
+  Jev was asked to score", and — more concretely — `core` cannot import J3's bucket-building code
+  without breaking `shared ← core ← agents` (CLAUDE.md rule 10). J3 gets its own small, separate
+  fallback (`rulesOnlyRiskTier`, risk.ts) built from the exact same signals it would otherwise
+  score, not a repurposed policy function.
+- **J3 fallback: rules-only tier, `meanConfidence: 0`.** The doc's adapter-contract table
+  (docs/03 §4) already names this explicitly ("J3 → rules-only tier"), so no gap-filling was
+  needed here, unlike the task brief's framing. `rulesOnlyRiskTier` (risk.ts) takes the worst of
+  four fixed, conservative per-signal rules (never a blended weighted average, since there is no
+  Jev confidence to weight against) and reports `meanConfidence: 0` — a value no real Jev call
+  can produce (confidences are always > 0) — so a run's UI/audit trail can tell a fallback
+  assessment apart from a genuinely low-confidence Jev read (which raises the tier by one level
+  instead, per the doc's own rule) just by looking at the number.
+- **Merchant-level dispute exposure, not per-customer chargebacks.** `chargeback_pattern`'s input
+  data (docs/03 §9 "getChargebackHistory") does not exist in this schema as specified: `disputes`
+  (`packages/core/src/db/schema/resolution.ts`) has `type: ['SETTLEMENT']` only and is keyed by
+  `batchId`, not `customerId` — there is no per-customer chargeback record anywhere in this
+  product. Rather than add that as an unplanned schema change mid-task, `getChargebackHistory`
+  reports the closest real signal instead: how many settlement disputes have been raised against
+  this order's *merchant* recently (`snapshot.loader.ts` now joins `settlements.merchantId` →
+  `disputes.batchId`, added as `OrderSnapshot.merchantDisputes`), feeding the `merchant_exposure`
+  Score. `chargeback_pattern` itself is scored from `customers.riskFlags` (already in the schema,
+  always empty in today's seed data, and exactly the kind of free-form flag this field looks
+  designed for) rather than from real chargeback history. **Known gap, not silently patched**: a
+  genuine per-customer chargeback/dispute record is a schema addition for a later phase if the
+  demo ever needs `chargeback_pattern` to mean something more than "has anyone flagged this
+  customer" — noted in PROGRESS.md.
+- **`packages/core` additions**: `OrderSnapshot` gained `devices: DeviceRow[]` (all of the
+  customer's known devices, all-time — `devices` table, keyed by `customerId`) and
+  `merchantDisputes: DisputeRow[]` (the proxy above). `snapshot.loader.ts` loads both with two
+  more batched, constant-count queries (now ~13 total), keeping the file's own "constant number
+  of queries regardless of order count" property; `test-factory.ts`'s `healthySnapshot()`
+  defaults both to `[]` so every existing reconciliation test is unaffected. `db/rows.ts` gained
+  `DeviceRow`.
+- **Policy engine does not consult `state.risk.tier` (J3's output) — confirmed as an existing
+  gap, not something this task should wire.** `resolution.service.ts`'s `proposeFromAgent`/
+  `propose` already pass a `riskTier` into `evaluatePolicy` for P1/P2, but it is always
+  `riskTierFromRules(state.order)` — the separate, always-on policy-engine risk tier above, not
+  the agent's J3 `RiskAssessment`. The docs/03 §11 P1/P2 rows already read as covered by that
+  existing rules-only tier, and the task brief was explicit not to invent new policy behavior
+  outside this task's scope, so `state.risk` is populated and available (on the run, in
+  `agent_steps`) but not yet read by anything downstream. Left as a documented gap in
+  PROGRESS.md rather than wired silently.

@@ -1,5 +1,7 @@
 import type {
   CustomerRow,
+  DeviceRow,
+  DisputeRow,
   LedgerEntryRow,
   MerchantRow,
   OrderRow,
@@ -42,6 +44,14 @@ export interface OrderSnapshot {
   customer: CustomerRow;
   /** The customer's attempts in the 24 hours before the primary capture (or before `now`). */
   recentAttempts: PaymentAttemptRow[];
+  /** Devices this customer has been seen on (docs/03 §9 "getDeviceSignals"), all-time — there
+   * are only ever a handful per customer in this product's seed data, so no window is applied. */
+  devices: DeviceRow[];
+  /** Settlement disputes raised against this order's merchant in the risk window, across any of
+   * the merchant's batches (docs/03 §9 "getChargebackHistory") — the closest exposure signal this
+   * schema has today; see docs/DECISIONS.md for why this is a merchant-level proxy, not a
+   * per-customer chargeback history. */
+  merchantDisputes: DisputeRow[];
 }
 
 /** Picks the gateway payment that represents "the" payment for an order. */

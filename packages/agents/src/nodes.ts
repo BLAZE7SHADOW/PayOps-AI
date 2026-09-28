@@ -15,7 +15,7 @@
  * (`diagnose` → `resolve`, which never runs `plan` or the specialists) still has evidence to cite.
  */
 import { interrupt } from '@langchain/langgraph';
-import { agentWriteContext, choice, loadCaseState, noul, type CaseState } from '@payops/core';
+import { agentWriteContext, choice, loadCaseState, noul, score, type CaseState } from '@payops/core';
 import {
   AGENT_BUDGET_LIMITS,
   AGENT_NAMES,
@@ -26,6 +26,7 @@ import {
   type EvidenceItem,
   type Finding,
   type InvestigationPlan,
+  type RiskAssessment,
   type RootCause,
   type RunStatus,
 } from '@payops/shared';
@@ -34,6 +35,8 @@ import { buildCaseBrief } from './brief';
 import { choosePlanSpecialists } from './planning';
 import { buildProposal } from './proposal';
 import { buildResolveContext, buildSpecialistContext, sliceEvidenceForAgent } from './context';
+import { extractRiskSignals, bucketRiskSignals, RISK_SCORE_CRITERIA, rulesOnlyRiskTier } from './risk';
+import { combineRiskScores } from './risk.weights';
 import { narrativeFor } from './templates';
 import { DiagnosisSchema, FindingsSchema, buildFollowUpChoiceSchema } from './schemas';
 import type { PayOpsStateType, PayOpsUpdate } from './state';
@@ -43,7 +46,6 @@ import {
   PAYMENT_TOOLS,
   RECONCILIATION_FOLLOWUP_TOOLS,
   RECONCILIATION_TOOLS,
-  RISK_FOLLOWUP_TOOLS,
   RISK_TOOLS,
   type ToolDef,
 } from './tools';
@@ -207,14 +209,14 @@ export function buildNodes(deps: AgentDeps) {
   }
 
   /**
-   * Builds one specialist node (`paymentAgent` / `reconciliationAgent` / `riskAgent`), each
-   * running the same two-stage pattern Phase 3's `investigate` used (docs/03 §2), but scoped to
-   * its own tool group: baseline evidence for this group already exists from `triage`, so the
-   * specialist only runs its own follow-up pass (bounded LLM call #1, up to
-   * `AGENT_BUDGET_LIMITS.maxFollowupToolCalls` tools from its own group) then emits findings
-   * (LLM call #2) tagged with its own `AgentName`. When the group has no follow-up tools at all
-   * (Risk, until Phase 4 task 5 adds risk tools) or no evidence to reason over, both LLM calls
-   * are skipped and the specialist legitimately contributes zero evidence and zero findings.
+   * Builds `paymentAgent` / `reconciliationAgent`, each running the same two-stage pattern
+   * Phase 3's `investigate` used (docs/03 §2): baseline evidence for this group already exists
+   * from `triage`, so the specialist only runs its own follow-up pass (bounded LLM call #1, up
+   * to `AGENT_BUDGET_LIMITS.maxFollowupToolCalls` tools from its own group) then emits findings
+   * (LLM call #2) tagged with its own `AgentName`. When the group has no evidence to reason
+   * over, both LLM calls are skipped and the specialist legitimately contributes nothing.
+   * `riskAgent` (below, Phase 4 task 5) is deliberately not built from this factory — J3 is code
+   * bucketing + one Jev call + code combination, not this two-LLM-call shape.
    */
   function buildSpecialistNode(agentName: AgentName, nodeName: string, ownTools: readonly ToolDef[], followUpTools: readonly ToolDef[]) {
     const followUpSchema = buildFollowUpChoiceSchema(followUpTools);
@@ -309,7 +311,103 @@ export function buildNodes(deps: AgentDeps) {
 
   const paymentAgent = buildSpecialistNode('payment', 'paymentAgent', PAYMENT_TOOLS, PAYMENT_FOLLOWUP_TOOLS);
   const reconciliationAgent = buildSpecialistNode('reconciliation', 'reconciliationAgent', RECONCILIATION_TOOLS, RECONCILIATION_FOLLOWUP_TOOLS);
-  const riskAgent = buildSpecialistNode('risk', 'riskAgent', RISK_TOOLS, RISK_FOLLOWUP_TOOLS);
+  /**
+   * `riskAgent` (docs/03-agent-system.md §4 "J3", §5 node table). Deliberately not built from
+   * `buildSpecialistNode`: J3 is code bucketing + one batched Jev `score()` call + code
+   * combination, not an LLM tool-choice pass. All four risk tools are baseline (tools.ts), so
+   * `triage` has already gathered this agent's evidence before `riskAgent` ever runs — there is
+   * no follow-up tool round here to bound with an LLM call.
+   *
+   * Gemini only enters as a fallback, per the node table's "(+LLM only if confidence < 0.5)":
+   * when Jev's mean confidence across the four Scores is under 0.5, one findings-only LLM call
+   * (the same `buildSpecialistContext`/`FindingsSchema` shape the other specialists use for
+   * their second call) writes up what the raw evidence shows, so a human reviewing an uncertain
+   * HIGH/CRITICAL tier has more than four bare numbers to go on. On Jev's own error/timeout, the
+   * J3 fallback (docs/03 §4 "Jev adapter contract": "J3 → rules-only tier") skips Jev and the
+   * LLM entirely — `rulesOnlyRiskTier` (risk.ts) never leaves `state.risk` unset.
+   */
+  async function riskAgent(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    await onEvent('riskAgent', 'NODE_STARTED', {});
+    const ownEvidence = sliceEvidenceForAgent(state.evidence, RISK_TOOLS);
+    if (ownEvidence.length === 0) {
+      // No order to read signals from at all (docs/03 §2: baseline tools found nothing) — same
+      // "legitimately contributes nothing" shape the other specialists use.
+      await onEvent('riskAgent', 'NODE_COMPLETED', { skipped: true });
+      return { agentsVisited: ['risk'] };
+    }
+
+    const signals = extractRiskSignals(ownEvidence);
+    const buckets = bucketRiskSignals(signals);
+
+    let risk: RiskAssessment;
+    let budget = zeroBudget();
+    try {
+      const result = await decision.ask({
+        tag: 'J3_RISK',
+        state: buckets,
+        questions: {
+          velocity_abuse: score('How much do the recent attempts, devices and cards look like automated abuse rather than one person paying?', RISK_SCORE_CRITERIA.velocity_abuse),
+          identity_mismatch: score("How much does this customer's identity look inconsistent (new account, mismatched device/card location)?", RISK_SCORE_CRITERIA.identity_mismatch),
+          chargeback_pattern: score("How much does this customer's recorded risk-flag history suggest a dispute pattern?", RISK_SCORE_CRITERIA.chargeback_pattern),
+          merchant_exposure: score("How exposed is this merchant to settlement disputes recently?", RISK_SCORE_CRITERIA.merchant_exposure),
+        },
+      });
+      const scores = {
+        velocity_abuse: result.answers.velocity_abuse.score,
+        identity_mismatch: result.answers.identity_mismatch.score,
+        chargeback_pattern: result.answers.chargeback_pattern.score,
+        merchant_exposure: result.answers.merchant_exposure.score,
+      };
+      const confidences = [
+        result.answers.velocity_abuse.confidence,
+        result.answers.identity_mismatch.confidence,
+        result.answers.chargeback_pattern.confidence,
+        result.answers.merchant_exposure.confidence,
+      ];
+      const meanConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
+      risk = combineRiskScores(scores, meanConfidence);
+      await onEvent('riskAgent', 'DECISION_MADE', { tag: 'J3_RISK', answers: result.answers, usage: result.usage, tier: risk.tier });
+      budget = { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens };
+
+      const findings: Finding[] = [];
+      if (meanConfidence < 0.5) {
+        const brief = state.case!;
+        const findingsContext = buildSpecialistContext({ agent: 'risk', callType: 'findings', brief, evidence: state.evidence, ownTools: RISK_TOOLS });
+        const findingsResult = await llm.invokeStructured(FindingsSchema, findingsContext.messages, {
+          node: 'riskAgent',
+          callIndex: 0,
+          scenarioKey: state.scenarioKey,
+        });
+        await onEvent('riskAgent', 'LLM_CALLED', {
+          call: 'findings',
+          usage: findingsResult.usage,
+          contextTokenEstimate: findingsContext.tokenEstimate,
+          contextHash: findingsContext.contentHash,
+        });
+        const validIds = new Set(ownEvidence.map((e) => e.id));
+        let pool = state.findings;
+        for (const f of findingsResult.data.findings) {
+          const evidenceIds = f.evidenceIds.filter((id) => validIds.has(id));
+          if (evidenceIds.length === 0) continue; // structural grounding, same rule buildSpecialistNode uses
+          const id = nextFindingId(pool);
+          const finding: Finding = { id, agent: 'risk', code: f.code, statement: f.statement, evidenceIds, confidence: f.confidence };
+          findings.push(finding);
+          pool = [...pool, finding];
+        }
+        if (findings.length > 0) await onEvent('riskAgent', 'FINDING_CREATED', { findingIds: findings.map((f) => f.id) });
+        budget = { ...budget, llmCalls: 1, tokensIn: budget.tokensIn + findingsResult.usage.inputTokens, tokensOut: budget.tokensOut + findingsResult.usage.outputTokens };
+      }
+
+      await onEvent('riskAgent', 'NODE_COMPLETED', { tier: risk.tier, meanConfidence: risk.meanConfidence, findingCount: findings.length });
+      return { risk, findings, agentsVisited: ['risk'], budget };
+    } catch (err) {
+      // J3 fallback (docs/03 §4 "Jev adapter contract"): rules-only tier, no LLM. Never leaves
+      // `state.risk` unset — a run must always have a risk assessment once Risk has run.
+      risk = rulesOnlyRiskTier(signals);
+      await onEvent('riskAgent', 'NODE_COMPLETED', { tier: risk.tier, fallback: true, error: err instanceof Error ? err.message : String(err) });
+      return { risk, agentsVisited: ['risk'], budget: { ...zeroBudget(), jevCalls: 1 } };
+    }
+  }
 
   /** Where the parallel `Send` fan-out (graph.ts) converges (docs/03 §5). Every write it could
    * make (`agentsVisited`/`evidence`/`findings`) is already merged by the state reducers once
