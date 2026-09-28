@@ -1,5 +1,6 @@
+
 import { PgBoss } from 'pg-boss';
-import type { Logger } from '@payops/core';
+import type { Database, Logger } from '@payops/core';
 
 /**
  * pg-boss keeps the job queue inside Postgres (schema "pgboss"), so there is no Redis.
@@ -9,8 +10,12 @@ export const QUEUES = {
   reconcileSweep: 'reconcile-sweep',
 } as const;
 
-export async function startBoss(connectionString: string, log: Logger): Promise<PgBoss> {
-  const boss = new PgBoss({ connectionString, max: 4, application_name: 'payops-jobs' });
+/**
+ * pg-boss runs on the app's own pool (one set of connections for everything; fewer connections on
+ * Supabase's free tier, and a single connection on local PGlite).
+ */
+export async function startBoss(pool: Database['pool'], log: Logger): Promise<PgBoss> {
+  const boss = new PgBoss({ db: { executeSql: (text, values) => pool.query(text, values) } });
   boss.on('error', (err: unknown) => log.error({ err }, 'job queue error'));
   await boss.start();
   for (const q of Object.values(QUEUES)) await boss.createQueue(q);

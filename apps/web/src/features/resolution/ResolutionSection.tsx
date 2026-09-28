@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail, ResolutionItem } from '@payops/shared';
 import { statusLabel } from '../../lib/format';
@@ -20,6 +20,13 @@ export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
   const attempts = view ? [...view.resolutions].sort((a, b) => b.attempt - a.attempt || b.createdAt.localeCompare(a.createdAt)) : [];
   const pending = view?.pendingApprovalId ? attempts.find((r) => r.approval?.id === view.pendingApprovalId) : undefined;
   const mayResolve = can(user?.role, 'resolve');
+  const canPropose = Boolean(view?.canPropose);
+
+  // A proposal that runs immediately makes the case busy (canPropose=false). Close the drawer so it
+  // does not reappear on its own when the case becomes proposable again after verification.
+  useEffect(() => {
+    if (!canPropose) setOpen(false);
+  }, [canPropose]);
 
   return (
     <section aria-labelledby="resolution-title" className="mt-6 border border-rule bg-surface">
@@ -58,7 +65,7 @@ export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
         <Attempts attempts={attempts} />
       )}
 
-      {c && view?.canPropose && mayResolve ? <ResolveDrawer c={c} open={open} onOpenChange={setOpen} /> : null}
+      {c && mayResolve ? <ResolveDrawer c={c} open={open && canPropose} onOpenChange={setOpen} /> : null}
     </section>
   );
 }

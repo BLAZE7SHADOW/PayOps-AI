@@ -19,9 +19,11 @@ let t: TestDatabase;
 let core: Core;
 const clock = fixedClock('2026-09-28T12:00:00.000Z');
 
+const published: Array<{ room: string; event: string; payload: unknown }> = [];
+
 beforeAll(async () => {
   t = await startTestDatabase();
-  core = createCore({ db: t.db, clock });
+  core = createCore({ db: t.db, clock, events: { publish: (room, event, payload) => published.push({ room, event, payload }) } });
 });
 afterAll(async () => {
   await t.close();
@@ -96,6 +98,8 @@ describe('manual resolution of every MVP scenario', () => {
       expect(sweep.opened).toBe(0);
       const all = await core.cases.list({ scope: 'all', limit: 50 });
       expect(all.items).toHaveLength(1);
+      // The queue's mini matrix reads the stored matrix, which must reflect the fix.
+      if (e.scenario !== 'settlement_mismatch') expect(all.items[0]?.mismatched).toEqual([]);
     });
   }
 });
@@ -232,5 +236,16 @@ describe('safety', () => {
     const actors = new Set(audit.items.map((a) => a.actor.name));
     expect(actors).toContain('Ananya Rao');
     expect(actors).toContain('Meera Iyer');
+  });
+});
+
+describe('realtime contract', () => {
+  it('approval.requested carries a full ApprovalItem', async () => {
+    published.length = 0;
+    const caseId = await openCase('refund_never_initiated');
+    const actions = await recommended(caseId);
+    await core.resolutions.propose(caseId, { actions, rationale: 'Refund the cancelled order in full' }, ops);
+    const evt = published.find((p) => p.event === 'approval.requested' && p.room === 'ops');
+    expect(evt?.payload).toMatchObject({ id: expect.any(String), tier: 'MANAGER', status: 'PENDING', case: { id: caseId } });
   });
 });

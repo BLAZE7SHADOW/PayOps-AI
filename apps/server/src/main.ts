@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import {
   createCore,
   createDatabase,
+  databasePoolSize,
   createLogger,
   describeEnv,
   loadServerEnv,
@@ -19,7 +20,7 @@ const env = loadServerEnv();
 const log = createLogger(env, 'payops');
 log.info(describeEnv(env), 'starting');
 
-const database = createDatabase(env.DATABASE_URL);
+const database = createDatabase(env.DATABASE_URL, { max: databasePoolSize(env) });
 await runMigrations(database.db);
 log.info('migrations applied');
 const seededUsers = await seedDemoUsers(database.db);
@@ -34,7 +35,7 @@ const events: EventPublisherPort = {
 };
 const core = createCore({ db: database.db, events });
 
-const boss = await startBoss(env.DATABASE_URL, log);
+const boss = await startBoss(database.pool, log);
 await registerReconcileSweep(boss, core, env, log);
 
 const app = createApp({ env, log, database, core, session });

@@ -24,7 +24,7 @@ export const POLICY_THRESHOLDS = {
   lowConfidence: 0.6,
 } as const;
 
-export const POLICY_RULE_IDS = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'] as const;
+export const POLICY_RULE_IDS = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11'] as const;
 export type PolicyRuleId = (typeof POLICY_RULE_IDS)[number];
 
 export interface PolicyRuleInfo {
@@ -47,6 +47,7 @@ export const POLICY_RULES: readonly PolicyRuleInfo[] = [
   { id: 'P8', condition: 'Agent diagnosis confidence below 0.60', tier: 'at least OPS', appliesTo: 'agent' },
   { id: 'P9', condition: 'Claims against a third party (settlement disputes)', tier: 'OPS', appliesTo: 'all' },
   { id: 'P10', condition: 'Hold or escalate only', tier: 'AUTO', appliesTo: 'all' },
+  { id: 'P11', condition: 'No rule above allows automatic execution (default)', tier: 'OPS', appliesTo: 'all' },
 ];
 
 export interface PolicyReason {

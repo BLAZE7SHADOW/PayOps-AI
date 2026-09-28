@@ -35,6 +35,8 @@ export const ServerEnvSchema = z.object({
   PORT: z.coerce.number().int().default(4000),
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
   DATABASE_URL: z.string().min(1).default('postgres://postgres:postgres@127.0.0.1:54329/postgres'),
+  /** Connection pool size shared by the app and the job queue. Defaults: 1 for local PGlite, 10 otherwise. */
+  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).optional(),
   JWT_SECRET: z.string().min(16).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   LOG_PRETTY: bool.optional(),
@@ -97,5 +99,22 @@ function redactUri(uri: string): string {
     return u.toString();
   } catch {
     return '(unparseable)';
+  }
+}
+
+/** Port used by `pnpm db:local` (PGlite). */
+export const LOCAL_PGLITE_PORT = '54329';
+
+/**
+ * PGlite is a single Postgres backend: statements from parallel connections can interleave and
+ * break the extended query protocol, so local PGlite gets exactly one connection. Real Postgres
+ * (Supabase) gets a normal pool.
+ */
+export function databasePoolSize(env: Pick<ServerEnv, 'DATABASE_URL' | 'DATABASE_POOL_MAX'>): number {
+  if (env.DATABASE_POOL_MAX) return env.DATABASE_POOL_MAX;
+  try {
+    return new URL(env.DATABASE_URL).port === LOCAL_PGLITE_PORT ? 1 : 10;
+  } catch {
+    return 10;
   }
 }

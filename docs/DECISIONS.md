@@ -68,3 +68,18 @@ AUTO must be granted by a rule (P5, P6, P10). If no rule fires (e.g. a correctio
 - If a step fails (precondition on fresh data or handler error), later steps are shown as SKIPPED, the resolution becomes EXECUTION_FAILED without validation, and the case reopens.
 - ESCALATE_TO_HUMAN sets the case to ESCALATED (no assignee yet). A PASS on a resolution containing it leaves the case ESCALATED instead of RESOLVED.
 - After an approval, `ApprovalContinuation.onApproved` executes and validates directly; Phase 3 replaces it with resuming the agent's LangGraph thread when `resolution.runId` is set.
+
+## D021 · Explicit default policy rule P11
+When no rule grants AUTO and none raises the tier, the decision is OPS with rule P11 ("no rule allows automatic execution"). Every decision now names at least one rule, so the UI and audit log can always say why.
+
+## D022 · Recommendations never read fault-injection fields
+`orders.lockedReason` exists only so the simulator can inject a version conflict. The manual recommendations must not read it (a real analyst could not see it): the replay is recommended first, and mark paid + post ledger only after a replay has failed. This keeps the replay-fails demo honest.
+
+## D023 · One shared database pool; size 1 on local PGlite
+pg-boss runs on the application's pool (`db.executeSql`). PGlite is a single Postgres backend, and parallel connections interleave extended-protocol messages ("bind message supplies N parameters"), so local PGlite gets one connection (`databasePoolSize`). Supabase gets 10 (override with `DATABASE_POOL_MAX`). Fewer connections also suits Supabase's free tier.
+
+## D024 · Stored case matrix refreshed after a resolution
+Queue and approval views read `cases.matrix/mismatched`. After a resolution finishes, the stored matrix is recomputed from live data so resolved cases stop showing disagreement.
+
+## D025 · Realtime approval events carry ApprovalItem
+`approval.requested` and `approval.resolved` publish a full `ApprovalItem` (viewer-independent), matching the shared contract the UI consumes.

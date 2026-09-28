@@ -18,7 +18,7 @@ export function AppShell() {
       <Nav />
       <div className="flex min-h-0 min-w-0 flex-col">
         <TopBar />
-        <main id="main" tabIndex={-1} className="min-h-0 flex-1 overflow-auto px-4 min-[1360px]:px-6 pt-5 pb-10 outline-none">
+        <main id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-auto px-4 min-[1360px]:px-6 pt-5 pb-10 outline-none">
           <Outlet />
         </main>
       </div>

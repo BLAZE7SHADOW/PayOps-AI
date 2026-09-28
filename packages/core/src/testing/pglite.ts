@@ -31,7 +31,7 @@ export async function startTestDatabase(): Promise<TestDatabase> {
   const server = new PGLiteSocketServer({ db: pglite, port, host: '127.0.0.1', maxConnections: 20 });
   await server.start();
   const url = `postgres://postgres:postgres@127.0.0.1:${port}/postgres`;
-  const database = createDatabase(url, { max: 4, applicationName: 'payops-test' });
+  const database = createDatabase(url, { max: 1, applicationName: 'payops-test' });
   await runMigrations(database.db);
 
   return {

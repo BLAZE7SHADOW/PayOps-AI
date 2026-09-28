@@ -9,8 +9,8 @@ export type Capability = 'resolve' | 'decide' | 'simulate';
 const MATRIX: Record<Capability, readonly Role[]> = {
   resolve: ['OPS', 'MANAGER', 'ADMIN'],
   decide: ['OPS', 'MANAGER', 'ADMIN'],
-  // The server runs the simulator in demo mode for OPS as well as ADMIN.
-  simulate: ['OPS', 'ADMIN'],
+  // In demo mode the server lets OPS and above use the simulator.
+  simulate: ['OPS', 'MANAGER', 'ADMIN'],
 };
 
 export function can(role: Role | null | undefined, capability: Capability): boolean {

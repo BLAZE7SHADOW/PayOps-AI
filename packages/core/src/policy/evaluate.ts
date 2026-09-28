@@ -9,7 +9,7 @@ import { POLICY_RULE_TABLE, policyFacts, type PolicyInput } from './rules';
 
 /**
  * Runs every rule and keeps the strictest tier. AUTO has to be granted by a rule (P5, P6, P10);
- * a proposal that no rule speaks for needs OPS approval by default.
+ * a proposal that no rule speaks for gets the explicit default rule P11 (OPS).
  */
 export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   const facts = policyFacts(input);
@@ -18,10 +18,14 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
     const hit = rule(input, facts);
     if (hit) reasons.push(hit);
   }
-  let tier: PolicyTier = 'OPS';
-  if (reasons.length > 0) {
-    tier = reasons.reduce<PolicyTier>((best, r) => (POLICY_TIER_RANK[r.tier] > POLICY_TIER_RANK[best] ? r.tier : best), 'AUTO');
+  // Default rule: nothing granted AUTO and nothing raised the tier, so a person decides.
+  if (reasons.length === 0) {
+    reasons.push({ ruleId: 'P11', tier: 'OPS', reason: 'No rule allows this proposal to run automatically' });
   }
+  const tier = reasons.reduce<PolicyTier>(
+    (best, r) => (POLICY_TIER_RANK[r.tier] > POLICY_TIER_RANK[best] ? r.tier : best),
+    'AUTO',
+  );
   return { tier, reasons, version: POLICY_VERSION, moneyMovingMinor: facts.moneyMinor, riskTier: input.riskTier };
 }
 

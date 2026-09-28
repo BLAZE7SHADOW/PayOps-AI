@@ -129,6 +129,12 @@ export class ApprovalService {
     };
   }
 
+  /** One approval as a list item (viewer-independent when viewer is null, e.g. for realtime fan-out). */
+  async item(id: string, viewer: SessionUser | null = null): Promise<ApprovalItem> {
+    const { a, c, r } = await this.load(id);
+    return this.toItem(a, c, r, viewer);
+  }
+
   async get(id: string, viewer: SessionUser | null): Promise<ApprovalDetail> {
     const { a, c, r } = await this.load(id);
     const [[caseItem], resolution] = await Promise.all([this.cases.listItems([c.id]), this.queries.item(r.id)]);

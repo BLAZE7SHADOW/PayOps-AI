@@ -49,7 +49,7 @@ const table: Row[] = [
   { name: 'refund ₹1,000.01 is OPS', input: { actions: [refund(1_000_01)] }, tier: 'OPS', rules: ['P4'] },
   { name: 'refund exactly ₹10,000 is OPS', input: { actions: [refund(10_000_00)] }, tier: 'OPS', rules: ['P4'] },
   { name: 'refund ₹10,000.01 is MANAGER', input: { actions: [refund(10_000_01)] }, tier: 'MANAGER', rules: ['P3'] },
-  { name: 'small refund with MEDIUM risk falls back to OPS', input: { actions: [refund(500_00)], riskTier: 'MEDIUM' }, tier: 'OPS', rules: [] },
+  { name: 'small refund with MEDIUM risk falls back to OPS', input: { actions: [refund(500_00)], riskTier: 'MEDIUM' }, tier: 'OPS', rules: ['P11'] },
   { name: 'two refunds are summed', input: { actions: [refund(6_000_00), refund(6_000_00)] }, tier: 'MANAGER', rules: ['P3'] },
   // Blocking.
   { name: 'CRITICAL risk + refund is BLOCKED', input: { actions: [refund(500_00)], riskTier: 'CRITICAL' }, tier: 'BLOCKED', rules: ['P1', 'P2'] },
@@ -58,15 +58,15 @@ const table: Row[] = [
   { name: 'empty proposal is BLOCKED', input: { actions: [] }, tier: 'BLOCKED', rules: ['P0'] },
   { name: 'grounding violation is BLOCKED', input: { groundingViolations: 2 }, tier: 'BLOCKED', rules: ['P0', 'P6'] },
   // Other rules.
-  { name: 'state correction without verified capture needs OPS', input: { gatewayCaptureVerified: false }, tier: 'OPS', rules: [] },
+  { name: 'state correction without verified capture needs OPS', input: { gatewayCaptureVerified: false }, tier: 'OPS', rules: ['P11'] },
   { name: 'hold alone is AUTO at LOW risk', input: { actions: [hold] }, tier: 'AUTO', rules: ['P10'] },
-  { name: 'mixed control and correction has no auto rule', input: { actions: [markPaid, hold] }, tier: 'OPS', rules: [] },
+  { name: 'mixed control and correction has no auto rule', input: { actions: [markPaid, hold] }, tier: 'OPS', rules: ['P11'] },
   { name: 'attempt 3 raises AUTO to OPS', input: { attempt: 3 }, tier: 'OPS', rules: ['P6', 'P7'] },
   // Agent-only parts.
   { name: 'agent correction with 0.9 confidence is AUTO', input: { proposer: 'AGENT', diagnosisConfidence: 0.9 }, tier: 'AUTO', rules: ['P6'] },
-  { name: 'agent correction with 0.8 confidence needs OPS', input: { proposer: 'AGENT', diagnosisConfidence: 0.8 }, tier: 'OPS', rules: [] },
+  { name: 'agent correction with 0.8 confidence needs OPS', input: { proposer: 'AGENT', diagnosisConfidence: 0.8 }, tier: 'OPS', rules: ['P11'] },
   { name: 'agent with 0.5 confidence triggers P8', input: { proposer: 'AGENT', diagnosisConfidence: 0.5 }, tier: 'OPS', rules: ['P8'] },
-  { name: 'agent small refund needs 0.9 for AUTO', input: { proposer: 'AGENT', actions: [refund(500_00)], diagnosisConfidence: 0.89 }, tier: 'OPS', rules: [] },
+  { name: 'agent small refund needs 0.9 for AUTO', input: { proposer: 'AGENT', actions: [refund(500_00)], diagnosisConfidence: 0.89 }, tier: 'OPS', rules: ['P11'] },
   { name: 'agent small refund at 0.95 is AUTO', input: { proposer: 'AGENT', actions: [refund(500_00)], diagnosisConfidence: 0.95 }, tier: 'AUTO', rules: ['P5'] },
   { name: 'P8 is skipped for people', input: { proposer: 'USER', diagnosisConfidence: 0.1 }, tier: 'AUTO', rules: ['P6'] },
 ];

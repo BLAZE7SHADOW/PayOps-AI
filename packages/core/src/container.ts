@@ -95,6 +95,7 @@ export function createCore(opts: CoreOptions): Core {
     },
   };
   const approvals = new ApprovalService(db, clock, audit, events, cases, resolutionQueries, continuation);
+  resolutions.useApprovalItems((id) => approvals.item(id));
 
   return {
     db,

@@ -186,7 +186,7 @@ describe('resolution API', () => {
 
   it('serves the policy document', async () => {
     const doc = (await viewer.get('/api/policy').expect(200)).body as PolicyDocument;
-    expect(doc.rules).toHaveLength(11);
+    expect(doc.rules).toHaveLength(12);
     expect(doc.thresholds[0]).toEqual({ label: 'Refunds approved automatically up to', value: '₹1,000.00' });
   });
 });

@@ -78,10 +78,12 @@ export function ResolveForm({ c, onDone, onCancel }: { c: CaseDetail; onDone: ()
   const submit = () => {
     setSubmitted(true);
     if (!actions || rationaleErr || !canSubmit) return;
-    propose.mutate(
-      { actions, rationale: rationale.trim() },
-      {
-        onSuccess: (r) => {
+    // mutateAsync (not mutate + onSuccess): the result must be handled even if this form unmounts
+    // while the server executes and verifies the fix.
+    propose
+      .mutateAsync({ actions, rationale: rationale.trim() })
+      .then(
+        (r) => {
           const text =
             r.status === 'AWAITING_APPROVAL'
               ? `Requested ${r.policy.tier === 'MANAGER' ? 'manager' : 'OPS'} approval for`
@@ -91,8 +93,8 @@ export function ResolveForm({ c, onDone, onCancel }: { c: CaseDetail; onDone: ()
           pushNotice({ kind: 'local', text, caseId: c.id, displayId: c.displayId, subject: `case:${c.id}` });
           onDone();
         },
-      },
-    );
+        () => undefined, // error state is rendered from propose.error
+      );
   };
 
   return (

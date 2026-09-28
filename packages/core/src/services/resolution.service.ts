@@ -14,6 +14,7 @@ import {
   newId,
   roleAtLeast,
   type ActorRef,
+  type ApprovalItem,
   type CatalogAction,
   type PolicyPreview,
   type ResolutionItem,
@@ -70,6 +71,13 @@ export class ResolutionService {
     private readonly executor: ExecutorService,
     private readonly validator: ValidatorService,
   ) {}
+
+  private approvalItem: ((approvalId: string) => Promise<ApprovalItem>) | null = null;
+
+  /** Wired by the composition root: approval.requested carries a full ApprovalItem (shared contract). */
+  useApprovalItems(load: (approvalId: string) => Promise<ApprovalItem>): void {
+    this.approvalItem = load;
+  }
 
   private async attemptsSoFar(db: Pick<Db, 'select'>, caseId: string): Promise<number> {
     const [row] = await db.select({ n: count() }).from(resolutions).where(eq(resolutions.caseId, caseId));
@@ -192,8 +200,11 @@ export class ResolutionService {
     }
     if (created.approvalId) {
       await this.publish(resolution.id, caseId);
-      this.events.publish(ROOMS.ops, OPS_EVENTS.approvalRequested, { approvalId: created.approvalId, caseId, resolutionId: resolution.id, tier: resolution.policy.tier });
-      this.events.publish(ROOMS.case(caseId), OPS_EVENTS.approvalRequested, { approvalId: created.approvalId, caseId, resolutionId: resolution.id, tier: resolution.policy.tier });
+      if (this.approvalItem) {
+        const item = await this.approvalItem(created.approvalId);
+        this.events.publish(ROOMS.ops, OPS_EVENTS.approvalRequested, item);
+        this.events.publish(ROOMS.case(caseId), OPS_EVENTS.approvalRequested, item);
+      }
       return this.queries.item(resolution.id);
     }
     return this.finish(resolution.id, write);
@@ -255,6 +266,7 @@ export class ResolutionService {
     const refs: CaseRow['entityRefs'] = row.entityRefs;
     if (refs.orderId) await this.reconciliation.checkOrders([refs.orderId]);
     if (row.type === 'SETTLEMENT_MISMATCH' && refs.batchId) await this.reconciliation.checkBatches([refs.batchId]);
+    await this.cases.refreshStoredMatrix(caseId);
   }
 
   private async publish(resolutionId: string, caseId: string): Promise<void> {

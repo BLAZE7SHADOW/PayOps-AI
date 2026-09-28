@@ -131,4 +131,6 @@ export const POLICY_RULE_TABLE: ReadonlyArray<{ id: PolicyRuleId; rule: PolicyRu
   { id: 'P8', rule: P8 },
   { id: 'P9', rule: P9 },
   { id: 'P10', rule: P10 },
+  // P11 is the default: evaluatePolicy adds it when no other rule fired.
+  { id: 'P11', rule: () => null },
 ];

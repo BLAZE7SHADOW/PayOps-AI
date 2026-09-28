@@ -4,7 +4,7 @@
  * second run skips scenarios that already exist.
  */
 import { SCENARIOS, formatMoney } from '@payops/shared';
-import { AppError, createCore, createDatabase, loadServerEnv, runMigrations } from '@payops/core';
+import { AppError, createCore, createDatabase, databasePoolSize, loadServerEnv, runMigrations } from '@payops/core';
 import { generateScenario, seedWorld } from '@payops/simulator';
 import { DEMO_PASSWORD, seedDemoUsers } from '../auth/demo-users';
 
@@ -12,7 +12,7 @@ const NOISE_PAYMENTS = 30;
 const BASE_SEED = 1000;
 
 const env = loadServerEnv();
-const database = createDatabase(env.DATABASE_URL, { max: 2, applicationName: 'payops-seed' });
+const database = createDatabase(env.DATABASE_URL, { max: Math.min(2, databasePoolSize(env)), applicationName: 'payops-seed' });
 try {
   await runMigrations(database.db);
   const core = createCore({ db: database.db });

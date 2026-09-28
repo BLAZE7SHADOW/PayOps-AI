@@ -337,6 +337,23 @@ export class CaseService {
    * Case detail with a LIVE matrix and lifecycle recomputed from current data, so the page
    * reflects fixes immediately. Settlement (batch) cases keep the matrix stored at detection.
    */
+  /**
+   * Store the live state matrix on a payment/order case. List views (queue, approvals) read the
+   * stored matrix, so it must be refreshed after a resolution changes the underlying records.
+   * Batch cases keep their detection-time matrix (D012).
+   */
+  async refreshStoredMatrix(caseId: string): Promise<void> {
+    const [row] = await this.db.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+    if (!row || row.type === 'SETTLEMENT_MISMATCH' || !row.entityRefs.orderId) return;
+    const [snapshot] = await loadOrderSnapshots(this.db, this.gateway, [row.entityRefs.orderId], this.clock.now());
+    if (!snapshot) return;
+    const matrix = buildMatrix(snapshot);
+    await this.db
+      .update(cases)
+      .set({ matrix: matrix.cells, mismatched: matrix.mismatched, updatedAt: this.clock.now() })
+      .where(eq(cases.id, caseId));
+  }
+
   async get(id: string, viewer: SessionUser | null = null): Promise<CaseDetail> {
     const [found] = await this.db
       .select({ row: cases, assigneeName: users.name })

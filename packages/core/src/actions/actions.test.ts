@@ -239,12 +239,13 @@ describe('actionOptions', () => {
     expect(sync.unavailableReason).toBeTruthy();
     for (const o of options) expect(o.summary).not.toMatch(/—/);
   });
-  it('recommends mark paid + ledger once a replay failed, or the order is locked', () => {
+  it('recommends mark paid + ledger once a replay failed, never by peeking at fault injection', () => {
     const s = capturedOrderFailedSnapshot();
     const history = [{ actionTypes: ['REPLAY_WEBHOOK_EVENT' as const], status: 'VALIDATED' as const, verdict: 'FAIL' as const }];
     expect(actionOptions(state(s), history).filter((o) => o.recommended).map((o) => o.type)).toEqual(['MARK_ORDER_PAID', 'POST_LEDGER_ENTRY']);
     const locked = withSnapshot(s, { order: { ...s.order, lockedReason: 'VERSION_CONFLICT' } });
-    expect(actionOptions(state(locked)).filter((o) => o.recommended).map((o) => o.type)).toEqual(['MARK_ORDER_PAID', 'POST_LEDGER_ENTRY']);
+    // `lockedReason` is simulator fault injection; a person could not see it, so it must not change advice.
+    expect(actionOptions(state(locked)).filter((o) => o.recommended).map((o) => o.type)).toEqual(['REPLAY_WEBHOOK_EVENT']);
   });
   it('targets the extra capture for a duplicate', () => {
     const dup = gwPayment({ id: 'gwp_2', capturedAt: ago(DAY_MS) });

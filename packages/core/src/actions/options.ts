@@ -31,6 +31,24 @@ export interface AttemptHistory {
 
 const NONE = 'none';
 
+/** Plain reason when the case has nothing for the action to act on (params hold the NONE placeholder). */
+const MISSING_SUBJECT: Record<ActionType, string> = {
+  REPLAY_WEBHOOK_EVENT: 'No webhook event on this case to replay.',
+  MARK_ORDER_PAID: 'No order and captured payment on this case.',
+  POST_LEDGER_ENTRY: 'No internal payment on this case to post.',
+  REVERSE_LEDGER_ENTRY: 'No ledger journal on this case to reverse.',
+  INITIATE_REFUND: 'No captured gateway payment on this case to refund.',
+  SYNC_REFUND_STATUS: 'No refund on this case to sync.',
+  RAISE_SETTLEMENT_DISPUTE: 'No settlement batch on this case.',
+  HOLD_PAYMENT_FOR_REVIEW: 'No internal payment on this case to hold.',
+  ESCALATE_TO_HUMAN: 'Escalation is not possible here.',
+};
+
+function missingSubject(action: CatalogAction): string | null {
+  const values = Object.values(action.params as Record<string, unknown>);
+  return values.includes(NONE) ? MISSING_SUBJECT[action.type] : null;
+}
+
 interface Draft {
   action: CatalogAction;
   summary: string;
@@ -181,7 +199,7 @@ export function recommendedTypes(state: CaseState, history: readonly AttemptHist
       if (!s || !isCaptured(s.primaryGw)) return ['ESCALATE_TO_HUMAN'];
       const needsLedger = captureCreditMinor(s) === 0;
       if (!PAID_ORDER_STATUSES.has(s.order.status) && s.order.status !== 'CANCELLED') {
-        if (s.order.lockedReason || replayFailedBefore(history) || !replayCandidate(s)) {
+        if (replayFailedBefore(history) || !replayCandidate(s)) {
           return needsLedger ? ['MARK_ORDER_PAID', 'POST_LEDGER_ENTRY'] : ['MARK_ORDER_PAID'];
         }
         return ['REPLAY_WEBHOOK_EVENT'];
@@ -216,7 +234,7 @@ export function actionOptions(state: CaseState, history: readonly AttemptHistory
       summary: draft.summary,
       recommended: available && recommended.has(type),
       available,
-      unavailableReason: available ? null : (failures[0] ?? `${ACTION_META[type].label} is not possible here.`),
+      unavailableReason: available ? null : (missingSubject(draft.action) ?? failures[0] ?? `${ACTION_META[type].label} is not possible here.`),
       editable: draft.editable ?? [],
       maxAmountMinor: draft.maxAmountMinor ?? null,
     };
