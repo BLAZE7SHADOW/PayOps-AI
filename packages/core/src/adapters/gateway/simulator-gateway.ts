@@ -1,4 +1,4 @@
-import { inArray, or } from 'drizzle-orm';
+import { and, gte, inArray, lt, or, sql } from 'drizzle-orm';
 import type { DbOrTx } from '../../db/client';
 import { gwPayments, gwRefunds, gwSettlementLines, gwWebhookDeliveries } from '../../db/schema';
 import type {
@@ -81,6 +81,17 @@ export class SimulatorGatewayAdapter implements PaymentGatewayPort {
       lineNo: r.lineNo,
       settledOn: r.settledOn,
     }));
+  }
+
+  async summarizeCaptures(range: { from: Date; to: Date }): Promise<{ count: number; amountMinor: number }> {
+    const [row] = await this.db
+      .select({
+        count: sql<number>`count(*)::int`,
+        amountMinor: sql<number>`coalesce(sum(${gwPayments.amountMinor}), 0)::bigint`.mapWith(Number),
+      })
+      .from(gwPayments)
+      .where(and(gte(gwPayments.capturedAt, range.from), lt(gwPayments.capturedAt, range.to)));
+    return { count: row?.count ?? 0, amountMinor: row?.amountMinor ?? 0 };
   }
 }
 

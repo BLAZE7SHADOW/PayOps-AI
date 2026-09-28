@@ -1,0 +1,139 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { SCENARIOS, type SystemKey } from '@payops/shared';
+import { createCore, tables, type Core } from '@payops/core';
+import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
+import { generateScenario, resetDemoData } from './index';
+
+let t: TestDatabase;
+let core: Core;
+
+beforeAll(async () => {
+  t = await startTestDatabase();
+  core = createCore({ db: t.db, clock: fixedClock('2026-09-28T12:00:00.000Z') });
+});
+afterAll(async () => {
+  await t.close();
+});
+beforeEach(async () => {
+  await resetDemoData(core);
+});
+
+const allCases = () => core.cases.list({ scope: 'all', limit: 100 });
+
+describe('scenarios', () => {
+  for (const info of SCENARIOS) {
+    it(`${info.key} opens ${info.expectedCaseType ?? 'no case'}`, async () => {
+      const result = await generateScenario(core, { scenario: info.key, seed: 42 });
+      const cases = await allCases();
+      if (info.expectedCaseType === null) {
+        expect(result.casesOpened).toEqual([]);
+        expect(cases.items).toEqual([]);
+      } else {
+        expect(result.casesOpened.map((c) => c.type)).toEqual([info.expectedCaseType]);
+        expect(cases.items.map((c) => c.type)).toEqual([info.expectedCaseType]);
+      }
+    });
+  }
+
+  const matrixOf = async (scenario: (typeof SCENARIOS)[number]['key']): Promise<SystemKey[]> => {
+    const { casesOpened } = await generateScenario(core, { scenario, seed: 7 });
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    return detail.matrix.mismatched;
+  };
+
+  it('captured_order_failed marks order, ledger and webhook', async () => {
+    const { casesOpened } = await generateScenario(core, { scenario: 'captured_order_failed', seed: 7 });
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    expect(detail.matrix.mismatched).toEqual(['ORDER', 'LEDGER', 'WEBHOOK']);
+    expect(detail).toMatchObject({
+      displayId: 'PAY-0001',
+      severity: 'HIGH',
+      amountMinor: 1_249_900,
+      ruleIds: ['D1_CAPTURED_NOT_PAID', 'D3_LEDGER_MISSING'],
+    });
+    expect(detail.matrix.cells.WEBHOOK.status).toBe('HTTP 500 ×3');
+    expect(detail.matrix.cells.SETTLEMENT.status).toBe('SETTLED');
+    expect(detail.notes.map((n) => n.text)).toEqual([
+      'I was charged ₹12,499 for my order but the app says the payment failed. Please check.',
+    ]);
+    expect(detail.lifecycle.some((e) => e.title === 'payment.captured delivery failed')).toBe(true);
+    expect(detail.customer?.name).toBeTruthy();
+    expect(detail.merchant?.name).toBe('Kavya Electronics');
+  });
+
+  it('settlement_mismatch marks settlement and sizes the shortfall', async () => {
+    const { casesOpened, created } = await generateScenario(core, { scenario: 'settlement_mismatch', seed: 7 });
+    expect(created.batchIds).toHaveLength(1);
+    expect(created.paymentIds).toHaveLength(6);
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    expect(detail.matrix.mismatched).toEqual(['SETTLEMENT']);
+    expect(detail.amountMinor).toBe(13_924);
+    expect(detail.severity).toBe('MEDIUM');
+    expect(detail.primaryRef.batchId).toBe(created.batchIds[0]);
+    expect(detail.matrix.cells.SETTLEMENT.detail).toBe('Fee ₹417.72 vs contract ₹278.48');
+    const [batch] = await t.db.select().from(tables.settlements);
+    expect(batch).toMatchObject({ status: 'MISMATCH', reportedNetMinor: batch!.expectedNetMinor - 13_924 });
+  });
+
+  it('refund_stuck marks ledger and webhook', async () => {
+    expect(await matrixOf('refund_stuck')).toEqual(['LEDGER', 'WEBHOOK']);
+  });
+
+  it('refund_never_initiated marks the order and is critical', async () => {
+    const { casesOpened } = await generateScenario(core, { scenario: 'refund_never_initiated', seed: 9 });
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    expect(detail.matrix.mismatched).toEqual(['ORDER']);
+    expect(detail).toMatchObject({ severity: 'CRITICAL', ruleIds: ['D6_REFUND_MISSING'], amountMinor: 7_800_000 });
+  });
+
+  it('duplicate_capture marks the gateway', async () => {
+    expect(await matrixOf('duplicate_capture')).toEqual(['GATEWAY']);
+  });
+
+  it('suspicious_payment is consistent across systems', async () => {
+    const { casesOpened } = await generateScenario(core, { scenario: 'suspicious_payment', seed: 7 });
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    expect(detail.matrix.mismatched).toEqual([]);
+    expect(detail).toMatchObject({ severity: 'HIGH', ruleIds: ['D8_RISK_VELOCITY'] });
+    expect(detail.lifecycle.find((e) => e.system === 'RISK')?.title).toBe('8 failed payment attempts in 42 min');
+  });
+
+  it('rejects the same scenario and seed twice', async () => {
+    await generateScenario(core, { scenario: 'captured_order_failed', seed: 5 });
+    await expect(generateScenario(core, { scenario: 'captured_order_failed', seed: 5 })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+    expect((await allCases()).items).toHaveLength(1);
+  });
+
+  it('is deterministic for a seed', async () => {
+    const a = await generateScenario(core, { scenario: 'duplicate_capture', seed: 11, noise: 3 });
+    await resetDemoData(core);
+    const b = await generateScenario(core, { scenario: 'duplicate_capture', seed: 11, noise: 3 });
+    expect(b.created).toEqual(a.created);
+  });
+
+  it('noise payments open no cases, and re-checking is stable', async () => {
+    const result = await generateScenario(core, { scenario: 'healthy_payment', seed: 3, noise: 40 });
+    expect(result.created.paymentIds).toHaveLength(41);
+    expect(result.casesOpened).toEqual([]);
+    const sweep = await core.reconciliation.sweep();
+    expect(sweep).toMatchObject({ checked: 41 + result.created.batchIds.length, opened: 0, updated: 0 });
+    const flagged = await core.payments.list({ limit: 100, mismatchOnly: true });
+    expect(flagged.items).toEqual([]);
+  });
+
+  it('re-detection merges into the open case instead of opening another', async () => {
+    const first = await generateScenario(core, { scenario: 'captured_order_failed', seed: 21 });
+    const again = await core.reconciliation.checkOrders([first.created.orderIds[0]!]);
+    expect(again).toMatchObject({ opened: 0, updated: 1, cases: [] });
+    expect((await allCases()).items).toHaveLength(1);
+  });
+
+  it('writes audit events for detection and generation', async () => {
+    await generateScenario(core, { scenario: 'refund_stuck', seed: 1 });
+    const audit = await core.audit.list({ limit: 10 });
+    // The test clock is frozen, so all three share a timestamp; compare as a set.
+    expect(audit.items.map((a) => a.action).sort()).toEqual(['case.opened', 'simulator.generated', 'simulator.reset']);
+  });
+});

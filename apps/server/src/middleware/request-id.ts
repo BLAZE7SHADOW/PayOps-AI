@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { RequestHandler } from 'express';
+import type { Role } from '@payops/shared';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       requestId: string;
-      user?: { id: string; email: string; name: string; role: import('@payops/shared').Role };
+      user?: { id: string; email: string; name: string; role: Role };
     }
   }
 }

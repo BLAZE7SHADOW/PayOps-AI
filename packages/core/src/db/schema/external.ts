@@ -5,7 +5,6 @@
 import { check, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
-  CARD_NETWORKS,
   GW_PAYMENT_STATUS,
   GW_REFUND_STATUS,
   PAYMENT_METHODS,

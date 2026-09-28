@@ -217,6 +217,13 @@ export interface GenerateScenarioResult {
 }
 
 // ── Audit ────────────────────────────────────────────────────────────────────
+export const AuditListQuery = z.object({
+  ...cursorQuery,
+  caseId: z.string().trim().min(1).max(64).optional(),
+  entityId: z.string().trim().min(1).max(64).optional(),
+});
+export type AuditListQuery = z.infer<typeof AuditListQuery>;
+
 export interface AuditEventItem {
   id: string;
   at: string;

@@ -24,6 +24,9 @@ export const ID_PREFIX = {
   dispute: 'dsp',
   execution: 'exe',
   approval: 'apr',
+  audit: 'aud',
+  journal: 'jrn',
+  settlementLine: 'sln',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

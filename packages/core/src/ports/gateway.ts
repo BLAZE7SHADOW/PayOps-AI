@@ -63,4 +63,6 @@ export interface PaymentGatewayPort {
   listWebhookDeliveries(gwPaymentIds: readonly string[]): Promise<GatewayWebhookDelivery[]>;
   listRefunds(gwPaymentIds: readonly string[]): Promise<GatewayRefund[]>;
   listSettlementLines(filter: { batchIds?: readonly string[]; gwPaymentIds?: readonly string[] }): Promise<GatewaySettlementLine[]>;
+  /** Count and total of payments captured in [from, to). Used by the overview metrics. */
+  summarizeCaptures(range: { from: Date; to: Date }): Promise<{ count: number; amountMinor: number }>;
 }

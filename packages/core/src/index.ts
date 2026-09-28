@@ -9,3 +9,7 @@ export * from './ports/clock';
 export * from './ports/events';
 export * from './ports/gateway';
 export * from './adapters/gateway/simulator-gateway';
+export type * from './db/rows';
+export * from './reconciliation';
+export * from './services';
+export * from './container';
