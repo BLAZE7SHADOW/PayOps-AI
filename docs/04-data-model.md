@@ -44,7 +44,7 @@ Drizzle schema lives in `packages/core/src/db/schema/`. Tables use snake_case; T
 
 LangGraph checkpoints: `PostgresSaver` (`@langchain/langgraph-checkpoint-postgres`) manages its own tables in the same database. pg-boss manages the `pgboss` schema.
 
-## Detection rules (code, `packages/core/src/detection/rules/`)
+## Detection rules (pure functions in `packages/core/src/reconciliation/rules.ts`)
 
 | Rule | Fires when | Case type | Severity |
 |---|---|---|---|

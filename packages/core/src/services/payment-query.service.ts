@@ -4,6 +4,7 @@
  * computed by the same code as the case page's state matrix.
  */
 import { and, desc, eq, gte, ilike, inArray, lt, lte, or, type SQL } from 'drizzle-orm';
+import { escapeLike } from './like';
 import type {
   LedgerState,
   Page,
@@ -34,7 +35,6 @@ const isPaymentCursor = (v: unknown): v is PaymentCursor =>
   isRecord(v) && typeof v.c === 'string' && typeof v.i === 'string';
 
 /** Escapes LIKE wildcards so user input is matched literally. */
-const likePrefix = (q: string): string => `${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 export function ledgerState(matrix: StateMatrix): LedgerState {
   const status = matrix.cells.LEDGER.status;
@@ -69,7 +69,7 @@ export class PaymentQueryService {
     const conds: SQL[] = [];
     const q = query.q?.trim();
     if (q) {
-      const pattern = likePrefix(q);
+      const pattern = `${escapeLike(q)}%`;
       conds.push(
         or(ilike(payments.id, pattern), ilike(payments.gwPaymentId, pattern), ilike(payments.orderId, pattern)) as SQL,
       );

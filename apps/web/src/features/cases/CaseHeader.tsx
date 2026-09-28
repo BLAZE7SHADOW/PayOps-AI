@@ -47,9 +47,6 @@ export function CaseHeader({ c }: { c: CaseDetail }) {
       </h1>
       <p className="mt-1 text-13 text-ink-2">
         <Tag tone={tone.severity(c.severity)}>{c.severity}</Tag>
-        <span className="ml-2">
-          Priority <span className="tabular font-mono text-ink">{c.priority}</span>
-        </span>
         <span className="mx-2 text-ink-3" aria-hidden="true">·</span>
         {c.assignee ? `Assigned to ${c.assignee.name}` : 'Unassigned'}
       </p>

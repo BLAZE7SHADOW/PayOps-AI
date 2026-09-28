@@ -19,7 +19,7 @@ Defined once in `apps/web/src/styles/tokens.css` as CSS variables and mapped int
 | `--rule-strong` | `#C4BBA9` | focused input border, selected row edge |
 | `--ink` | `#1C1B18` | primary text |
 | `--ink-2` | `#55514A` | secondary text |
-| `--ink-3` | `#8A8479` | tertiary text, placeholders |
+| `--ink-3` | `#8A8479` | placeholders, separators, chart marks only (3.3:1 on paper, so never for meaningful text; use `--ink-2`) |
 | `--accent` | `#1E5A4C` | primary buttons, links, focus ring (ledger green) |
 | `--accent-weak` | `#DCE8E2` | selected row, active nav |
 | `--ok` | `#2E6B3A` | PASS, matched |

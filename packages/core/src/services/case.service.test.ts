@@ -100,6 +100,14 @@ describe('CaseService.list', () => {
     expect((await core.cases.list({ scope: 'closed', limit: 10 })).items).toEqual([]);
   });
 
+  it('finds cases by display id, payment id prefix, and treats wildcards literally', async () => {
+    const { case: c } = await open(candidate({ fingerprint: 'PAYMENT_MISMATCH:pay_findme' }));
+    const byDisplay = await core.cases.list({ scope: 'all', limit: 10, q: c.displayId.toLowerCase() });
+    expect(byDisplay.items.map((i) => i.id)).toEqual([c.id]);
+    const wildcard = await core.cases.list({ scope: 'all', limit: 10, q: '%' });
+    expect(wildcard.items).toEqual([]);
+  });
+
   it('rejects a malformed cursor', async () => {
     await expect(core.cases.list({ scope: 'open', limit: 2, cursor: 'not-a-cursor' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });

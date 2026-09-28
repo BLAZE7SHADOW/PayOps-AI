@@ -59,7 +59,7 @@ Do **not** add: MongoDB, Redis, BullMQ, a separate worker service, Supabase Auth
 
 Internal ops tool, calm and dense. Warm paper background `#F5F2EA` (never pure white), ink text, single accent ledger green `#1E5A4C`, muted status colors. IBM Plex Sans + IBM Plex Mono (tabular numbers for money, ids, times). Radius 0–4px. Borders not shadows. No gradients, glass, orbs, dot grids, bento grids, emojis, sparkles, lucide, checkmark bullets, colored left stripes, neon, pastels, hover transforms, animated arrows, fake terminals, fake testimonials, pricing tiers. Skeleton loaders for every async surface. Copy: plain and specific, no em dashes, no "it's not X, it's Y", no hype words, AI features named by function ("Investigation", "Proposed resolution"). Only token colors, never raw hex in components.
 
-## Commands (fill in as Phase 0 creates them)
+## Commands
 
 ```
 pnpm db:local       # zero-install Postgres (PGlite) on :54329, or set DATABASE_URL to Supabase

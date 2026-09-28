@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, gt, inArray, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { escapeLike } from './like';
 import {
   CASE_DISPLAY_PREFIX,
   CASE_TYPE_LABEL,
@@ -193,6 +194,17 @@ export class CaseService {
     if (query.status) filters.push(eq(cases.status, query.status));
     if (query.type) filters.push(eq(cases.type, query.type));
     if (query.severity) filters.push(eq(cases.severity, query.severity));
+    if (query.q) {
+      const prefix = `${escapeLike(query.q)}%`;
+      filters.push(
+        or(
+          ilike(cases.displayId, prefix),
+          ilike(cases.id, prefix),
+          ilike(sql`${cases.entityRefs} ->> 'paymentId'`, prefix),
+          ilike(sql`${cases.entityRefs} ->> 'orderId'`, prefix),
+        ) as SQL,
+      );
+    }
 
     const cursor = decodeCursor(query.cursor, isCaseCursor);
     const pageFilters = [...filters];

@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { CASE_TYPES, CASE_TYPE_LABEL, SEVERITIES, type CaseListItem } from '@payops/shared';
 import type { CaseFilters } from '../../lib/query-keys';
@@ -51,10 +50,10 @@ export function ExceptionsPage() {
     scope: pickEnum(url.scope, SCOPES) ?? 'open',
     type: pickEnum(url.type, CASE_TYPES),
     severity: pickEnum(url.severity, SEVERITIES),
-    q: url.q?.toUpperCase(),
+    q: url.q?.trim() || undefined,
   };
   const list = useCases(filters);
-  const rows = useMemo(() => (filters.q ? list.items.filter((c) => c.displayId === filters.q) : list.items), [list.items, filters.q]);
+  const rows = list.items;
   const narrowed = Boolean(filters.type || filters.severity || filters.q);
 
   return (

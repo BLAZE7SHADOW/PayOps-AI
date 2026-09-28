@@ -28,3 +28,15 @@ Owner asked to cut infrastructure that isn't needed. One Postgres database now h
 
 ## D009 · Case fingerprint is caseType + primary entity
 Rules that describe the same underlying problem (D1 and D3 on one payment) merge into one case instead of opening two. Enforced by a partial unique index on open cases.
+
+## D010 · Same scenario + seed twice returns 409
+The simulator refuses to regenerate a scenario with a seed it already used (checked via the `simulator.generated` audit row in the same transaction). Why: deterministic ids would collide; a clear 409 beats a half-written scenario.
+
+## D011 · Payment list filter reads gw_payments directly
+`PaymentQueryService` joins `gw_payments` for the gateway-status filter. It is read-only and keeps pagination in SQL; all other gateway reads go through `PaymentGatewayPort`. Revisit when a real gateway adapter exists (store a mirrored gateway status on `payments` instead).
+
+## D012 · Batch cases keep the matrix from detection time
+Payment/order cases recompute the state matrix live on every read. Settlement batch cases keep the stored matrix and link to the first offending payment for context.
+
+## D013 · Case search
+`GET /api/cases?q=` prefix-matches display id, case id, payment id and order id (case-insensitive, wildcards escaped).

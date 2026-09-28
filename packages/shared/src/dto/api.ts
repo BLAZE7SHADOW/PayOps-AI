@@ -135,6 +135,8 @@ export const CaseListQuery = z.object({
   type: z.enum(CASE_TYPES).optional(),
   severity: z.enum(SEVERITIES).optional(),
   scope: z.enum(['open', 'closed', 'all']).default('open'),
+  /** Display id (PAY-0042), case id, payment id or order id. Prefix match, case-insensitive. */
+  q: z.string().trim().min(1).max(64).optional(),
 });
 export type CaseListQuery = z.infer<typeof CaseListQuery>;
 
