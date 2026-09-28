@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.vite/
+*.log
+.DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# local
+playwright-report/
+test-results/
+
+# local database
+.data/
+.sync/
