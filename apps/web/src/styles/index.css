@@ -1,0 +1,57 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './base.css';
+
+/* Clear Tailwind's defaults so only our tokens exist as utilities. */
+@theme inline {
+  --color-*: initial;
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-accent-weak: var(--accent-weak);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-bad-weak: var(--bad-weak);
+  --color-warn-weak: var(--warn-weak);
+  --color-ok-weak: var(--ok-weak);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+
+  --font-*: initial;
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Type scale 12 / 13 / 14 / 16 / 20 / 24 (§3). */
+  --text-*: initial;
+  --text-11: 11px;
+  --text-11--line-height: 16px;
+  --text-12: 12px;
+  --text-12--line-height: 16px;
+  --text-13: 13px;
+  --text-13--line-height: 20px;
+  --text-14: 14px;
+  --text-14--line-height: 20px;
+  --text-16: 16px;
+  --text-16--line-height: 24px;
+  --text-20: 20px;
+  --text-20--line-height: 28px;
+  --text-24: 24px;
+  --text-24--line-height: 32px;
+
+  /* Radius 0 to 4px only (§4). */
+  --radius-*: initial;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+
+  --shadow-*: initial;
+  --shadow-pop: var(--shadow-pop);
+
+  --animate-*: initial;
+}

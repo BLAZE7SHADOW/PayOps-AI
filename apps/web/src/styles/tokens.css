@@ -1,0 +1,42 @@
+/*
+ * Design tokens (docs/05-ui-design.md §2). The only colors the app may use.
+ * Components reference these through Tailwind utilities (bg-paper, text-ink-2, ...)
+ * or var(--token) in CSS. Never raw hex in components.
+ *
+ * Contrast note: --ink-3 is 3.3:1 on --paper, so it is used only for placeholders,
+ * separators and non-text marks. Secondary text uses --ink-2 (7:1).
+ */
+:root {
+  --paper: #f5f2ea;
+  --surface: #fbf9f4;
+  --surface-sunk: #eeeae0;
+  --rule: #ddd6c8;
+  --rule-strong: #c4bba9;
+  --ink: #1c1b18;
+  --ink-2: #55514a;
+  --ink-3: #8a8479;
+  --accent: #1e5a4c;
+  --accent-weak: #dce8e2;
+  --ok: #2e6b3a;
+  --warn: #94660f;
+  --bad: #9e3524;
+  --bad-weak: #f3e1db;
+  --warn-weak: #f2e8d2;
+  --ok-weak: #e0ebdf;
+
+  /* Chart series: accent plus neutral ink tints only (§11 Overview). Order is fixed per case type. */
+  --chart-1: var(--accent);
+  --chart-2: #8db3a6;
+  --chart-3: var(--ink-2);
+  --chart-4: #b8ae9c;
+  --chart-5: #3d8a76;
+
+  --shadow-pop: 0 1px 0 var(--rule), 0 8px 24px rgb(28 27 24 / 0.08);
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --nav-width: 216px;
+  --topbar-height: 48px;
+  --row-height: 36px;
+}
