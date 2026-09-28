@@ -3,8 +3,15 @@ import {
   DAY_MS,
   OPEN_CASE_STATUSES,
   SCENARIOS,
+  ApprovalDecisionBody,
+  PreviewActionsBody,
+  ProposeActionsBody,
+  roleAtLeast,
   seededIds,
   type ApiErrorBody,
+  type ApprovalItem,
+  type ResolutionItem,
+  type SessionUser,
   type CaseDetail,
   type CaseListItem,
   type GenerateScenarioBody,
@@ -15,14 +22,56 @@ import {
   type PaymentListItem,
 } from '@payops/shared';
 import { buildDb, exceptionsByType, type MockDb } from './fixtures';
+import {
+  MOCK_PASSWORD,
+  USERS,
+  demoAccounts,
+  evaluate,
+  execute,
+  policyDocument,
+  propose,
+  resolutionView,
+  seedResolutions,
+  toSession,
+  viewerApproval,
+} from './resolution';
 
-let db: MockDb = buildDb();
-type Listener = (kind: 'created' | 'updated', item: CaseListItem) => void;
+const freshDb = () => seedResolutions(buildDb());
+let db: MockDb = freshDb();
+
+// ── Mock realtime bus (mocks/realtime.ts subscribes) ─────────────────────────
+export type MockEvent =
+  | { name: 'case'; kind: 'created' | 'updated'; item: CaseListItem }
+  | { name: 'approval'; kind: 'requested' | 'resolved'; item: ApprovalItem }
+  | { name: 'resolution'; item: ResolutionItem };
+type Listener = (e: MockEvent) => void;
 const listeners = new Set<Listener>();
-export const onMockCase = (l: Listener) => {
+export const onMockEvent = (l: Listener) => {
   listeners.add(l);
   return () => listeners.delete(l);
 };
+const emit = (e: MockEvent, delay = 0) => setTimeout(() => listeners.forEach((l) => l(e)), delay);
+
+// ── Mock session: sessionStorage stands in for the httpOnly cookie, mock mode only ─
+const SESSION_KEY = 'payops.mock.session';
+function currentUser(): SessionUser | null {
+  let id: string | null = null;
+  try {
+    id = window.sessionStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+  const u = USERS.find((x) => x.id === id);
+  return u ? toSession(u) : null;
+}
+function setSession(u: SessionUser | null) {
+  try {
+    if (u) window.sessionStorage.setItem(SESSION_KEY, u.id);
+    else window.sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Storage blocked: the session lasts until reload.
+  }
+}
 
 const LATENCY_MS = 350;
 let reqSeq = 0;
@@ -34,8 +83,8 @@ function json(body: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json', 'x-request-id': requestId() },
   });
 }
-function error(status: number, code: string, message: string): Response {
-  const body: ApiErrorBody = { error: { code, message, requestId: requestId() } };
+function error(status: number, code: string, message: string, details?: unknown): Response {
+  const body: ApiErrorBody = { error: { code, message, requestId: requestId(), ...(details === undefined ? {} : { details }) } };
   return json(body, status);
 }
 
@@ -44,7 +93,7 @@ function toListItem(p: PaymentDetail): PaymentListItem {
   return rest;
 }
 function toCaseItem(c: CaseDetail): CaseListItem {
-  const { matrix: _m, entityRefs: _e, customer: _c, merchant: _me, notes: _n, lifecycle: _l, resolvedAt: _r, resolution: _res, ...rest } = c;
+  const { matrix: _m, entityRefs: _e, customer: _c, merchant: _me, notes: _n, lifecycle: _l, resolvedAt: _r, resolution: _res, resolutionView: _rv, ...rest } = c;
   return rest;
 }
 
@@ -64,7 +113,7 @@ function overview(): OverviewMetrics {
     capturedTodayMinor: today.reduce((s, p) => s + p.amountMinor, 0) + 4_218_650_00,
     capturedTodayCount: today.length + 312,
     openExceptions: open.length,
-    awaitingApproval: db.cases.filter((c) => c.status === 'AWAITING_APPROVAL').length,
+    awaitingApproval: db.approvals.filter((a) => a.status === 'PENDING').length,
     resolved7d: db.cases.filter((c) => c.status === 'RESOLVED').length + 23,
     resolvedByAgent7d: 0,
     exceptionsByType: exceptionsByType(db),
@@ -93,10 +142,13 @@ function generate(body: GenerateScenarioBody): GenerateScenarioResult {
       updatedAt: now,
       resolvedAt: null,
       resolution: null,
+      matrix: structuredClone(template.matrix),
+      mismatched: [...template.mismatched],
     };
+    db.caseMeta[c.id] = { ...(db.caseMeta[template.id] ?? { tag: body.scenario, risk: 'LOW' }) };
     db.cases.unshift(c);
     casesOpened.push({ id: c.id, displayId: c.displayId, type: c.type });
-    setTimeout(() => listeners.forEach((l) => l('created', toCaseItem(c))), 400);
+    emit({ name: 'case', kind: 'created', item: toCaseItem(c) }, 400);
   }
   return {
     scenario: body.scenario,
@@ -106,13 +158,124 @@ function generate(body: GenerateScenarioBody): GenerateScenarioResult {
   };
 }
 
-async function handle(method: string, url: URL, body: unknown): Promise<Response> {
+/** AUTO proposals and approved ones execute a moment later, then the validator reports. */
+function runExecution(caseId: string, resolutionId: string) {
+  setTimeout(() => {
+    const c = db.cases.find((x) => x.id === caseId);
+    const res = db.resolutions.find((r) => r.id === resolutionId);
+    if (!c || !res) return;
+    execute(db, c, res);
+    for (const a of db.approvals) if (a.case.id === c.id) a.case.status = c.status;
+    emit({ name: 'resolution', item: res });
+    emit({ name: 'case', kind: 'updated', item: toCaseItem(c) }, 50);
+  }, 1_500);
+}
+
+async function handle(method: string, url: URL, body: unknown, isJson: boolean): Promise<Response> {
   const sp = url.searchParams;
   const path = url.pathname;
   let m: RegExpExecArray | null;
 
   if (method === 'GET' && path === '/api/health') return json({ ok: true });
+
+  // ── Auth ──
+  if (method === 'GET' && path === '/api/auth/demo-accounts') return json(demoAccounts());
+  if (method === 'POST' && path === '/api/auth/login') {
+    const b = body as { email?: string; password?: string };
+    const u = USERS.find((x) => x.email === String(b.email ?? '').toLowerCase());
+    if (!u || b.password !== MOCK_PASSWORD) return error(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
+    setSession(u);
+    return json(toSession(u));
+  }
+  if (method === 'POST' && path === '/api/auth/demo-login') {
+    const u = USERS.find((x) => x.email === String((body as { email?: string }).email ?? '').toLowerCase());
+    if (!u) return error(404, 'DEMO_ACCOUNT_NOT_FOUND', 'No demo account with that email.');
+    setSession(u);
+    return json(toSession(u));
+  }
+  if (method === 'POST' && path === '/api/auth/logout') {
+    setSession(null);
+    return new Response(null, { status: 204, headers: { 'x-request-id': requestId() } });
+  }
+  const user = currentUser();
+  if (!user) return error(401, 'UNAUTHENTICATED', 'Sign in to continue.');
+  if (method === 'GET' && path === '/api/auth/me') return json(user);
+  // CSRF rule from the real server: state-changing requests must be JSON.
+  if (method !== 'GET' && !isJson) return error(415, 'UNSUPPORTED_MEDIA_TYPE', 'State-changing requests must send application/json.');
+
   if (method === 'GET' && path === '/api/overview') return json(overview());
+  if (method === 'GET' && path === '/api/policy') return json(policyDocument());
+
+  // ── Resolution ──
+  if ((m = /^\/api\/cases\/([^/]+)\/actions(\/preview)?$/.exec(path)) && method === 'POST') {
+    const c = db.cases.find((x) => x.id === m![1]);
+    if (!c) return error(404, 'CASE_NOT_FOUND', `No case with id ${m[1]}.`);
+    if (!roleAtLeast(user.role, 'OPS')) return error(403, 'FORBIDDEN', 'Your role cannot propose resolutions.');
+    const attempt = db.resolutions.filter((r) => r.caseId === c.id).length + 1;
+    if (m[2]) {
+      const parsed = PreviewActionsBody.safeParse(body);
+      if (!parsed.success) return error(400, 'VALIDATION_FAILED', 'Invalid actions.', parsed.error.issues);
+      return json(evaluate(db, c, parsed.data.actions, attempt));
+    }
+    const parsed = ProposeActionsBody.safeParse(body);
+    if (!parsed.success) return error(422, 'VALIDATION_FAILED', 'Invalid proposal.', parsed.error.issues);
+    if (db.approvals.some((a) => a.case.id === c.id && a.status === 'PENDING') || c.status === 'EXECUTING')
+      return error(409, 'CONFLICT', 'A proposal on this case is already pending.');
+    const pre = evaluate(db, c, parsed.data.actions, attempt);
+    if (pre.decision.tier === 'BLOCKED')
+      return error(422, 'POLICY_BLOCKED', 'Policy blocks this proposal.', { policy: pre.decision, preconditionFailures: pre.preconditionFailures });
+    const { resolution, approval } = propose(db, c, user, parsed.data.actions, parsed.data.rationale);
+    emit({ name: 'case', kind: 'updated', item: toCaseItem(c) }, 100);
+    if (approval) emit({ name: 'approval', kind: 'requested', item: viewerApproval(db, approval, user) }, 200);
+    else runExecution(c.id, resolution.id);
+    return json(resolution, 201);
+  }
+
+  // ── Approvals ──
+  if (method === 'GET' && path === '/api/approvals') {
+    const scope = sp.get('scope') ?? 'pending';
+    const list = db.approvals
+      .filter((a) => scope === 'all' || (scope === 'pending' ? a.status === 'PENDING' : a.status !== 'PENDING'))
+      .map((a) => viewerApproval(db, a, user));
+    return json(paginate(list, sp));
+  }
+  if (method === 'GET' && (m = /^\/api\/approvals\/([^/]+)$/.exec(path))) {
+    const a = db.approvals.find((x) => x.id === m![1]);
+    if (!a) return error(404, 'APPROVAL_NOT_FOUND', `No approval with id ${m[1]}.`);
+    const c = db.cases.find((x) => x.id === a.case.id)!;
+    const resolution = db.resolutions.find((r) => r.id === a.resolutionId)!;
+    return json({ ...viewerApproval(db, a, user), resolution, caseItem: toCaseItem(c) });
+  }
+  if (method === 'POST' && (m = /^\/api\/approvals\/([^/]+)\/decision$/.exec(path))) {
+    const a = db.approvals.find((x) => x.id === m![1]);
+    if (!a) return error(404, 'APPROVAL_NOT_FOUND', `No approval with id ${m[1]}.`);
+    const parsed = ApprovalDecisionBody.safeParse(body);
+    if (!parsed.success) return error(400, 'VALIDATION_FAILED', parsed.error.issues[0]?.message ?? 'Invalid decision.');
+    if (a.status !== 'PENDING') return error(409, 'ALREADY_DECIDED', `This approval was already ${a.status.toLowerCase()}.`);
+    const view = viewerApproval(db, a, user);
+    if (!view.canDecide) return error(403, 'FORBIDDEN', view.cannotDecideReason ?? 'You cannot decide this approval.');
+    const c = db.cases.find((x) => x.id === a.case.id)!;
+    const res = db.resolutions.find((r) => r.id === a.resolutionId)!;
+    const now = new Date().toISOString();
+    const status = parsed.data.decision === 'APPROVE' ? 'APPROVED' : parsed.data.decision === 'REJECT' ? 'REJECTED' : 'ESCALATED';
+    Object.assign(a, { status, decidedBy: { type: 'USER', id: user.id, name: user.name }, decidedAt: now, comment: parsed.data.comment || null });
+    res.approval = { id: a.id, tier: a.tier, status, decidedBy: a.decidedBy, comment: a.comment, decidedAt: now };
+    res.updatedAt = now;
+    if (status === 'APPROVED') {
+      res.status = 'EXECUTING';
+      c.status = 'EXECUTING';
+      runExecution(c.id, res.id);
+    } else {
+      res.status = status;
+      c.status = status === 'REJECTED' ? 'OPEN' : 'ESCALATED';
+    }
+    a.case.status = c.status;
+    const item = viewerApproval(db, a, user);
+    emit({ name: 'approval', kind: 'resolved', item }, 100);
+    emit({ name: 'resolution', item: res }, 150);
+    emit({ name: 'case', kind: 'updated', item: toCaseItem(c) }, 200);
+    return json(item);
+  }
 
   if (method === 'GET' && path === '/api/payments') {
     const q = sp.get('q')?.toLowerCase();
@@ -146,9 +309,11 @@ async function handle(method: string, url: URL, body: unknown): Promise<Response
   }
   if (method === 'GET' && (m = /^\/api\/cases\/([^/]+)$/.exec(path))) {
     const c = db.cases.find((x) => x.id === m![1] || x.displayId === m![1]);
-    return c ? json(c) : error(404, 'CASE_NOT_FOUND', `No case with id ${m[1]}.`);
+    return c ? json({ ...c, resolutionView: resolutionView(db, c, user) }) : error(404, 'CASE_NOT_FOUND', `No case with id ${m[1]}.`);
   }
 
+  const simulator = path.startsWith('/api/simulator');
+  if (simulator && user.role !== 'OPS' && user.role !== 'ADMIN') return error(403, 'FORBIDDEN', 'The simulator is for Ops and Admin users.');
   if (method === 'GET' && path === '/api/simulator/scenarios') return json(SCENARIOS);
   if (method === 'POST' && path === '/api/simulator/scenarios') {
     const b = body as GenerateScenarioBody;
@@ -156,7 +321,7 @@ async function handle(method: string, url: URL, body: unknown): Promise<Response
     return json(generate({ scenario: b.scenario, seed: b.seed, noise: b.noise ?? 0 }), 201);
   }
   if (method === 'POST' && path === '/api/simulator/reset') {
-    db = buildDb();
+    db = freshDb();
     return json({ ok: true });
   }
 
@@ -177,8 +342,9 @@ export function installMockFetch(): void {
     if (!url.pathname.startsWith('/api/')) return real(input, init);
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
+    const isJson = new Headers(init?.headers).get('content-type')?.includes('application/json') ?? false;
     await new Promise((r) => setTimeout(r, LATENCY_MS));
-    return handle(method, url, body);
+    return handle(method, url, body, isJson);
   };
   console.warn(`[mock api] serving fixtures for /api (${db.cases.length} cases, ${db.payments.length} payments)`);
 }

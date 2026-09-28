@@ -7,7 +7,9 @@ const ROOT: Record<string, string> = {
   payments: 'Payments',
   exceptions: 'Exceptions',
   cases: 'Exceptions',
+  approvals: 'Approvals',
   simulator: 'Simulator',
+  policy: 'Policy',
   audit: 'Audit log',
 };
 

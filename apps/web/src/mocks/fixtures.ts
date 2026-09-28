@@ -12,8 +12,12 @@ import {
   caseDisplayId,
   formatMoney,
   seededIds,
+  type ApprovalItem,
   type AuditEventItem,
   type CaseDetail,
+  type CaseResolutionView,
+  type ResolutionItem,
+  type RiskTier,
   type CaseListItem,
   type CaseNote,
   type CaseType,
@@ -33,7 +37,7 @@ import {
 const ids = seededIds('payops-web-mock');
 const NOW = Date.now();
 export const ago = (ms: number): string => new Date(NOW - ms).toISOString();
-const after = (iso: string, ms: number): string => new Date(new Date(iso).getTime() + ms).toISOString();
+export const after = (iso: string, ms: number): string => new Date(new Date(iso).getTime() + ms).toISOString();
 const S = 1000;
 
 const CUSTOMERS = [
@@ -321,14 +325,39 @@ const specs: Array<PaymentSpec & { tag?: string }> = [
   { amountMinor: 5_600_00, createdAgoMs: 4 * DAY_MS, customerIdx: 6, merchantIdx: 2, method: 'UPI' },
 ];
 
+/** Approval as stored: the viewer-specific fields (canDecide, reason) are computed per request. */
+export type StoredApproval = Omit<ApprovalItem, 'canDecide' | 'cannotDecideReason'>;
+
 export interface MockDb {
   payments: PaymentDetail[];
   cases: CaseDetail[];
   audit: AuditEventItem[];
   seq: Record<CaseType, number>;
+  /** Scenario tag and policy risk tier per case id (risk is computed by core in the real server). */
+  caseMeta: Record<string, { tag: string; risk: RiskTier }>;
+  resolutions: ResolutionItem[];
+  approvals: StoredApproval[];
 }
 
-interface CaseSpec {
+/** Placeholder; the mock server computes the real view per request and per viewer. */
+export const emptyResolutionView = (): CaseResolutionView => ({
+  actionOptions: [],
+  resolutions: [],
+  pendingApprovalId: null,
+  canPropose: false,
+  cannotProposeReason: null,
+});
+
+const RISK_BY_TAG: Record<string, RiskTier> = {
+  captured_order_failed: 'LOW',
+  injected_refund_request: 'MEDIUM',
+  refund_never_initiated: 'HIGH',
+  suspicious_payment: 'CRITICAL',
+  refund_stuck: 'LOW',
+  duplicate_capture: 'MEDIUM',
+};
+
+export interface CaseSpec {
   tag: string;
   type: CaseType;
   severity: Severity;
@@ -389,10 +418,11 @@ const caseSpecs: CaseSpec[] = [
   { tag: 'duplicate_capture', type: 'DUPLICATE', severity: 'HIGH', ruleIds: ['D4_DUPLICATE_CAPTURE'], openedAfterMs: 2 * MINUTE_MS + 20 * S, priority: 78 },
 ];
 
-function caseFromPayment(db: MockDb, p: PaymentDetail, spec: CaseSpec): CaseDetail {
+export function caseFromPayment(db: MockDb, p: PaymentDetail, spec: CaseSpec): CaseDetail {
   const seq = (db.seq[spec.type] += 1);
   const openedAt = after(p.createdAt, spec.openedAfterMs);
   const id = ids.next('case');
+  db.caseMeta[id] = { tag: spec.tag, risk: RISK_BY_TAG[spec.tag] ?? 'LOW' };
   return {
     id,
     displayId: caseDisplayId(CASE_DISPLAY_PREFIX[spec.type], seq),
@@ -422,6 +452,7 @@ function caseFromPayment(db: MockDb, p: PaymentDetail, spec: CaseSpec): CaseDeta
     lifecycle: p.lifecycle,
     resolvedAt: null,
     resolution: null,
+    resolutionView: emptyResolutionView(),
   };
 }
 
@@ -430,8 +461,10 @@ function settlementCase(db: MockDb): CaseDetail {
   const openedAt = ago(5 * HOUR_MS + 12 * MINUTE_MS);
   const batchId = ids.next('settlementBatch');
   const merchant = MERCHANTS[1]!;
+  const id = ids.next('case');
+  db.caseMeta[id] = { tag: 'settlement_mismatch', risk: 'LOW' };
   return {
-    id: ids.next('case'),
+    id,
     displayId: caseDisplayId('STL', seq),
     type: 'SETTLEMENT_MISMATCH',
     severity: 'MEDIUM',
@@ -465,6 +498,7 @@ function settlementCase(db: MockDb): CaseDetail {
     ],
     resolvedAt: null,
     resolution: null,
+    resolutionView: emptyResolutionView(),
   };
 }
 
@@ -474,6 +508,9 @@ export function buildDb(): MockDb {
     cases: [],
     audit: [],
     seq: { PAYMENT_MISMATCH: 41, REFUND_EXCEPTION: 16, SETTLEMENT_MISMATCH: 8, RISK_CASE: 2, DUPLICATE: 3 },
+    caseMeta: {},
+    resolutions: [],
+    approvals: [],
   };
   for (const spec of specs) {
     const p = makePayment(spec);
@@ -527,7 +564,7 @@ export function buildDb(): MockDb {
     status: 'RESOLVED',
   });
   resolved.resolvedAt = after(resolved.openedAt, 2 * HOUR_MS);
-  resolved.resolution = { by: 'USER', summary: 'Ledger entry posted manually after webhook replay.' };
+  resolved.resolution = { by: 'USER', summary: 'Posted the missing capture journal. Validator PASS.' };
   db.cases.push(resolved);
 
   db.payments.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -581,7 +618,7 @@ function buildAudit(db: MockDb): AuditEventItem[] {
         id: ids.next('execution'),
         at: c.resolvedAt,
         actorType: 'USER',
-        actor: { id: 'usr_demo', name: 'Priya Raman' },
+        actor: { id: 'usr_ananya', name: 'Ananya Rao' },
         action: 'case.resolved',
         entityType: 'case',
         entityId: c.id,
@@ -594,7 +631,7 @@ function buildAudit(db: MockDb): AuditEventItem[] {
     id: ids.next('execution'),
     at: ago(6 * DAY_MS),
     actorType: 'USER',
-    actor: { id: 'usr_demo', name: 'Priya Raman' },
+    actor: { id: 'usr_admin', name: 'Admin' },
     action: 'simulator.reset',
     entityType: 'system',
     entityId: 'demo_data',

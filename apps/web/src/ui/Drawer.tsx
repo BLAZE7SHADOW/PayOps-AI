@@ -9,10 +9,12 @@ interface DrawerProps {
   title: string;
   children: ReactNode;
   width?: number;
+  /** Pinned below the scrolling body, e.g. form actions. */
+  footer?: ReactNode;
 }
 
 /** Right-hand sheet on top of the page. No scrim: the table stays readable beside it. */
-export function Drawer({ open, onOpenChange, title, children, width = 680 }: DrawerProps) {
+export function Drawer({ open, onOpenChange, title, children, width = 680, footer }: DrawerProps) {
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
@@ -33,6 +35,7 @@ export function Drawer({ open, onOpenChange, title, children, width = 680 }: Dra
             </button>
           </RD.Close>
           <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          {footer ? <div className="shrink-0 border-t border-rule bg-surface px-5 py-3">{footer}</div> : null}
         </RD.Content>
       </RD.Portal>
     </RD.Root>

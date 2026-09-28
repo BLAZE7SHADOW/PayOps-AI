@@ -32,7 +32,11 @@ function figures(m: OverviewMetrics): Figure[] {
     {
       label: 'Awaiting approval',
       value: m.awaitingApproval.toLocaleString('en-IN'),
-      sub: m.awaitingApproval ? plural(m.awaitingApproval, 'proposed action') : 'Nothing waiting',
+      sub: (
+        <Link to="/approvals" className="link">
+          {m.awaitingApproval ? `Review ${plural(m.awaitingApproval, 'proposal')}` : 'Nothing waiting'}
+        </Link>
+      ),
     },
     {
       label: 'Resolved by investigation, 7d',

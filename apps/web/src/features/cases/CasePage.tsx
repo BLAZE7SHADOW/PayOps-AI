@@ -1,5 +1,6 @@
 import { useParams } from 'react-router';
 import { DETECTION_RULE_LABEL, type CaseDetail } from '@payops/shared';
+import { useCaseRoom } from '../../lib/socket';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { EmptyState } from '../../ui/EmptyState';
 import { ErrorState } from '../../ui/ErrorState';
@@ -9,11 +10,14 @@ import { Timeline, TimelineSkeleton } from '../../ui/Timeline';
 import { useCase } from './api';
 import { CaseDetails, CaseDetailsSkeleton } from './CaseDetails';
 import { CaseHeader, CaseHeaderSkeleton } from './CaseHeader';
+import { ResolutionSection } from '../resolution/ResolutionSection';
 
 export function CasePage() {
   const { caseId = '' } = useParams();
   const q = useCase(caseId);
   const c = q.data;
+  // Per-case events (resolution.updated, execution steps) arrive only while we are in the room.
+  useCaseRoom(caseId);
   useDocumentTitle(c ? c.displayId : 'Case');
 
   if (q.isError) {
@@ -62,6 +66,8 @@ export function CasePage() {
           <EmptyState message="No investigation has run for this case." className="py-6" />
         </Section>
       </div>
+
+      <ResolutionSection c={c} />
     </article>
   );
 }

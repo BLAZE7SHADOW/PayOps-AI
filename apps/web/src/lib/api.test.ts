@@ -52,6 +52,27 @@ describe('api', () => {
   });
 });
 
+describe('api state-changing requests', () => {
+  it('always sends a JSON body and content type on POST, even without a body', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await api('/api/auth/logout', { method: 'POST' });
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.body).toBe('{}');
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json');
+    expect(init?.credentials).toBe('include');
+  });
+
+  it('sends no body on GET', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse({}, 200));
+    vi.stubGlobal('fetch', fetchMock);
+    await api('/api/auth/me');
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.body).toBeUndefined();
+    expect(new Headers(init?.headers).get('content-type')).toBeNull();
+  });
+});
+
 describe('toQueryString', () => {
   it('drops empty values', () => {
     expect(toQueryString({ q: 'pay_1', status: undefined, mismatchOnly: false, empty: '', limit: 25 })).toBe('?q=pay_1&limit=25');

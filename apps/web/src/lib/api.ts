@@ -71,14 +71,17 @@ export interface RequestOptions {
 
 export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, signal } = opts;
+  // CSRF rule: every state-changing request is JSON, even with nothing to send. Browsers cannot
+  // send application/json cross-site without a preflight, so the server can reject anything else.
+  const sendsBody = method !== 'GET';
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, {
       method,
       signal,
       credentials: 'include',
-      headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: sendsBody ? { accept: 'application/json', 'content-type': 'application/json' } : { accept: 'application/json' },
+      body: sendsBody ? JSON.stringify(body ?? {}) : undefined,
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
