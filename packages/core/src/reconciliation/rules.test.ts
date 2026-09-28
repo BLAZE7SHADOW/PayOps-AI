@@ -124,6 +124,13 @@ describe('D4 duplicate capture', () => {
     const s = withSnapshot(base, { gateway: [...base.gateway, gwPayment({ id: 'gwp_2', status: 'FAILED', capturedAt: null })] });
     expect(d4DuplicateCapture(s)).toBeNull();
   });
+  it('stops firing once the extra capture is refunded in full', () => {
+    const base = dup();
+    const refunded = gwPayment({ id: 'gwp_2', amountMinor: 499_900, status: 'REFUNDED', refundedMinor: 499_900 });
+    expect(d4DuplicateCapture(withSnapshot(base, { gateway: [base.gateway[0]!, refunded] }))).toBeNull();
+    const partly = gwPayment({ id: 'gwp_2', amountMinor: 499_900, status: 'PARTIALLY_REFUNDED', refundedMinor: 100_000 });
+    expect(d4DuplicateCapture(withSnapshot(base, { gateway: [base.gateway[0]!, partly] }))?.amountMinor).toBe(399_900);
+  });
   it('fires on nothing else for a duplicate on a paid order', () => {
     expect(runOrderRules(dup()).map((h) => h.ruleId)).toEqual(['D4_DUPLICATE_CAPTURE']);
   });
@@ -180,6 +187,10 @@ describe('D8 risk velocity', () => {
     const hit = d8RiskVelocity(risky(8));
     expect(hit).toMatchObject({ ruleId: 'D8_RISK_VELOCITY', caseType: 'RISK_CASE', severityFloor: 'HIGH', amountMinor: 4_500_000 });
     expect(hit?.reason).toBe('8 failed attempts across 3 card countries in 24h before a ₹45,000.00 capture.');
+  });
+  it('is suppressed once the payment is on hold', () => {
+    const s = risky(8);
+    expect(d8RiskVelocity(withSnapshot(s, { payment: paymentRow({ amountMinor: 4_500_000, hold: true }) }))).toBeNull();
   });
   it('does not fire for 4 failures', () => {
     expect(d8RiskVelocity(risky(4))).toBeNull();

@@ -9,6 +9,8 @@ import {
   formatMoney,
   newId,
   type CaseDetail,
+  type CaseResolutionView,
+  type SessionUser,
   type CaseListItem,
   type CaseListQuery,
   type CaseNote,
@@ -17,14 +19,14 @@ import {
 } from '@payops/shared';
 import type { Db, DbOrTx, Tx } from '../db/client';
 import type { CaseRow } from '../db/rows';
-import { cases, counters, customers, merchants, supportNotes, users } from '../db/schema';
+import { cases, counters, customers, merchants, supportNotes, users, type CaseResolutionRow } from '../db/schema';
 import { notFound } from '../errors';
 import type { ClockPort } from '../ports/clock';
 import type { PaymentGatewayPort } from '../ports/gateway';
 import { priorityOf, type CaseCandidate } from '../reconciliation/candidates';
 import { buildLifecycle } from '../reconciliation/lifecycle';
 import { buildMatrix } from '../reconciliation/matrix';
-import { SYSTEM_ACTOR, type AuditService } from './audit.service';
+import { SYSTEM_ACTOR, auditFrom, type AuditService, type WriteContext } from './audit.service';
 import { decodeCursor, encodeCursor, isRecord } from './cursor';
 import { loadOrderSnapshots } from './snapshot.loader';
 
@@ -55,13 +57,32 @@ export function isOpenFingerprintConflict(err: unknown): boolean {
   return false;
 }
 
+/** Audit action names for case status changes. */
+const CASE_STATUS_ACTION: Record<CaseStatus, string> = {
+  OPEN: 'case.reopened',
+  INVESTIGATING: 'case.investigating',
+  AWAITING_APPROVAL: 'case.awaiting_approval',
+  EXECUTING: 'case.executing',
+  RESOLVED: 'case.resolved',
+  ESCALATED: 'case.escalated',
+  REJECTED: 'case.rejected',
+};
+
 export class CaseService {
+  /** Builds the resolution part of the case page. Injected so this service stays read/write only. */
+  private resolutionViews: { view(row: CaseRow, viewer: SessionUser | null): Promise<CaseResolutionView> } | null = null;
+
   constructor(
     private readonly db: Db,
     private readonly clock: ClockPort,
     private readonly gateway: PaymentGatewayPort,
     private readonly audit: AuditService,
   ) {}
+
+  /** Wired by the composition root (the resolution read side depends on this service's module). */
+  useResolutionViews(views: { view(row: CaseRow, viewer: SessionUser | null): Promise<CaseResolutionView> }): void {
+    this.resolutionViews = views;
+  }
 
   /**
    * Opens a case for the candidate or merges it into the open case with the same fingerprint.
@@ -186,6 +207,49 @@ export class CaseService {
     return { case: row, created: false, changed };
   }
 
+  /**
+   * Moves a case to a new status inside the caller's transaction and audits it. Used by the
+   * resolution flow (AWAITING_APPROVAL, EXECUTING, RESOLVED...) and the ESCALATE action.
+   */
+  async setStatus(
+    tx: Tx,
+    caseId: string,
+    status: CaseStatus,
+    summary: string,
+    ctx: WriteContext,
+    extra: { resolution?: CaseResolutionRow | null } = {},
+  ): Promise<CaseRow> {
+    const [existing] = await tx.select().from(cases).where(eq(cases.id, caseId)).for('update').limit(1);
+    if (!existing) throw notFound('Case', caseId);
+    const now = this.clock.now();
+    const closing = CLOSED_CASE_STATUSES.includes(status);
+    const [row] = await tx
+      .update(cases)
+      .set({
+        status,
+        updatedAt: now,
+        resolvedAt: status === 'RESOLVED' ? now : closing ? existing.resolvedAt : null,
+        ...(extra.resolution !== undefined ? { resolution: extra.resolution } : {}),
+      })
+      .where(eq(cases.id, caseId))
+      .returning();
+    if (!row) throw notFound('Case', caseId);
+    if (existing.status !== status) {
+      await this.audit.record(
+        auditFrom({ ...ctx, caseId }, {
+          action: CASE_STATUS_ACTION[status],
+          entityType: 'case',
+          entityId: caseId,
+          summary,
+          before: { status: existing.status },
+          after: { status, ...(extra.resolution ? { resolution: extra.resolution } : {}) },
+        }),
+        tx,
+      );
+    }
+    return row;
+  }
+
   /** Queue order: priority desc, then oldest first. Keyset pagination. */
   async list(query: CaseListQuery): Promise<Page<CaseListItem>> {
     const filters: SQL[] = [];
@@ -273,7 +337,7 @@ export class CaseService {
    * Case detail with a LIVE matrix and lifecycle recomputed from current data, so the page
    * reflects fixes immediately. Settlement (batch) cases keep the matrix stored at detection.
    */
-  async get(id: string): Promise<CaseDetail> {
+  async get(id: string, viewer: SessionUser | null = null): Promise<CaseDetail> {
     const [found] = await this.db
       .select({ row: cases, assigneeName: users.name })
       .from(cases)
@@ -288,7 +352,7 @@ export class CaseService {
     if (refs.paymentId) noteFilters.push(eq(supportNotes.paymentId, refs.paymentId));
     if (refs.orderId) noteFilters.push(eq(supportNotes.orderId, refs.orderId));
 
-    const [snapshots, noteRows, customerRows, merchantRows] = await Promise.all([
+    const [snapshots, noteRows, customerRows, merchantRows, resolutionView] = await Promise.all([
       refs.orderId ? loadOrderSnapshots(this.db, this.gateway, [refs.orderId], this.clock.now()) : Promise.resolve([]),
       noteFilters.length
         ? this.db.select().from(supportNotes).where(or(...noteFilters)).orderBy(asc(supportNotes.createdAt))
@@ -299,6 +363,7 @@ export class CaseService {
       refs.merchantId
         ? this.db.select().from(merchants).where(eq(merchants.id, refs.merchantId)).limit(1)
         : Promise.resolve([]),
+      this.resolutionViews ? this.resolutionViews.view(row, viewer) : Promise.resolve(emptyResolutionView()),
     ]);
     const snapshot = snapshots[0];
     const isBatchCase = row.type === 'SETTLEMENT_MISMATCH';
@@ -334,8 +399,13 @@ export class CaseService {
       lifecycle: snapshot ? buildLifecycle(snapshot) : [],
       resolvedAt: row.resolvedAt ? row.resolvedAt.toISOString() : null,
       resolution: row.resolution ? { by: row.resolution.by, summary: row.resolution.summary } : null,
+      resolutionView,
     };
   }
+}
+
+function emptyResolutionView(): CaseResolutionView {
+  return { actionOptions: [], resolutions: [], pendingApprovalId: null, canPropose: false, cannotProposeReason: 'Resolution is not available.' };
 }
 
 export function toCaseListItem(row: CaseRow, assigneeName: string | null = null): CaseListItem {

@@ -56,6 +56,18 @@ export interface GatewaySettlementLine {
   settledOn: Date;
 }
 
+/** Outcome of one delivery attempt of a webhook event to our consumer. */
+export interface WebhookDeliveryResult {
+  httpStatus: number | null;
+  attemptAt: string;
+}
+
+/**
+ * Where the gateway delivers webhooks. In production this is an HTTP endpoint; with the simulator
+ * it is our in-process WebhookConsumer. It answers like an HTTP handler would.
+ */
+export type WebhookSink = (event: GatewayWebhookDelivery) => Promise<{ httpStatus: number }>;
+
 export interface PaymentGatewayPort {
   readonly name: string;
   getPayments(ids: readonly string[]): Promise<GatewayPayment[]>;
@@ -65,4 +77,13 @@ export interface PaymentGatewayPort {
   listSettlementLines(filter: { batchIds?: readonly string[]; gwPaymentIds?: readonly string[] }): Promise<GatewaySettlementLine[]>;
   /** Count and total of payments captured in [from, to). Used by the overview metrics. */
   summarizeCaptures(range: { from: Date; to: Date }): Promise<{ count: number; amountMinor: number }>;
+
+  // ── Writes (Phase 2). Called only by the executor, never inside a database transaction. ──
+  /** Ask the gateway to deliver an event again. Returns what our consumer answered. */
+  replayWebhook(eventId: string): Promise<WebhookDeliveryResult>;
+  /**
+   * Create a refund against a captured payment. The gateway rejects amounts above the refundable
+   * balance. The resulting refund.* webhook is delivered like any other event.
+   */
+  createRefund(input: { gwPaymentId: string; amountMinor: number }): Promise<GatewayRefund>;
 }

@@ -2,7 +2,7 @@
  * Small derived facts over an OrderSnapshot. Every rule and matrix cell is built from these, so
  * "what counts as captured" or "what the contract fee is" is decided in exactly one place.
  */
-import { bpsOf, type GwPaymentStatus, type OrderStatus } from '@payops/shared';
+import { bpsOf, type GwPaymentStatus, type InternalPaymentStatus, type OrderStatus } from '@payops/shared';
 import type { MerchantRow, OrderRow } from '../db/rows';
 import type { GatewayPayment } from '../ports/gateway';
 import type { OrderSnapshot } from './snapshot';
@@ -19,6 +19,21 @@ export function isCaptured(gw: Pick<GatewayPayment, 'status'> | null): boolean {
 export function capturedGw(s: Pick<OrderSnapshot, 'gateway'>): GatewayPayment[] {
   return s.gateway.filter((g) => isCaptured(g));
 }
+
+/**
+ * Captured gateway payments still holding customer money (not fully refunded). A duplicate
+ * capture that has been refunded in full no longer counts as a duplicate.
+ */
+export function heldCaptures(s: Pick<OrderSnapshot, 'gateway'>): GatewayPayment[] {
+  return capturedGw(s).filter((g) => g.amountMinor > g.refundedMinor);
+}
+
+/** Internal payment statuses that mean our records already know about the capture. */
+export const CAPTURE_KNOWN_STATUSES: ReadonlySet<InternalPaymentStatus> = new Set([
+  'CAPTURED',
+  'PARTIALLY_REFUNDED',
+  'REFUNDED',
+]);
 
 export function capturedTotalMinor(s: Pick<OrderSnapshot, 'gateway'>): number {
   return sum(capturedGw(s).map((g) => g.amountMinor));

@@ -125,6 +125,11 @@ function mergeCreated(into: ScenarioContext['created'], from: ScenarioContext['c
 
 /** Business and ops tables wiped by a reset. Users (and pg-boss) are kept. */
 const RESET_TABLES = [
+  'validation_results',
+  'executions',
+  'approvals',
+  'resolutions',
+  'disputes',
   'gw_settlement_lines',
   'gw_webhook_deliveries',
   'gw_refunds',

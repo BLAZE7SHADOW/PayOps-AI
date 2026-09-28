@@ -3,7 +3,7 @@
  * the batch total with what the gateway reported. Pure; the service loads the inputs.
  */
 import { formatMoney } from '@payops/shared';
-import type { MerchantRow, SettlementRow } from '../db/rows';
+import type { DisputeRow, MerchantRow, SettlementRow } from '../db/rows';
 import type { GatewaySettlementLine } from '../ports/gateway';
 import { expectedFee, sum, type FeeBreakdown } from './facts';
 import type { RuleHit } from './rules';
@@ -23,12 +23,27 @@ export interface BatchCheck {
   diffMinor: number;
   offendingLines: OffendingLine[];
   hit: RuleHit | null;
+  /** Open dispute covering the difference (D7 suppressed), if any. */
+  disputeId: string | null;
+}
+
+/**
+ * D7 is suppressed while an OPEN dispute covers exactly the batch's difference: the shortfall is
+ * claimed and waiting on the acquirer, so it is no longer an unhandled exception.
+ */
+export function coveringDispute<D extends Pick<DisputeRow, 'id' | 'status' | 'amountMinor'>>(
+  disputes: readonly D[],
+  diffMinor: number,
+): D | null {
+  if (diffMinor === 0) return null;
+  return disputes.find((d) => d.status === 'OPEN' && d.amountMinor === Math.abs(diffMinor)) ?? null;
 }
 
 export function checkBatch(input: {
   settlement: Pick<SettlementRow, 'id'>;
   lines: readonly GatewaySettlementLine[];
   merchant: Pick<MerchantRow, 'feeBps' | 'feeFixedMinor' | 'taxBps'>;
+  disputes?: ReadonlyArray<Pick<DisputeRow, 'id' | 'status' | 'amountMinor'>>;
 }): BatchCheck {
   const { settlement, merchant } = input;
   const lines = [...input.lines].sort((a, b) => a.lineNo - b.lineNo);
@@ -44,8 +59,9 @@ export function checkBatch(input: {
   const reportedNetMinor = sum(lines.map((l) => l.netMinor));
   const diffMinor = reportedNetMinor - expectedNetMinor;
   const abs = Math.abs(diffMinor);
+  const disputeId = coveringDispute(input.disputes ?? [], diffMinor)?.id ?? null;
   const hit: RuleHit | null =
-    diffMinor === 0
+    diffMinor === 0 || disputeId !== null
       ? null
       : {
           ruleId: 'D7_SETTLEMENT_DIFF',
@@ -55,5 +71,5 @@ export function checkBatch(input: {
           amountMinor: abs,
           reason: `Batch net is ${diffMinor < 0 ? 'short' : 'over'} by ${formatMoney(abs)} across ${offendingLines.length} line${offendingLines.length === 1 ? '' : 's'}.`,
         };
-  return { batchId: settlement.id, expectedNetMinor, reportedNetMinor, diffMinor, offendingLines, hit };
+  return { batchId: settlement.id, expectedNetMinor, reportedNetMinor, diffMinor, offendingLines, hit, disputeId };
 }

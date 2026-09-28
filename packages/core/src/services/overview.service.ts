@@ -7,7 +7,7 @@ import {
   type OverviewMetrics,
 } from '@payops/shared';
 import type { Db } from '../db/client';
-import { cases, users } from '../db/schema';
+import { approvals, cases, users } from '../db/schema';
 import type { ClockPort } from '../ports/clock';
 import type { PaymentGatewayPort } from '../ports/gateway';
 import { toCaseListItem } from './case.service';
@@ -32,7 +32,7 @@ export class OverviewService {
     const trendStart = new Date(today.getTime() - (TREND_DAYS - 1) * DAY_MS);
     const day = sql<string>`to_char(${cases.openedAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
-    const [captured, openRows, resolvedRows, trendRows, oldest] = await Promise.all([
+    const [captured, openRows, resolvedRows, trendRows, oldest, pending] = await Promise.all([
       this.gateway.summarizeCaptures({ from: today, to: new Date(today.getTime() + DAY_MS) }),
       this.db
         .select({ status: cases.status, n: count() })
@@ -55,6 +55,7 @@ export class OverviewService {
         .where(inArray(cases.status, [...OPEN_CASE_STATUSES]))
         .orderBy(asc(cases.openedAt), asc(cases.id))
         .limit(5),
+      this.db.select({ n: count() }).from(approvals).where(eq(approvals.status, 'PENDING')),
     ]);
 
     const byDay = new Map<string, Partial<Record<CaseType, number>>>();
@@ -70,7 +71,7 @@ export class OverviewService {
       capturedTodayMinor: captured.amountMinor,
       capturedTodayCount: captured.count,
       openExceptions: openRows.reduce((acc, r) => acc + r.n, 0),
-      awaitingApproval: openRows.find((r) => r.status === 'AWAITING_APPROVAL')?.n ?? 0,
+      awaitingApproval: pending[0]?.n ?? 0,
       resolved7d: resolvedRows[0]?.n ?? 0,
       resolvedByAgent7d: 0, // Phase 3: agent resolutions
       exceptionsByType: [...byDay.entries()].map(([date, counts]) => ({ date, ...counts })),

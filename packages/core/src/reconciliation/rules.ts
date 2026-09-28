@@ -19,10 +19,12 @@ import {
   capturedGw,
   capturedTotalMinor,
   gatewayRefundedMinor,
+  heldCaptures,
   isCaptured,
   lastTransitionAt,
   msSince,
   outstandingCapturedMinor,
+  sum,
 } from './facts';
 import type { OrderSnapshot } from './snapshot';
 
@@ -59,7 +61,7 @@ function paymentEntity(s: OrderSnapshot): { kind: EntityKind; id: string } {
 
 /** First captured gateway payment still holding money, preferring the primary one. */
 function heldCapture(s: OrderSnapshot) {
-  const held = capturedGw(s).filter((g) => g.amountMinor > g.refundedMinor);
+  const held = heldCaptures(s);
   return held.find((g) => g.id === s.primaryGw?.id) ?? held[0] ?? null;
 }
 
@@ -106,11 +108,13 @@ export const d3LedgerMissing: OrderRule = (s) => {
   };
 };
 
+/** Fires while more than one capture still holds money; refunding the extra capture resolves it. */
 export const d4DuplicateCapture: OrderRule = (s) => {
-  const captured = capturedGw(s);
+  const captured = heldCaptures(s);
   if (captured.length <= 1) return null;
   const keep = captured.find((g) => g.id === s.primaryGw?.id) ?? captured[0];
-  const extra = capturedTotalMinor(s) - (keep?.amountMinor ?? 0);
+  const held = (g: { amountMinor: number; refundedMinor: number }) => g.amountMinor - g.refundedMinor;
+  const extra = sum(captured.map(held)) - (keep ? held(keep) : 0);
   return {
     ruleId: 'D4_DUPLICATE_CAPTURE',
     caseType: 'DUPLICATE',
@@ -156,7 +160,9 @@ export const d6RefundMissing: OrderRule = (s) => {
   };
 };
 
+/** Suppressed once the payment is on hold: the risk has been contained and is with a person. */
 export const d8RiskVelocity: OrderRule = (s) => {
+  if (s.payment?.hold) return null;
   const gw = s.primaryGw;
   if (!gw || !isCaptured(gw) || gw.amountMinor < RULE_THRESHOLDS.riskMinCaptureMinor) return null;
   const end = (gw.capturedAt ?? s.now).getTime();

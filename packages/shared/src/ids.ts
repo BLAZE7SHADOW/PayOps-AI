@@ -27,6 +27,8 @@ export const ID_PREFIX = {
   audit: 'aud',
   journal: 'jrn',
   settlementLine: 'sln',
+  resolution: 'rsl',
+  validation: 'val',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

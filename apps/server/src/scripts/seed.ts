@@ -1,11 +1,12 @@
 /**
- * `pnpm seed`: migrate, seed the base world, then generate every fault scenario once plus 30
+ * `pnpm seed`: migrate, seed demo users and the base world, then generate every fault scenario once plus 30
  * healthy background payments. Fixed seeds make the demo data the same on every machine; a
  * second run skips scenarios that already exist.
  */
 import { SCENARIOS, formatMoney } from '@payops/shared';
 import { AppError, createCore, createDatabase, loadServerEnv, runMigrations } from '@payops/core';
 import { generateScenario, seedWorld } from '@payops/simulator';
+import { DEMO_PASSWORD, seedDemoUsers } from '../auth/demo-users';
 
 const NOISE_PAYMENTS = 30;
 const BASE_SEED = 1000;
@@ -15,6 +16,8 @@ const database = createDatabase(env.DATABASE_URL, { max: 2, applicationName: 'pa
 try {
   await runMigrations(database.db);
   const core = createCore({ db: database.db });
+  const users = await seedDemoUsers(database.db);
+  console.warn(`demo users: ${users} created (password "${DEMO_PASSWORD}")`);
   await seedWorld(database.db, core.clock.now());
 
   const faults = SCENARIOS.filter((s) => s.expectedCaseType !== null);

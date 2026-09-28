@@ -198,6 +198,7 @@ export function refundRow(o: Partial<RefundRow> = {}): RefundRow {
   return {
     id: 'rfd_1',
     paymentId: 'pay_1',
+    gwPaymentId: 'gwp_1',
     gwRefundId: null,
     amountMinor: 345_000,
     status: 'PENDING',

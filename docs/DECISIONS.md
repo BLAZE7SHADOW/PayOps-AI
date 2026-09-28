@@ -40,3 +40,31 @@ Payment/order cases recompute the state matrix live on every read. Settlement ba
 
 ## D013 · Case search
 `GET /api/cases?q=` prefix-matches display id, case id, payment id and order id (case-insensitive, wildcards escaped).
+
+## D014 · Refunds key on the gateway payment
+`refunds.gw_payment_id` is always set and `refunds.payment_id` is nullable. Why: refunding the second capture of a duplicate has no internal payment to point at. Migration 0001 adds the column nullable, backfills it from `payments`, then sets NOT NULL, so databases created by 0000 upgrade cleanly. Order snapshots load refunds by the order's gateway payments, and ledger rows by payment id or by those refunds' ids, so a refunded duplicate's refund journal is visible on the case.
+
+## D015 · CSRF defence: SameSite=Lax plus JSON-only writes
+The session cookie is `SameSite=Lax`, and every POST/PUT/PATCH/DELETE must carry `Content-Type: application/json` (415 otherwise, checked from the header so bodiless requests are covered). Why: a cross-site HTML form can only send urlencoded, multipart or text/plain, and a cross-site JSON fetch needs a CORS preflight our CORS policy (single `WEB_ORIGIN`) refuses. No token round-trip needed. Consequence: API clients must send JSON even for empty bodies (`{}`); the web client already does.
+
+## D016 · Own auth: scrypt passwords, HS256 JWT cookie
+Passwords use Node's `crypto.scrypt` (N=16384, r=8, p=1, 64-byte key, random 16-byte salt, stored as `scrypt$<salt>$<hash>`), compared with `timingSafeEqual`. Sessions are an 8h HS256 JWT signed with `jose` in the httpOnly cookie `payops_session` (Secure in production), claims `{sub, role, name, email}`; requests are authenticated from the claims without a database read. Development without `JWT_SECRET` uses a fixed dev secret and logs a warning; production refuses to start without it. Socket.IO handshakes are authenticated from the same cookie. Login is rate limited in memory (10/min per IP + email) and returns one generic message for unknown email and wrong password. Demo users (all with password `payops-demo`) are seeded idempotently on server start and by `pnpm seed`: ops@, ops2@, manager@, viewer@, admin@payops.dev. Why: no new infrastructure, no native modules, easy to explain.
+
+## D017 · Detection suppression after a resolution
+D7 (settlement diff) does not fire while an OPEN dispute on the batch covers exactly the difference; D8 (risk velocity) does not fire once the payment is on hold. Why: after a dispute or a hold the exception is being handled, so the sweep must not reopen it. The validator's matrix invariant accordingly allows SETTLEMENT to differ on a settlement case covered by an open dispute (the fee really is still wrong until the acquirer pays).
+
+## D018 · Matrix and D4 understand fixes
+- A duplicate is a capture that still holds money: D4 and the gateway cell count captures with `refundedMinor < amountMinor`, so refunding the extra capture in full resolves it.
+- A FAILED webhook delivery is no longer a mismatch once our records caught up another way (payment.captured: internal payment is CAPTURED or later; refund.*: the linked internal refund has the matching status). The cell still shows the failure code with a note.
+Why: without these, correct manual fixes (mark paid, sync refund, refund the duplicate) could never reach validator PASS.
+
+## D019 · Policy defaults and attempt numbering
+AUTO must be granted by a rule (P5, P6, P10). If no rule fires (e.g. a correction without a verified capture, or a mixed correction + control proposal) the tier is OPS with no rule reasons. Attempt = number of earlier resolutions on the case + 1, including BLOCKED and REJECTED ones, so P7 applies from the second proposal of any kind. Risk for manual proposals is rules-only (`riskTierFromRules`), which never yields CRITICAL; it is also the future J3 fallback.
+
+## D020 · Resolution flow details
+- The simulator gateway delivers webhooks synchronously to our `WebhookConsumer`, after its own commit; the consumer runs its own transaction and the adapter records the attempt afterwards (never nested, required by PGlite's serialised transactions). The injected fault for `replay_fails_then_replan` is the consumer answering 409 while `orders.locked_reason` is set.
+- INITIATE_REFUND records our refund as REQUESTED first; the consumer links a gateway refund to it by gateway refund id, else to the oldest unlinked REQUESTED/PENDING refund on the same gateway payment with the same amount.
+- A REPLAY that gets HTTP 409 is a SUCCEEDED step (the gateway did re-deliver); the validator FAILs it on the delivery postcondition.
+- If a step fails (precondition on fresh data or handler error), later steps are shown as SKIPPED, the resolution becomes EXECUTION_FAILED without validation, and the case reopens.
+- ESCALATE_TO_HUMAN sets the case to ESCALATED (no assignee yet). A PASS on a resolution containing it leaves the case ESCALATED instead of RESOLVED.
+- After an approval, `ApprovalContinuation.onApproved` executes and validates directly; Phase 3 replaces it with resuming the agent's LangGraph thread when `resolution.runId` is set.

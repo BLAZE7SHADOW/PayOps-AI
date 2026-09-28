@@ -1,25 +1,25 @@
 import { Router } from 'express';
 import { GenerateScenarioBody, SCENARIOS, type GenerateScenarioResult, type ScenarioInfo } from '@payops/shared';
-import type { Core } from '@payops/core';
+import type { Core, ServerEnv } from '@payops/core';
+import { requireRole } from '../auth/middleware';
 import { generateScenario, resetDemoData } from '@payops/simulator';
 import { parseBody } from '../lib/validate';
 
-export function simulatorRoutes(core: Core): Router {
+export function simulatorRoutes(core: Core, env: Pick<ServerEnv, 'DEMO_MODE'>): Router {
   const router = Router();
+  // ADMIN only, or OPS in demo mode so visitors can generate scenarios.
+  router.use(requireRole(env.DEMO_MODE ? 'OPS' : 'ADMIN'));
 
-  // Phase 2: requireRole('ADMIN') (OPS when DEMO_MODE)
   router.get('/scenarios', (_req, res) => {
     const body: readonly ScenarioInfo[] = SCENARIOS;
     res.json(body);
   });
 
-  // Phase 2: requireRole('ADMIN') (OPS when DEMO_MODE)
   router.post('/scenarios', async (req, res) => {
     const body: GenerateScenarioResult = await generateScenario(core, parseBody(GenerateScenarioBody, req));
     res.status(201).json(body);
   });
 
-  // Phase 2: requireRole('ADMIN') (OPS when DEMO_MODE)
   router.post('/reset', async (_req, res) => {
     await resetDemoData(core);
     res.json({ status: 'ok' });

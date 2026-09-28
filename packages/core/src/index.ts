@@ -12,4 +12,8 @@ export * from './adapters/gateway/simulator-gateway';
 export type * from './db/rows';
 export * from './reconciliation';
 export * from './services';
+export * from './actions';
+export * from './policy';
+export * from './execution/executor.service';
+export * from './validation/validator.service';
 export * from './container';

@@ -4,6 +4,8 @@ import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { Logger, ServerEnv } from '@payops/core';
+import { readSession, requireJson } from './auth/middleware';
+import { sessionConfig, type SessionConfig } from './auth/session';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { requestId } from './middleware/request-id';
 import { buildRouter, type RouteDeps } from './routes';
@@ -11,6 +13,8 @@ import { buildRouter, type RouteDeps } from './routes';
 export interface AppDeps extends RouteDeps {
   env: ServerEnv;
   log: Logger;
+  /** Built from env when omitted. */
+  session?: SessionConfig;
 }
 
 /** Express app factory. Kept free of listen() so tests can mount it with supertest. */
@@ -32,8 +36,11 @@ export function createApp(deps: AppDeps): Express {
   app.use(cors({ origin: deps.env.WEB_ORIGIN, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
+  app.use(requireJson());
+  const session = deps.session ?? sessionConfig(deps.env, deps.log);
+  app.use(readSession(session));
 
-  app.use('/api', buildRouter(deps));
+  app.use('/api', buildRouter({ ...deps, session }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(deps.log));

@@ -294,6 +294,7 @@ async function writeRefund(
   await tx.insert(tables.refunds).values({
     id: refundId,
     paymentId: r.paymentId,
+    gwPaymentId: r.gwPaymentId,
     gwRefundId,
     amountMinor: r.amountMinor,
     status: r.refund.internalStatus,

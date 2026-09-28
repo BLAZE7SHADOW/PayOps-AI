@@ -9,6 +9,8 @@ import {
   type EventPublisherPort,
 } from '@payops/core';
 import { createApp } from './app';
+import { seedDemoUsers } from './auth/demo-users';
+import { sessionConfig } from './auth/session';
 import { startBoss } from './jobs/boss';
 import { registerReconcileSweep } from './jobs/reconcile';
 import { createRealtime } from './realtime/socket';
@@ -20,6 +22,9 @@ log.info(describeEnv(env), 'starting');
 const database = createDatabase(env.DATABASE_URL);
 await runMigrations(database.db);
 log.info('migrations applied');
+const seededUsers = await seedDemoUsers(database.db);
+if (seededUsers > 0) log.info({ seededUsers }, 'demo users created');
+const session = sessionConfig(env, log);
 
 // Socket.IO needs the HTTP server and the app needs core, so the publisher forwards to the
 // realtime instance once it exists.
@@ -32,9 +37,9 @@ const core = createCore({ db: database.db, events });
 const boss = await startBoss(env.DATABASE_URL, log);
 await registerReconcileSweep(boss, core, env, log);
 
-const app = createApp({ env, log, database, core });
+const app = createApp({ env, log, database, core, session });
 const http = createServer(app);
-const { io, publisher } = createRealtime(http, { origin: env.WEB_ORIGIN, log });
+const { io, publisher } = createRealtime(http, { origin: env.WEB_ORIGIN, log, session });
 realtime.publisher = publisher;
 
 http.listen(env.PORT, () => log.info(`listening on http://localhost:${env.PORT}`));

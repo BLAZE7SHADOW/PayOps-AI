@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'INVALID_TRANSITION'
   | 'VERSION_CONFLICT'
   | 'RATE_LIMITED'
+  | 'UNSUPPORTED_MEDIA_TYPE'
   | 'INTERNAL';
 
 const STATUS: Record<ErrorCode, number> = {
@@ -21,6 +22,7 @@ const STATUS: Record<ErrorCode, number> = {
   INVALID_TRANSITION: 409,
   VERSION_CONFLICT: 409,
   RATE_LIMITED: 429,
+  UNSUPPORTED_MEDIA_TYPE: 415,
   INTERNAL: 500,
 };
 

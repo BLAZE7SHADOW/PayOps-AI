@@ -2,11 +2,12 @@
  * Batched loading of OrderSnapshots. The number of queries is constant (about ten) no matter how
  * many orders are requested, so list endpoints and the sweep never do N+1 reads.
  */
-import { and, gte, inArray, lt } from 'drizzle-orm';
+import { and, gte, inArray, lt, or } from 'drizzle-orm';
 import { DAY_MS } from '@payops/shared';
 import type { DbOrTx } from '../db/client';
 import type {
   CustomerRow,
+  DisputeRow,
   LedgerEntryRow,
   MerchantRow,
   PaymentAttemptRow,
@@ -16,6 +17,7 @@ import type {
 } from '../db/rows';
 import {
   customers,
+  disputes,
   ledgerEntries,
   merchants,
   orders,
@@ -75,11 +77,26 @@ export async function loadOrderSnapshots(
       gateway.listWebhookDeliveries(gwIds),
       gateway.listRefunds(gwIds),
       gateway.listSettlementLines({ gwPaymentIds: gwIds }),
-      paymentIds.length
-        ? db.select().from(ledgerEntries).where(inArray(ledgerEntries.paymentId, paymentIds))
+      // Capture postings by internal payment, plus refund postings for any of the order's gateway
+      // payments (a refunded duplicate capture has a refund journal but no internal payment).
+      paymentIds.length || gwIds.length
+        ? db
+            .select()
+            .from(ledgerEntries)
+            .where(
+              or(
+                paymentIds.length ? inArray(ledgerEntries.paymentId, paymentIds) : undefined,
+                gwIds.length
+                  ? inArray(
+                      ledgerEntries.refundId,
+                      db.select({ id: refunds.id }).from(refunds).where(inArray(refunds.gwPaymentId, gwIds)),
+                    )
+                  : undefined,
+              ),
+            )
         : Promise.resolve<LedgerEntryRow[]>([]),
-      paymentIds.length
-        ? db.select().from(refunds).where(inArray(refunds.paymentId, paymentIds))
+      gwIds.length
+        ? db.select().from(refunds).where(inArray(refunds.gwPaymentId, gwIds))
         : Promise.resolve<RefundRow[]>([]),
       db.select().from(merchants).where(inArray(merchants.id, merchantIds)),
       db.select().from(customers).where(inArray(customers.id, customerIds)),
@@ -107,7 +124,8 @@ export async function loadOrderSnapshots(
   const gwRefundsByGw = groupBy(gwRefundRows, (r) => r.gwPaymentId);
   const linesByGw = groupBy(lines, (l) => l.gwPaymentId);
   const ledgerByPayment = groupBy(ledgerRows, (e) => e.paymentId);
-  const refundsByPayment = groupBy(refundRows, (r) => r.paymentId);
+  const ledgerByRefund = groupBy(ledgerRows, (e) => e.refundId);
+  const refundsByGw = groupBy(refundRows, (r) => r.gwPaymentId);
   const attemptsByCustomer = groupBy(attemptRows, (a) => a.customerId);
   const merchantById = new Map<string, MerchantRow>(merchantRows.map((m) => [m.id, m]));
   const customerById = new Map<string, CustomerRow>(customerRows.map((c) => [c.id, c]));
@@ -134,6 +152,11 @@ export async function loadOrderSnapshots(
     const windowEnd = (primaryGw?.capturedAt ?? now).getTime();
     const windowStart = windowEnd - RULE_THRESHOLDS.riskWindowMs;
 
+    const orderRefunds = gateway.flatMap((g) => refundsByGw.get(g.id) ?? []);
+    const ledgerById = new Map<string, LedgerEntryRow>();
+    for (const e of payment ? (ledgerByPayment.get(payment.id) ?? []) : []) ledgerById.set(e.id, e);
+    for (const r of orderRefunds) for (const e of ledgerByRefund.get(r.id) ?? []) ledgerById.set(e.id, e);
+
     snapshots.push({
       now,
       order,
@@ -141,8 +164,8 @@ export async function loadOrderSnapshots(
       gateway,
       primaryGw,
       webhooks: gateway.flatMap((g) => webhooksByGw.get(g.id) ?? []),
-      ledger: payment ? (ledgerByPayment.get(payment.id) ?? []) : [],
-      refunds: payment ? (refundsByPayment.get(payment.id) ?? []) : [],
+      ledger: [...ledgerById.values()].sort((a, b) => a.postedAt.getTime() - b.postedAt.getTime() || a.id.localeCompare(b.id)),
+      refunds: orderRefunds.sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime()),
       gwRefunds: gateway.flatMap((g) => gwRefundsByGw.get(g.id) ?? []),
       settlementLines: orderLines,
       settlement: primaryLine ? (settlementById.get(primaryLine.batchId) ?? null) : null,
@@ -162,6 +185,8 @@ export interface BatchData {
   merchant: MerchantRow;
   /** gw payment id → internal payment (+ its order) for linking cases. */
   paymentsByGw: Map<string, Pick<PaymentRow, 'id' | 'orderId'>>;
+  /** Disputes raised against this batch (any status). */
+  disputes: DisputeRow[];
 }
 
 /** Loads several settlement batches with a constant number of queries. */
@@ -178,7 +203,7 @@ export async function loadBatches(
   ]);
   if (settlementRows.length === 0) return [];
   const gwIds = uniq(lines.map((l) => l.gwPaymentId));
-  const [merchantRows, paymentRows] = await Promise.all([
+  const [merchantRows, paymentRows, disputeRows] = await Promise.all([
     db.select().from(merchants).where(inArray(merchants.id, uniq(settlementRows.map((s) => s.merchantId)))),
     gwIds.length
       ? db
@@ -186,7 +211,9 @@ export async function loadBatches(
           .from(payments)
           .where(inArray(payments.gwPaymentId, gwIds))
       : Promise.resolve([]),
+    db.select().from(disputes).where(inArray(disputes.batchId, ids)),
   ]);
+  const disputesByBatch = groupBy(disputeRows, (d) => d.batchId);
   const merchantById = new Map(merchantRows.map((m) => [m.id, m]));
   const linesByBatch = groupBy(lines, (l) => l.batchId);
   const paymentsByGw = new Map(paymentRows.map((p) => [p.gwPaymentId, { id: p.id, orderId: p.orderId }]));
@@ -197,7 +224,13 @@ export async function loadBatches(
     const settlement = settlementById.get(id);
     const merchant = settlement ? merchantById.get(settlement.merchantId) : undefined;
     if (!settlement || !merchant) continue;
-    out.push({ settlement, merchant, lines: linesByBatch.get(id) ?? [], paymentsByGw });
+    out.push({
+      settlement,
+      merchant,
+      lines: linesByBatch.get(id) ?? [],
+      paymentsByGw,
+      disputes: disputesByBatch.get(id) ?? [],
+    });
   }
   return out;
 }

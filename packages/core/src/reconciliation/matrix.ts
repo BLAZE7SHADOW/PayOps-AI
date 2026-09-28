@@ -15,8 +15,10 @@ import {
   captureCreditMinor,
   capturedGw,
   capturedTotalMinor,
+  CAPTURE_KNOWN_STATUSES,
   expectedFee,
   gatewayProcessedRefundMinor,
+  heldCaptures,
   isCaptured,
   outstandingCapturedMinor,
   refundPostedMinor,
@@ -79,19 +81,20 @@ function gatewayCell(s: OrderSnapshot): MatrixCell {
     return cell('GATEWAY', { reference: true, detail: 'No gateway payment for this order' });
   }
   const captured = capturedGw(s);
-  const duplicate = captured.length > 1;
+  // A second capture that was refunded in full is no longer a live duplicate.
+  const duplicate = heldCaptures(s).length > 1;
   let detail: string | null = null;
-  if (s.gwRefunds.length > 0) {
-    detail = s.gwRefunds.map((r) => `Refund ${formatMoney(r.amountMinor)} ${r.status}`).join(' · ');
-  } else if (duplicate) {
+  if (duplicate) {
     detail = `${captured.length} captures on one order`;
+  } else if (s.gwRefunds.length > 0) {
+    detail = s.gwRefunds.map((r) => `Refund ${formatMoney(r.amountMinor)} ${r.status}`).join(' · ');
   } else if (primary.card) {
     detail = `${primary.method} · ${primary.card.network} ${primary.card.last4}`;
   } else {
     detail = primary.method;
   }
   return cell('GATEWAY', {
-    status: duplicate ? `CAPTURED ×${captured.length}` : primary.status,
+    status: captured.length > 1 ? `CAPTURED ×${captured.length}` : primary.status,
     amountMinor: captured.length > 0 ? capturedTotalMinor(s) : primary.amountMinor,
     at: iso(primary.capturedAt ?? primary.createdAt),
     detail,
@@ -176,17 +179,45 @@ function latest(deliveries: GatewayWebhookDelivery[]): GatewayWebhookDelivery | 
   return [...deliveries].sort((a, b) => (lastAttemptAt(a) ?? '').localeCompare(lastAttemptAt(b) ?? '')).pop();
 }
 
+/**
+ * A failed delivery stops mattering once our records caught up another way (for example an
+ * analyst marked the order paid, or synced the refund). It is still shown, but not as a mismatch.
+ */
+export function deliveryCaughtUp(s: OrderSnapshot, w: GatewayWebhookDelivery): boolean {
+  if (w.event === 'payment.captured') {
+    return s.payment !== null && s.payment.gwPaymentId === w.gwPaymentId && CAPTURE_KNOWN_STATUSES.has(s.payment.status);
+  }
+  if (w.event === 'refund.processed' || w.event === 'refund.failed') {
+    const want = w.event === 'refund.processed' ? 'PROCESSED' : 'FAILED';
+    return s.refunds.some((r) => r.gwRefundId !== null && r.gwRefundId === w.gwRefundId && r.status === want);
+  }
+  return false;
+}
+
+function failureCode(w: GatewayWebhookDelivery): string {
+  const last = w.attempts[w.attempts.length - 1];
+  const code = last?.httpStatus != null ? `HTTP ${last.httpStatus}` : 'TIMEOUT';
+  return `${code} ×${w.attempts.length}`;
+}
+
 function webhookCell(s: OrderSnapshot): MatrixCell {
   const relevant = relevantDeliveries(s);
-  const failed = latest(relevant.filter((w) => w.finalStatus === 'FAILED'));
+  const failedAll = relevant.filter((w) => w.finalStatus === 'FAILED');
+  const failed = latest(failedAll.filter((w) => !deliveryCaughtUp(s, w)));
   if (failed) {
-    const last = failed.attempts[failed.attempts.length - 1];
-    const code = last?.httpStatus != null ? `HTTP ${last.httpStatus}` : 'TIMEOUT';
     return cell('WEBHOOK', {
-      status: `${code} ×${failed.attempts.length}`,
+      status: failureCode(failed),
       at: lastAttemptAt(failed),
       detail: failed.event,
       mismatch: true,
+    });
+  }
+  const caughtUp = latest(failedAll);
+  if (caughtUp) {
+    return cell('WEBHOOK', {
+      status: failureCode(caughtUp),
+      at: lastAttemptAt(caughtUp),
+      detail: `${caughtUp.event} not delivered; internal records updated another way`,
     });
   }
   const pending = latest(relevant.filter((w) => w.finalStatus === 'PENDING'));

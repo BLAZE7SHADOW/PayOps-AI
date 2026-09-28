@@ -1,4 +1,4 @@
-/** Operations tables: users, cases, audit. Agent/approval tables arrive in later phases. */
+/** Operations tables: users, cases, audit. Resolution tables live in resolution.ts. */
 import { index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {

@@ -143,13 +143,16 @@ export const paymentAttempts = pgTable(
   (t) => [index().on(t.customerId, t.at)],
 );
 
+/**
+ * Our refund records. `gwPaymentId` is always set; `paymentId` is null when the captured gateway
+ * payment never reached our system (the second capture of a duplicate).
+ */
 export const refunds = pgTable(
   'refunds',
   {
     id: text().primaryKey(),
-    paymentId: text()
-      .notNull()
-      .references(() => payments.id),
+    paymentId: text().references(() => payments.id),
+    gwPaymentId: text().notNull(),
     gwRefundId: text(),
     amountMinor: money().notNull(),
     status: text({ enum: REFUND_STATUS }).notNull(),
@@ -158,7 +161,13 @@ export const refunds = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index().on(t.paymentId), index().on(t.status), check('refunds_amount_positive', sql`${t.amountMinor} > 0`)],
+  (t) => [
+    index().on(t.paymentId),
+    index().on(t.gwPaymentId),
+    index().on(t.gwRefundId),
+    index().on(t.status),
+    check('refunds_amount_positive', sql`${t.amountMinor} > 0`),
+  ],
 );
 
 /**

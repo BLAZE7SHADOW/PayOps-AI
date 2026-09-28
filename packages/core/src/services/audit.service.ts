@@ -23,6 +23,36 @@ export interface AuditInput {
 /** The actor used for automated detection and background jobs. */
 export const SYSTEM_ACTOR = { actorType: 'SYSTEM', actorId: 'system', actorName: 'Reconciliation' } as const;
 
+export interface AuditActor {
+  actorType: ActorType;
+  actorId: string;
+  actorName: string;
+}
+
+/**
+ * Who is making a write and on behalf of which case/run. Every write service takes one so its
+ * audit rows land in the case's trail.
+ */
+export interface WriteContext {
+  actor: AuditActor;
+  caseId?: string | null;
+  runId?: string | null;
+}
+
+export const WEBHOOK_CONSUMER_ACTOR: AuditActor = {
+  actorType: 'SYSTEM',
+  actorId: 'webhook-consumer',
+  actorName: 'Webhook consumer',
+};
+
+/** Convenience for writing an audit row from a WriteContext. */
+export function auditFrom(
+  ctx: WriteContext,
+  fields: Omit<AuditInput, 'actorType' | 'actorId' | 'actorName' | 'caseId' | 'runId'>,
+): AuditInput {
+  return { ...ctx.actor, caseId: ctx.caseId ?? null, runId: ctx.runId ?? null, ...fields };
+}
+
 interface AuditCursor {
   at: string;
   id: string;
