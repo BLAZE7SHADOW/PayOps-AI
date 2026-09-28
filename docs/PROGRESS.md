@@ -4,10 +4,11 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-5 (Jev adapter, J1 signal
-intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, and now the Risk
-specialist + J3 atomic scores + weighted tier) are done; the rest of Phase 4 (groundCheck + J4,
-evidence persistence, UI decision/grounding trace, cassette recordings) is not started.
+**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-6 (Jev adapter, J1 signal
+intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, Risk specialist +
+J3 atomic scores + weighted tier, and now `groundCheck` + J4 structural/semantic grounding) are
+done; the rest of Phase 4 (evidence/finding persistence, UI decision/grounding trace, cassette
+recordings) is not started.
 
 ## Phase checklist
 
@@ -21,14 +22,11 @@ evidence persistence, UI decision/grounding trace, cassette recordings) is not s
 
 ## Next task
 
-Phase 4 task 6: `groundCheck` + J4 (docs/06-phases.md Phase 4 task 6, docs/03-agent-system.md §4
-"J4"). Structural predicates over each finding's cited evidence, one batched Jev `support`
-Choice per claim plus a `sufficient` Noul, code rules (any `contradicted` at confidence ≥ 0.5
-drops that finding and records a `GroundingViolation`; `sufficient < 0.5` and
-`investigationRound < 2` routes back to `plan` for one targeted extra round, only the specialists
-owning the gaps). `state.grounding`/`state.gaps` are still always `null`/`[]` — `join` currently
-feeds `resolve` directly (see nodes.ts's header comment). After task 6: evidence/finding
-persistence (task 7), UI decision/grounding trace (task 8), cassette recordings (task 9).
+Phase 4 task 7: findings persisted to `agentFindings`, evidence to `evidence`
+(docs/06-phases.md Phase 4 task 7). `groundCheck`/J4 (task 6) is done — `state.grounding` and
+`state.gaps` are genuinely populated now, and `join` feeds `groundCheck` before `resolve`
+(nodes.ts, graph.ts). After task 7: UI decision/grounding trace (task 8), cassette recordings
+(task 9).
 
 ## How to run locally
 
@@ -85,6 +83,67 @@ on the Mac to verify.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 4 task 6: `groundCheck` + J4 structural/semantic grounding
+- New `packages/agents/src/grounding/predicates.ts`: one fact predicate per `FindingCode`
+  (docs/03 §7), table-tested against every code in `FINDING_CODES` (`predicates.test.ts`), each
+  checking only facts a real `tools.ts` `ToolDef.run` actually projects. Three codes
+  (`LEDGER_CREDIT_MISSING`, `REFUND_MISSING`, `SETTLEMENT_LINE_MISSING`) get a deliberately loose
+  predicate rather than an invented fact, because no tool asserts the "this is missing" claim
+  positively — documented as known gaps in docs/DECISIONS.md D041, not silently tightened.
+- New `packages/agents/src/grounding.ts`: the pure J4 logic, split out from the graph node the
+  same way task 3 split `choosePlanSpecialists` out of `plan` — `applyStructuralGrounding`
+  (§7, re-checks evidenceIds exist + runs the new predicates), `buildGroundingRequest` (batches
+  one `support_<findingId>` Choice per structurally-sound finding plus one `sufficient` Noul into
+  a single Jev call, §4), `applyGroundingRules` (the code rules: `contradicted` @ confidence
+  ≥ 0.5 drops a finding and records a `GroundingViolation`; `sufficient < 0.5` and
+  `investigationRound < MAX_INVESTIGATION_ROUNDS (2)` → `computeGaps` names the agents that lost
+  all their findings; the J4 adapter-contract fallback — `semanticAnswers: null` — always reports
+  `needsHumanReview: true`, `sufficient: true`, `gaps: []`, so a Jev outage can never trigger an
+  extra round by itself), and `survivingFindings` (the filter `resolve` applies before ever
+  building a context or letting the LLM cite a finding).
+- `nodes.ts`: new `groundCheck` node between `join` and `resolve` runs both passes and calls Jev
+  under tag `J4_GROUND`, with its own try/catch for the adapter-contract fallback.
+  **Design choice, since `state.findings` is append-only (state.ts, §6, unchanged by this task):
+  a dropped finding is never physically removed from `state.findings` — it can't be, without
+  breaking the parallel `Send` fan-out's merge-by-id reducer. `resolve` now builds
+  `groundedFindings = survivingFindings(state.findings, state.grounding?.violations)` and passes
+  that (not `state.findings`) into `buildResolveContext`, so a dropped finding's statement never
+  reaches the diagnosis LLM's context even though the array it lives in never shrinks.** This is
+  what "grounding, filtered findings, gaps" in the doc's node-reference table means in this
+  codebase — recorded in D041 since it is a real interpretation call, not implied by the doc.
+  `plan` gained a second branch: when `state.gaps` is non-empty (a `groundCheck`-requested
+  targeted re-round), it skips J2 entirely and routes straight to the specialists named in
+  `gaps` (`routedBy: 'GAP_TARGETED'`, a new `InvestigationPlan.routedBy` variant in
+  `packages/shared/src/agents.ts`) — cheaper and more deterministic than asking Jev again, since
+  the gap already says which agents are missing evidence (D041).
+- `graph.ts`: `join` now feeds `groundCheck`, and a new conditional edge routes `gaps.length > 0`
+  back to `plan`, otherwise to `resolve` — the round cap lives entirely inside
+  `applyGroundingRules`, so the edge condition is just "were gaps produced". The fast path
+  (`diagnose` → `resolve` directly, skipping `plan`/specialists/`join`/`groundCheck` completely)
+  is untouched; `graph.test.ts`'s four existing scenarios all exercise only that path and were
+  re-verified unaffected.
+- `packages/shared/src/agents.ts`: `GroundingReport` gained an optional `needsHumanReview`
+  field (optional so the one pre-existing literal in `context.test.ts` that predates this task
+  keeps typechecking); `InvestigationPlan.routedBy` gained `'GAP_TARGETED'`.
+- Tests: `packages/agents/src/grounding/predicates.test.ts` (every `FindingCode`, matching +
+  non-matching evidence), `packages/agents/src/grounding.test.ts` (structural pass, the
+  contradicted-drop rule, the sufficiency/gaps/round-cap decision including the round-cap-never-
+  loops-back case, the J4 fallback, `computeGaps`, `survivingFindings`, and — the explicit Phase
+  4 "Done when" proof — a deliberately corrupted finding shown absent from the exact
+  `buildResolveContext` call `resolve` makes), and new cases in `packages/agents/src/nodes.test.ts`
+  (`groundCheck` node-level: structural drop before Jev is even asked about that finding,
+  semantic contradicted-drop, gaps on insufficiency, no gaps once the round cap is spent, the J4
+  fallback; `plan`'s gap-targeted branch never calling `decision.ask`). All existing task 3/4/5
+  tests (`planning.test.ts`, `context.test.ts`, `risk.test.ts`, the earlier `nodes.test.ts`/
+  `graph.test.ts` cases) were re-read, not just assumed, and none needed a signature change.
+- Checks: `pnpm typecheck` and `pnpm lint` clean across all packages. `pnpm test` still cannot run
+  in this session — same documented bridge issue (`Cannot find module
+  '@rollup/rollup-linux-arm64-gnu'`), re-confirmed by running it again and reading the exact error
+  text rather than assuming. Ask Shivam to run `pnpm test` locally (including all the new test
+  files above) before trusting this session's grounding logic fully.
+- Not done this session: evidence/finding persistence (task 7), UI trace (task 8), cassette
+  recordings (task 9) — see Next task.
 
 ### 2026-09-28 · Phase 4 task 5: Risk specialist, code bucketing, J3 Score composite, weighted tier
 - `riskAgent` (nodes.ts) is now a real, bespoke node instead of a stub built from

@@ -8,7 +8,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import type { Core, DecisionPort, LlmPort } from '@payops/core';
-import type { CaseBrief, EvidenceItem } from '@payops/shared';
+import type { CaseBrief, EvidenceItem, Finding, InvestigationPlan } from '@payops/shared';
 import { buildNodes } from './nodes';
 import type { PayOpsStateType } from './state';
 
@@ -114,5 +114,95 @@ describe('riskAgent (docs/03 §4 "J3", §5 node table)', () => {
     const update = await nodes.riskAgent(baseState([])) as Partial<PayOpsStateType>;
     expect(update.risk).toBeUndefined();
     expect(update.agentsVisited).toEqual(['risk']);
+  });
+});
+
+/**
+ * Node-level tests for `groundCheck` (docs/03 §4 "J4", §5, Phase 4 task 6) and the `plan` node's
+ * gap-targeted re-round branch. `groundCheck` never calls `loadCaseState` (nodes.ts) -- it only
+ * reads `state.findings`/`state.evidence`/`state.agentsVisited`/`state.investigationRound` and
+ * `decision` -- so, like `riskAgent` above, a fake `DecisionPort` is enough.
+ */
+const groundingEvidence: EvidenceItem[] = [
+  { id: 'ev_01', source: 'getWebhookDeliveries', system: 'WEBHOOK', entityRef: 'wh_1', observedAt: '2026-01-01T00:00:00Z', stepId: 'triage', facts: { finalStatus: 'FAILED', lastHttpStatus: 500, event: 'payment.captured', attempts: 1 } },
+  { id: 'ev_02', source: 'getCustomerHistory', system: 'RISK', entityRef: 'cus_a', observedAt: '2026-01-01T00:00:00Z', stepId: 'triage', facts: { accountAgeDays: 1 } },
+];
+const soundFinding: Finding = { id: 'fd_01', agent: 'payment', code: 'WEBHOOK_HTTP_500', statement: 'The webhook failed with HTTP 500 [ev_01].', evidenceIds: ['ev_01'], confidence: 0.9 };
+// Structurally corrupted: cites real evidence, but the wrong kind for its own code (WEBHOOK_HTTP_500
+// needs a cited WEBHOOK item with lastHttpStatus >= 500; ev_02 is RISK evidence).
+const corruptedFinding: Finding = { id: 'fd_02', agent: 'risk', code: 'WEBHOOK_HTTP_500', statement: 'CORRUPTED_UNSUPPORTED_CLAIM [ev_02].', evidenceIds: ['ev_02'], confidence: 0.9 };
+
+function groundState(partial: Partial<PayOpsStateType>): PayOpsStateType {
+  return { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', evidence: groundingEvidence, findings: [soundFinding], agentsVisited: ['payment'], investigationRound: 1, ...partial } as unknown as PayOpsStateType;
+}
+
+function groundDecision(supportByFindingId: Record<string, 'supported' | 'contradicted' | 'not_enough_evidence'>, sufficientNoul: number): DecisionPort {
+  return {
+    ask: vi.fn(async (req: { questions: Record<string, unknown> }) => {
+      const answers: Record<string, unknown> = {};
+      for (const key of Object.keys(req.questions)) {
+        if (key === 'sufficient') { answers[key] = { type: 'noul', noul: sufficientNoul, confidence: 0.9 }; continue; }
+        const findingId = key.replace(/^support_/, '');
+        answers[key] = { type: 'choice', choice: supportByFindingId[findingId] ?? 'not_enough_evidence', confidence: 0.9 };
+      }
+      return { answers, usage: { input_tokens: 15, output_tokens: 5 } };
+    }) as unknown as DecisionPort['ask'],
+  };
+}
+
+describe('groundCheck (docs/03 §4 "J4", §7, Phase 4 task 6)', () => {
+  it('drops a structurally corrupted finding before Jev ever sees it, and never asks Jev about it', async () => {
+    const decision = groundDecision({ fd_01: 'supported' }, 0.9);
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision, onEvent: noopEvent });
+    const update = await nodes.groundCheck(groundState({ findings: [soundFinding, corruptedFinding] })) as Partial<PayOpsStateType>;
+    expect(update.grounding?.violations).toEqual([{ findingId: 'fd_02', reason: 'cited evidence does not satisfy the WEBHOOK_HTTP_500 predicate' }]);
+    const asked = (decision.ask as ReturnType<typeof vi.fn>).mock.calls[0]![0] as { questions: Record<string, unknown> };
+    expect(Object.keys(asked.questions)).toEqual(['support_fd_01', 'sufficient']); // fd_02 was already gone
+  });
+
+  it('drops a finding Jev marks contradicted at confidence >= 0.5, recording a GroundingViolation (never reaches resolve)', async () => {
+    const decision = groundDecision({ fd_01: 'contradicted' }, 0.9);
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision, onEvent: noopEvent });
+    const update = await nodes.groundCheck(groundState({})) as Partial<PayOpsStateType>;
+    expect(update.grounding?.violations).toEqual([{ findingId: 'fd_01', reason: 'Jev J4 marked this claim contradicted by its cited evidence' }]);
+    expect(update.grounding?.needsHumanReview).toBe(false);
+  });
+
+  it('sets gaps for the agents that lost their findings when insufficient and the round budget allows it', async () => {
+    const decision = groundDecision({ fd_01: 'contradicted' }, 0.2);
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision, onEvent: noopEvent });
+    const update = await nodes.groundCheck(groundState({ investigationRound: 1 })) as Partial<PayOpsStateType>;
+    expect(update.grounding?.sufficient).toBe(false);
+    expect(update.gaps).toEqual([{ agent: 'payment', reason: 'payment ran but has no findings that survived grounding' }]);
+  });
+
+  it('never adds gaps once the round budget is spent, even when still insufficient', async () => {
+    const decision = groundDecision({ fd_01: 'contradicted' }, 0.1);
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision, onEvent: noopEvent });
+    const update = await nodes.groundCheck(groundState({ investigationRound: 2 })) as Partial<PayOpsStateType>;
+    expect(update.gaps).toEqual([]);
+  });
+
+  it('J4 fallback: structural check only, needsHumanReview set, and never takes an extra round from the error alone', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+    const update = await nodes.groundCheck(groundState({ findings: [soundFinding, corruptedFinding], investigationRound: 1 })) as Partial<PayOpsStateType>;
+    expect(update.grounding?.needsHumanReview).toBe(true);
+    expect(update.grounding?.sufficient).toBe(true);
+    expect(update.gaps).toEqual([]);
+    // The structural pass still ran and still caught the corrupted finding, fallback or not.
+    expect(update.grounding?.violations).toEqual([{ findingId: 'fd_02', reason: 'cited evidence does not satisfy the WEBHOOK_HTTP_500 predicate' }]);
+  });
+});
+
+describe('plan: gap-targeted re-round (docs/03 §5 "groundCheck -> plan")', () => {
+  it('routes only to the specialists named in `gaps`, skipping J2 entirely', async () => {
+    const priorPlan: InvestigationPlan = { primaryHypothesis: 'webhook_or_state_sync', specialists: ['payment', 'reconciliation', 'risk'], routedBy: 'JEV', confidence: 0.9 };
+    const neverCalled: DecisionPort = { ask: vi.fn(async () => { throw new Error('J2 should never be asked on a targeted re-round'); }) as unknown as DecisionPort['ask'] };
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: neverCalled, onEvent: noopEvent });
+    const state = { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief, plan: priorPlan, gaps: [{ agent: 'payment', reason: 'payment ran but has no findings that survived grounding' }], investigationRound: 1 } as unknown as PayOpsStateType;
+    const update = await nodes.plan(state) as Partial<PayOpsStateType>;
+    expect(update.plan).toMatchObject({ specialists: ['payment'], routedBy: 'GAP_TARGETED' });
+    expect(update.investigationRound).toBe(2);
+    expect(neverCalled.ask).not.toHaveBeenCalled();
   });
 });

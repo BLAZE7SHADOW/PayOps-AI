@@ -1,8 +1,12 @@
 /**
  * Wires the graph (docs/03-agent-system.md §5). Phase 4 task 3 replaces the single `investigate`
  * node with `plan` (J2) fanning out to the Payment/Reconciliation/Risk specialists in parallel
- * via LangGraph `Send`, converging on `join`. `groundCheck` and `replan` are later Phase 4/5
- * tasks, so `join` still feeds `resolve` directly, same as `investigate` used to.
+ * via LangGraph `Send`, converging on `join`. Phase 4 task 6 adds `groundCheck` (J4) between
+ * `join` and `resolve`, with a conditional edge back to `plan` for one targeted extra
+ * investigation round when the evidence is insufficient and the round budget allows it (§4 "J4",
+ * §5's `groundCheck -> plan` arrow). `replan` is still a later Phase 5 task. The fast path
+ * (`diagnose` -> `resolve` directly) never touches `plan`, the specialists, `join` or
+ * `groundCheck` -- unchanged by this task.
  */
 import { END, Send, START, StateGraph, type BaseCheckpointSaver } from '@langchain/langgraph';
 import { AGENT_NAMES, type AgentName } from '@payops/shared';
@@ -29,6 +33,7 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     .addNode('reconciliationAgent', nodes.reconciliationAgent)
     .addNode('riskAgent', nodes.riskAgent)
     .addNode('join', nodes.join)
+    .addNode('groundCheck', nodes.groundCheck)
     .addNode('resolve', nodes.resolve)
     .addNode('policyGate', nodes.policyGate)
     .addNode('awaitApproval', nodes.awaitApproval)
@@ -57,7 +62,17 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     .addEdge('paymentAgent', 'join')
     .addEdge('reconciliationAgent', 'join')
     .addEdge('riskAgent', 'join')
-    .addEdge('join', 'resolve')
+    .addEdge('join', 'groundCheck')
+    // docs/03 §5: "groundCheck -+-> (gaps & rounds<2) -> plan / -> resolve". `groundCheck`
+    // (nodes.ts) only ever populates `gaps` when `applyGroundingRules` decided a targeted extra
+    // round is warranted (insufficient evidence and the round cap not yet spent), so a non-empty
+    // `gaps` is itself the whole condition -- the round cap is enforced inside that function, not
+    // re-checked here.
+    .addConditionalEdges(
+      'groundCheck',
+      (state: PayOpsStateType) => (state.gaps.length > 0 ? 'plan' : 'resolve'),
+      { plan: 'plan', resolve: 'resolve' },
+    )
     .addEdge('resolve', 'policyGate')
     .addConditionalEdges(
       'policyGate',

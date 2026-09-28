@@ -1,8 +1,8 @@
 /**
  * Graph nodes (docs/03-agent-system.md §5). Phase 3's single `investigate` node is split
  * (Phase 4 task 3) into a `plan` node (J2) that routes to Payment/Reconciliation/Risk
- * specialists via LangGraph `Send`, which converge on `join` before `resolve` — grounding
- * (`groundCheck`) and replan are still later Phase 4/5 tasks, so `join` feeds `resolve` directly.
+ * specialists via LangGraph `Send`, which converge on `join` before `groundCheck` (J4, Phase 4
+ * task 6) and then `resolve` — replan is still a later Phase 5 task.
  * `execute` folds the doc's execute → validate → close into one call to
  * `resolutions.finish()`, which already runs that exact sequence for a person's proposal; the
  * agent takes the same code path, just with `onFailure: 'ESCALATE'` instead of reopening the
@@ -12,7 +12,8 @@
  * node name rather than a specific `agent_steps` row id; the agent's `AttemptHistory` is always
  * empty (a fresh run rarely follows a failed manual attempt in the seeded demo data); `triage`
  * still gathers the combined baseline evidence for every group up front (D038), so the fast path
- * (`diagnose` → `resolve`, which never runs `plan` or the specialists) still has evidence to cite.
+ * (`diagnose` → `resolve`, which never runs `plan`, the specialists or `groundCheck`) still has
+ * evidence to cite.
  */
 import { interrupt } from '@langchain/langgraph';
 import { agentWriteContext, choice, loadCaseState, noul, score, type CaseState } from '@payops/core';
@@ -25,6 +26,7 @@ import {
   type Diagnosis,
   type EvidenceItem,
   type Finding,
+  type GroundingReport,
   type InvestigationPlan,
   type RiskAssessment,
   type RootCause,
@@ -33,6 +35,14 @@ import {
 import type { AgentDeps } from './deps';
 import { buildCaseBrief } from './brief';
 import { choosePlanSpecialists } from './planning';
+import {
+  applyGroundingRules,
+  applyStructuralGrounding,
+  buildGroundingRequest,
+  supportKey,
+  survivingFindings,
+  type SupportAnswer,
+} from './grounding';
 import { buildProposal } from './proposal';
 import { buildResolveContext, buildSpecialistContext, sliceEvidenceForAgent } from './context';
 import { extractRiskSignals, bucketRiskSignals, RISK_SCORE_CRITERIA, rulesOnlyRiskTier } from './risk';
@@ -154,6 +164,25 @@ export function buildNodes(deps: AgentDeps) {
   async function plan(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('plan', 'NODE_STARTED', {});
     const brief = state.case!;
+
+    // Targeted re-round (docs/03 §5 "groundCheck -> plan", §4 "J4"): `groundCheck` only ever
+    // populates `gaps` when it wants another round, so a non-empty `gaps` here means "skip J2,
+    // re-run exactly the specialists that own the gaps" -- the gap already says which agents are
+    // missing evidence, so asking Jev again would just be re-deriving the same answer at the
+    // cost of a call (docs/DECISIONS.md D041). This still counts as one more `plan` visit for
+    // the `investigationRound` cap, same as the first, JEV-routed call below.
+    if (state.gaps.length > 0) {
+      const specialists = AGENT_NAMES.filter((name) => state.gaps.some((g) => g.agent === name));
+      const investigationPlan: InvestigationPlan = {
+        primaryHypothesis: state.plan?.primaryHypothesis ?? 'UNKNOWN',
+        specialists,
+        routedBy: 'GAP_TARGETED',
+        confidence: state.plan?.confidence ?? 0,
+      };
+      await onEvent('plan', 'NODE_COMPLETED', { specialists, routedBy: 'GAP_TARGETED', targeted: true, gaps: state.gaps });
+      return { plan: investigationPlan, investigationRound: state.investigationRound + 1 };
+    }
+
     try {
       const result = await decision.ask({
         tag: 'J2_PLAN',
@@ -412,7 +441,8 @@ export function buildNodes(deps: AgentDeps) {
   /** Where the parallel `Send` fan-out (graph.ts) converges (docs/03 §5). Every write it could
    * make (`agentsVisited`/`evidence`/`findings`) is already merged by the state reducers once
    * LangGraph runs this node, so it only logs — the doc's "join | code | – | agentsVisited"
-   * row means "observes the merge", not "computes it". */
+   * row means "observes the merge", not "computes it". `groundCheck` (below) is the next node
+   * and does the real work. */
   async function join(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('join', 'NODE_STARTED', {});
     await onEvent('join', 'NODE_COMPLETED', {
@@ -423,6 +453,69 @@ export function buildNodes(deps: AgentDeps) {
     return {};
   }
 
+  /**
+   * J4 (docs/03-agent-system.md §4 "J4", §7 "Evidence model"), Phase 4 task 6. Two passes:
+   * structural predicates first (code, always runs, `grounding.ts` + `grounding/predicates.ts`),
+   * then one batched Jev call -- a `support` Choice per structurally-sound finding plus one
+   * `sufficient` Noul over the whole case. `state.findings` is append-only (state.ts), so a
+   * "dropped" finding is never physically removed here: `grounding.violations` is the drop
+   * record, and `resolve` (below) filters by it before building any context or letting the LLM
+   * cite a finding -- this is what makes a grounding-caught finding "never reach resolve" even
+   * though the array it lives in never shrinks.
+   */
+  async function groundCheck(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    await onEvent('groundCheck', 'NODE_STARTED', {});
+    const evidenceById = new Map(state.evidence.map((e) => [e.id, e]));
+    const structural = applyStructuralGrounding(state.findings, evidenceById);
+
+    const { state: jevState, questions } = buildGroundingRequest(structural.sound, evidenceById);
+    try {
+      const result = await decision.ask({ tag: 'J4_GROUND', state: jevState, questions });
+      await onEvent('groundCheck', 'DECISION_MADE', { tag: 'J4_GROUND', answers: result.answers, usage: result.usage });
+
+      const semanticAnswers: SupportAnswer[] = structural.sound.map((f) => {
+        const answer = result.answers[supportKey(f.id)];
+        return answer && answer.type === 'choice'
+          ? { findingId: f.id, choice: answer.choice as SupportAnswer['choice'], confidence: answer.confidence }
+          : { findingId: f.id, choice: 'not_enough_evidence', confidence: 0 };
+      });
+      const sufficientAnswer = result.answers.sufficient;
+      const sufficientNoul = sufficientAnswer && sufficientAnswer.type === 'noul' ? sufficientAnswer.noul : 1;
+
+      const rules = applyGroundingRules({
+        findings: state.findings,
+        structuralViolations: structural.violations,
+        semanticAnswers,
+        sufficientNoul,
+        agentsVisited: state.agentsVisited,
+        investigationRound: state.investigationRound,
+      });
+      const grounding: GroundingReport = { checked: state.findings.length, violations: rules.violations, sufficient: rules.sufficient, needsHumanReview: rules.needsHumanReview };
+      await onEvent('groundCheck', 'NODE_COMPLETED', { violations: grounding.violations, sufficient: rules.sufficient, gaps: rules.gaps });
+      return {
+        grounding,
+        gaps: rules.gaps,
+        budget: { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens },
+      };
+    } catch (err) {
+      // J4 fallback (docs/03 §4 "Jev adapter contract"): "structural check only + mark
+      // needsHumanReview" -- semantic checking is skipped entirely (never guessed), and the
+      // fallback never adds an extra round on its own (`applyGroundingRules` enforces this by
+      // always returning `sufficient: true`, `gaps: []` when `semanticAnswers` is `null`).
+      const rules = applyGroundingRules({
+        findings: state.findings,
+        structuralViolations: structural.violations,
+        semanticAnswers: null,
+        sufficientNoul: null,
+        agentsVisited: state.agentsVisited,
+        investigationRound: state.investigationRound,
+      });
+      const grounding: GroundingReport = { checked: state.findings.length, violations: rules.violations, sufficient: rules.sufficient, needsHumanReview: rules.needsHumanReview };
+      await onEvent('groundCheck', 'NODE_COMPLETED', { violations: grounding.violations, fallback: true, error: err instanceof Error ? err.message : String(err) });
+      return { grounding, gaps: [], budget: { ...zeroBudget(), jevCalls: 1 } };
+    }
+  }
+
   async function resolve(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('resolve', 'NODE_STARTED', {});
     const caseState = await loadCaseState(core.db, core.gateway, state.caseId, core.clock.now());
@@ -431,10 +524,14 @@ export function buildNodes(deps: AgentDeps) {
     let diagnosis = state.diagnosis;
     let budget = zeroBudget();
     const findings: Finding[] = [];
+    // Grounding (docs/03 §4 "J4") already ran between `join` and `resolve` on the full path --
+    // `state.grounding` is `null` on the fast path (`diagnose` -> `resolve` directly), where
+    // `survivingFindings` is a no-op copy of `state.findings`.
+    const groundedFindings = survivingFindings(state.findings, state.grounding?.violations);
     if (!diagnosis) {
       const resolveContext = buildResolveContext({
         brief,
-        findings: state.findings,
+        findings: groundedFindings,
         evidenceCount: state.evidence.length,
         risk: state.risk,
         grounding: state.grounding,
@@ -539,6 +636,7 @@ export function buildNodes(deps: AgentDeps) {
     reconciliationAgent,
     riskAgent,
     join,
+    groundCheck,
     resolve,
     policyGate,
     awaitApproval,

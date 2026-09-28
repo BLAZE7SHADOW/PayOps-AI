@@ -106,6 +106,15 @@ export interface GroundingReport {
   checked: number;
   violations: GroundingViolation[];
   sufficient: boolean;
+  /**
+   * J4 adapter-contract fallback (docs/03 §4 "Jev adapter contract": "J4 -> structural check
+   * only + mark needsHumanReview"). True only when the semantic (Jev) citation check could not
+   * run at all (error/timeout) -- structural predicates still ran and `violations` still holds
+   * whatever they caught. Optional so existing literals built before this flag existed (and any
+   * caller that only cares about the pre-Phase-4-task-6 shape) keep typechecking; readers should
+   * treat a missing value as `false`. Docs/DECISIONS.md D041.
+   */
+  needsHumanReview?: boolean;
 }
 
 // ── Case brief (code-built, docs/03 §4a §8) ─────────────────────────────────
@@ -139,7 +148,10 @@ export interface EntityRefs {
 export interface InvestigationPlan {
   primaryHypothesis: string;
   specialists: AgentName[];
-  routedBy: 'JEV' | 'DEFAULT_ALL';
+  // 'GAP_TARGETED' (Phase 4 task 6, docs/03 §5 groundCheck -> plan): a re-round that skips J2
+  // entirely and routes only to the specialists named in `gaps` -- the gap already says which
+  // agents lack evidence, so asking Jev again would be redundant (docs/DECISIONS.md D041).
+  routedBy: 'JEV' | 'DEFAULT_ALL' | 'GAP_TARGETED';
   confidence: number;
 }
 

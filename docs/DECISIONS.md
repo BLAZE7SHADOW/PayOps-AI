@@ -253,3 +253,57 @@ bucketing + one batched Jev `score()` call + code combination, not a two-LLM-cal
   outside this task's scope, so `state.risk` is populated and available (on the run, in
   `agent_steps`) but not yet read by anything downstream. Left as a documented gap in
   PROGRESS.md rather than wired silently.
+
+## D041 · `groundCheck`/J4: predicate coverage gaps, append-only findings filtered at the point of use, gap-routing bypasses J2
+Phase 4 task 6 (docs/03-agent-system.md §4 "J4", §7 "Evidence model").
+
+- **Structural predicates: three known-loose codes, not invented facts.** `grounding/
+  predicates.ts` has one predicate per `FindingCode`, but `LEDGER_CREDIT_MISSING`,
+  `REFUND_MISSING` and `SETTLEMENT_LINE_MISSING` are all "something is missing" claims, and no
+  `tools.ts` tool projects a positive fact for an absence (`getSettlementLines` returns every
+  line in a batch, not "this payment's line, or nothing"). Each of those three predicates checks
+  the closest real proxy it can (e.g. a captured gateway payment cited alongside no cited LEDGER
+  credit) rather than inventing a field like `expectsRefund` that no tool actually produces. This
+  is deliberately the *loose* half of grounding — §7 says predicates run "on the cited evidence",
+  which cannot prove a global absence — and the *tight* half (is there truly no matching record
+  anywhere) is exactly what J4's semantic `contradicted`/`not_enough_evidence` answers are for.
+  `ORDER_STATE_DIVERGED` and `REFUND_STATUS_MISMATCH` are also intentionally loose in the same
+  spirit: they check that the finding cited evidence from *both* sides of the comparison it
+  claims to make, not that the comparison itself resolves to "different" — recomputing that
+  would either duplicate the reconciliation matrix's own state-comparison logic
+  (`core/reconciliation/matrix.ts`) or the refund-status gateway mapping
+  (`refund.service.ts`'s `REFUND_STATUS_FROM_GATEWAY`), which are core's own domain logic, not a
+  grounding predicate's job, and `core` cannot be imported from `agents`'s grounding code the
+  other way either (CLAUDE.md rule 10: `core` never imports `agents`, but the true constraint
+  here is not duplicating `core`'s comparison/mapping logic a second time inside `agents`).
+- **A dropped finding is filtered at the point of use, never removed from `state.findings`.**
+  `state.findings`'s reducer (`mergeById`, state.ts) only adds/overwrites by id — it cannot
+  delete, and changing it to a full-replace reducer would break the parallel `Send` fan-out
+  (three specialists each returning only their own new findings; a replace reducer would let the
+  last branch to merge silently discard the other two's). So `groundCheck` never shrinks
+  `state.findings`; it writes `grounding.violations` (which findings are dropped, and why), and
+  `resolve` computes `survivingFindings(state.findings, state.grounding?.violations)`
+  (`grounding.ts`) before building any context or letting the diagnosis LLM cite anything. This
+  is what the node-reference table's "groundCheck | ... | grounding, filtered findings, gaps"
+  means in this codebase: "filtered findings" is `grounding.violations` used as a filter at read
+  time, not a separate state field. `grounding.test.ts` proves this directly by building the
+  exact `buildResolveContext` call `resolve` makes and asserting a deliberately corrupted
+  finding's id and statement text are both absent from the rendered messages.
+- **Gap-targeted re-round bypasses J2 entirely.** §5's diagram routes `groundCheck`'s "gaps &
+  rounds<2" edge back through the same `plan` node, not a separate one. On a re-round (`plan`
+  sees a non-empty `state.gaps`), `plan` skips the J2 Jev call and routes directly to
+  `AGENT_NAMES.filter(name => gaps.some(g => g.agent === name))` (`routedBy: 'GAP_TARGETED'`, a
+  new `InvestigationPlan.routedBy` variant). The gap already names exactly which agents lost
+  their findings or had none — re-asking J2 "which specialists matter" would either reproduce
+  that same answer or contradict it for no benefit, at the cost of a Jev call and a second layer
+  of uncertainty. `plan`'s existing `investigationRound + 1` increment (task 3) is reused
+  unchanged for this branch too, so the round cap in `applyGroundingRules` still counts both
+  kinds of `plan` visit the same way.
+- **`GroundingReport.needsHumanReview` is optional, not required.** Added to carry the J4
+  adapter-contract fallback flag (docs/03 §4: "J4 → structural check only + mark
+  needsHumanReview"). Made optional (`?: boolean`) rather than required so the one pre-existing
+  literal `GroundingReport` in `context.test.ts` (predates this task) keeps typechecking without
+  edits; every real writer (`groundCheck`, both branches) always sets it explicitly, and readers
+  should treat a missing value as `false`. Nothing yet *reads* `needsHumanReview` downstream
+  (no UI surface exists before Phase 4 task 8) — it is populated and available on the run, same
+  shape as D040's note about `state.risk` not yet being read by policy.
