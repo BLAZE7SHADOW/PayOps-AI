@@ -113,3 +113,14 @@ Prompts omit case display ids, entity refs and observation times. Timestamp fact
 
 ## D035 · Share the checkpointer pool and correct the Jev pin
 PostgresSaver uses the application's pg pool, just like pg-boss (D023). A second pool can interleave operations on PGlite's single backend. The setup cache is scoped to that database and cleared after a failed setup. Jev's provider accepts `jev-1.13.0`, not the initial `jev-1.13` configuration; env parsing translates that legacy spelling to the pinned version without editing secrets. Confirmed by a live 400 response and https://docs.typesafe.ai/models.
+
+## D036 · J1 signal intake runs after commit, once per newly opened case
+`SignalIntakeService.screenCase` is called from `ReconciliationService.applyCandidates` only for
+`result.created` cases, after `openOrUpdate`'s transaction has committed — a Jev call is a network
+request and must not run inside a DB transaction. It is not retried on every sweep: a note keeps
+its tags once screened (`complaintType != null` is the completion marker), so a Jev outage only
+costs that one case's tags, matching the doc's J1 fallback ("no tags") rather than promising
+retries. `createCore` gained an optional `decision?: DecisionPort`, defaulting to a
+`NullDecisionPort` that always rejects, so tests, the simulator and any caller that doesn't care
+about J1 are unaffected; `apps/server` is the only caller that wires a real one
+(`createDecisionPort(env)`, same adapter and model pin the agent graph uses).

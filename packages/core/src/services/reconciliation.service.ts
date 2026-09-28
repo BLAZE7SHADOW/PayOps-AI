@@ -15,6 +15,7 @@ import { evaluateOrder, groupHits, snapshotEntityRefs, type CaseCandidate } from
 import { blankMatrix, buildMatrix } from '../reconciliation/matrix';
 import { checkBatch } from '../reconciliation/settlement';
 import type { CaseService } from './case.service';
+import type { SignalIntakeService } from './signal-intake.service';
 import { loadBatches, loadOrderSnapshots } from './snapshot.loader';
 
 export const RECON_CHUNK_SIZE = 200;
@@ -54,6 +55,7 @@ export class ReconciliationService {
     private readonly gateway: PaymentGatewayPort,
     private readonly cases: CaseService,
     private readonly events: EventPublisherPort,
+    private readonly signalIntake: SignalIntakeService,
   ) {}
 
   /** Re-evaluates the given orders: updates payments.recon and opens or updates cases. */
@@ -195,6 +197,14 @@ export class ReconciliationService {
       if (result.created) summary.opened += 1;
       else summary.updated += 1;
       if (result.changed) touched.push({ id: result.case.id, created: result.created });
+      // J1 signal intake (docs/03 §4): screen a newly opened case's support notes once, outside
+      // the DB transaction (it makes a network call), before the case is published to the UI.
+      if (result.created) {
+        await this.signalIntake.screenCase(result.case.id, {
+          paymentId: result.case.entityRefs.paymentId,
+          orderId: result.case.entityRefs.orderId,
+        });
+      }
     }
     // After commit: publish only what changed, so a sweep over stable data is silent.
     const items = await this.cases.listItems(touched.map((t) => t.id));

@@ -18,10 +18,12 @@ import { OverviewService } from './services/overview.service';
 import { PaymentService } from './services/payment.service';
 import { PaymentQueryService } from './services/payment-query.service';
 import { ReconciliationService } from './services/reconciliation.service';
+import { SignalIntakeService } from './services/signal-intake.service';
 import { RefundService } from './services/refund.service';
 import { ResolutionQueryService } from './services/resolution-query.service';
 import { ResolutionService } from './services/resolution.service';
 import { WebhookConsumer } from './services/webhook-consumer';
+import type { DecisionPort } from './ports/decision';
 import { ValidatorService } from './validation/validator.service';
 
 /** Resumes an agent run's LangGraph thread after a human decides its approval (Phase 3). */
@@ -36,6 +38,8 @@ export interface CoreOptions {
   /** Wired by apps/server once pg-boss is up; undefined in tests that never start an agent run. */
   agentResumer?: AgentResumer;
   gateway?: PaymentGatewayPort;
+  /** Jev, for J1 signal intake on case creation. Defaults to a port that always falls back (no tags). */
+  decision?: DecisionPort;
 }
 
 export interface Core {
@@ -45,6 +49,7 @@ export interface Core {
   gateway: PaymentGatewayPort;
   audit: AuditService;
   cases: CaseService;
+  signalIntake: SignalIntakeService;
   reconciliation: ReconciliationService;
   payments: PaymentQueryService;
   overview: OverviewService;
@@ -62,6 +67,13 @@ export interface Core {
   approvals: ApprovalService;
 }
 
+/** Default DecisionPort when the caller has no Jev adapter wired: always falls back (J1 → no tags). */
+class NullDecisionPort implements DecisionPort {
+  ask(): Promise<never> {
+    return Promise.reject(new Error('No DecisionPort configured'));
+  }
+}
+
 export function createCore(opts: CoreOptions): Core {
   const { db } = opts;
   const clock = opts.clock ?? systemClock;
@@ -69,7 +81,9 @@ export function createCore(opts: CoreOptions): Core {
   const gateway = opts.gateway ?? new SimulatorGatewayAdapter(db, clock);
   const audit = new AuditService(db, clock);
   const cases = new CaseService(db, clock, gateway, audit);
-  const reconciliation = new ReconciliationService(db, clock, gateway, cases, events);
+  const decision = opts.decision ?? new NullDecisionPort();
+  const signalIntake = new SignalIntakeService(db, decision);
+  const reconciliation = new ReconciliationService(db, clock, gateway, cases, events, signalIntake);
 
   const orders = new OrderService(clock, audit);
   const ledger = new LedgerService(clock, audit);
@@ -120,6 +134,7 @@ export function createCore(opts: CoreOptions): Core {
     gateway,
     audit,
     cases,
+    signalIntake,
     reconciliation,
     payments: new PaymentQueryService(db, clock, gateway, cases),
     overview: new OverviewService(db, clock, gateway),

@@ -8,6 +8,7 @@ import {
   ROLES,
   SEVERITIES,
   type ActorType,
+  type ComplaintType,
   type DetectionRuleId,
   type MatrixCell,
   type SystemKey,
@@ -36,7 +37,7 @@ export interface CaseEntityRefs {
 }
 
 export interface CaseSignalsRow {
-  complaintType?: string | null;
+  complaintType?: ComplaintType | null;
   urgent?: boolean | null;
   quarantined?: boolean | null;
 }

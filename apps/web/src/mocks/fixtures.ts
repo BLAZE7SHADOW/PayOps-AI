@@ -385,7 +385,7 @@ const caseSpecs: CaseSpec[] = [
         quarantined: false,
       },
     ],
-    signals: { complaintType: 'CHARGED_NOT_DELIVERED' },
+    signals: { complaintType: 'charged_not_delivered' },
   },
   {
     tag: 'refund_never_initiated',
@@ -410,10 +410,10 @@ const caseSpecs: CaseSpec[] = [
         quarantined: true,
       },
     ],
-    signals: { complaintType: 'REFUND_REQUEST', quarantined: true },
+    signals: { complaintType: 'refund_not_received', quarantined: true },
   },
   { tag: 'suspicious_payment', type: 'RISK_CASE', severity: 'CRITICAL', ruleIds: ['D8_RISK_VELOCITY'], openedAfterMs: 20 * S, priority: 92, signals: { urgent: true } },
-  { tag: 'refund_stuck', type: 'REFUND_EXCEPTION', severity: 'MEDIUM', ruleIds: ['D5_REFUND_PENDING_SLA'], openedAfterMs: 7 * DAY_MS, priority: 64, signals: { complaintType: 'REFUND_DELAYED' },
+  { tag: 'refund_stuck', type: 'REFUND_EXCEPTION', severity: 'MEDIUM', ruleIds: ['D5_REFUND_PENDING_SLA'], openedAfterMs: 7 * DAY_MS, priority: 64, signals: { complaintType: 'refund_not_received' },
     notes: [{ authorType: 'CUSTOMER', text: 'Refund for my cancelled order has not reached my account after 9 days. The bank says nothing was received.', quarantined: false }] },
   { tag: 'duplicate_capture', type: 'DUPLICATE', severity: 'HIGH', ruleIds: ['D4_DUPLICATE_CAPTURE'], openedAfterMs: 2 * MINUTE_MS + 20 * S, priority: 78 },
 ];

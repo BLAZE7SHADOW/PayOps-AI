@@ -81,6 +81,16 @@ export type SettlementStatus = (typeof SETTLEMENT_STATUS)[number];
 export const NOTE_AUTHOR_TYPES = ['CUSTOMER', 'MERCHANT'] as const;
 export type NoteAuthorType = (typeof NOTE_AUTHOR_TYPES)[number];
 
+/** J1 signal intake (docs/03-agent-system.md §4 J1). */
+export const COMPLAINT_TYPES = [
+  'charged_not_delivered',
+  'double_charged',
+  'refund_not_received',
+  'unauthorized',
+  'other',
+] as const;
+export type ComplaintType = (typeof COMPLAINT_TYPES)[number];
+
 // ── Operations ───────────────────────────────────────────────────────────────
 export const ROLES = ['VIEWER', 'OPS', 'MANAGER', 'ADMIN'] as const;
 export type Role = (typeof ROLES)[number];

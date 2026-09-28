@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   CASE_STATUS,
   CASE_TYPES,
+  type ComplaintType,
   GW_PAYMENT_STATUS,
   ORDER_STATUS,
   ROLES,
@@ -142,7 +143,7 @@ export const CaseListQuery = z.object({
 export type CaseListQuery = z.infer<typeof CaseListQuery>;
 
 export interface CaseSignals {
-  complaintType?: string;
+  complaintType?: ComplaintType;
   urgent?: boolean;
   quarantined?: boolean;
 }

@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import {
   createCore,
   createDatabase,
+  createDecisionPort,
   databasePoolSize,
   createLogger,
   describeEnv,
@@ -44,7 +45,10 @@ const agentResumer: AgentResumer = {
     return boxedResumer.resume(runId, decision);
   },
 };
-const core = createCore({ db: database.db, events, agentResumer });
+// J1 signal intake uses the same Jev adapter as the agent graph, keyed to the default cassette
+// in REPLAY/RECORD (agent runs pass their own scenarioKey; this app-wide path always uses 'default').
+const decisionPort = createDecisionPort(env);
+const core = createCore({ db: database.db, events, agentResumer, decision: decisionPort });
 
 const boss = await startBoss(database.pool, log);
 await registerReconcileSweep(boss, core, env, log);
