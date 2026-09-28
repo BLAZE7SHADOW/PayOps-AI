@@ -514,3 +514,96 @@ two real, if narrow, gaps:
 
 `pnpm typecheck`, `pnpm lint`, `pnpm test` (383 passed, 0 skipped) all clean after both fixes.
 Phase 4's "Done when" list is now true and verified, not just asserted.
+
+## D047 · Phase 5 task 1: replan node (J5), splitting execute/validate/close, and attempt tabs
+
+**`ResolutionService.finish()` split into composable steps.** Phase 3-4's `execute` graph node
+called `resolutions.finish()`, which ran execute → validate → close as one atomic sequence (close
+meaning: update the resolution's status, move the case to RESOLVED/OPEN/ESCALATED, run an audit
+entry, refresh detection, publish). The replan loop (docs/03 §13) needs to see the validator's
+verdict *before* deciding whether to close anything — closing on PARTIAL/FAIL before `replan` has
+even run would flip the case to OPEN/ESCALATED and then immediately need to flip it back if
+`replan` decides to retry. Split `finish` into four public methods: `execute` (run actions only),
+`validate` (run the validator only, using the existing fixed `VALIDATOR_CTX` — unchanged from
+before), `closeExecutionFailed` (close after an execution error — execution failures still never
+reach `replan`, matching docs/03 §5's diagram, where only a validator PARTIAL/FAIL routes there),
+and `closeValidated` (close after a validator verdict — PASS resolves, PARTIAL/FAIL reopens or
+escalates, same rules as before). `finish` itself is now just these four called in sequence with
+no decision point in between, so every existing caller (`propose()`'s AUTO path,
+`container.ts`'s post-approval continuation) is unchanged — confirmed by the full existing test
+suite passing unmodified (395 tests, no assertions touched in `simulator/src/resolution.test.ts`
+or `apps/server/src/app.test.ts`).
+
+**Graph shape:** `execute` (docs/03 §5) now only runs actions; on failure it closes
+`EXECUTION_FAILED`/ESCALATED itself (via `closeExecutionFailed`) exactly as `finish` used to, and
+a conditional edge sends that case straight to `END`. On success it edges to the new `validate`
+node, which runs the validator and leaves the resolution deliberately un-closed. A conditional
+edge on `validate`'s verdict sends PASS to a new `closeResolved` node (closes PASS, matching the
+old fast success path) and PARTIAL/FAIL to the new `replan` node.
+
+**`replan` (J5, nodes.ts)**: asks Jev a single `strategy` Choice
+(`retry_same_action | alternative_action | reinvestigate | escalate_to_human`), always builds an
+`AttemptSummary` from the validator's failed checks for `history` regardless of outcome, and
+enforces two code caps that always win over Jev and never spend a call/get overridden by
+confidence, per docs/03 §4's adapter-contract table: the attempt cap
+(`AGENT_BUDGET_LIMITS.maxAttempts`, already `2`) skips the Jev call entirely; a confidence floor
+of 0.5 on the answered strategy forces `escalate_to_human` even if Jev picked something else. A
+Jev throw hits the same J5 fallback (`escalate`). The graph's conditional edge out of `replan`
+derives the route from state `replan` already set, rather than adding a new "chosen strategy"
+state field: `status === 'ESCALATED'` (only `replan` sets this, past this point in the graph) →
+`closeEscalated`; `diagnosis === null` (only `reinvestigate` clears it, deliberately, so `resolve`
+runs a fresh full-LLM diagnosis instead of reusing a stale fast-path one) → `plan`; otherwise
+(`retry_same_action`/`alternative_action`, which share one route today) → `resolve`.
+
+**`closeEscalated` became dual-purpose.** It was already the target of `awaitApproval`'s ESCALATE
+decision (whose own service call — `approvals.decide()` — already closes everything; the node was
+a no-op) and is now also `replan`'s `escalate_to_human` target (where the current attempt's
+resolution is still open, per the split above, and needs closing now). Distinguished by
+`state.validation`: `null` means "reached via `awaitApproval`, nothing to close here"; set means
+"reached via `replan`, close the validated resolution now" — no new state field needed, since
+`validation` is only ever set by the new `validate` node.
+
+**History feeds the existing recommendation logic, not a new one.** `core/actions/options.ts`'s
+`recommendedTypes`/`replayFailedBefore` already existed (pre-Phase-5, for the manual "Resolve"
+form) and already implements exactly docs/03 §13's demo behavior: a case whose most recent replay
+failed recommends `MARK_ORDER_PAID` (+`POST_LEDGER_ENTRY`) instead of `REPLAY_WEBHOOK_EVENT`
+again. `resolve` (nodes.ts) previously always called `buildProposal(diagnosis, caseState, [])` —
+hardcoded empty history. Fixed to pass `toAttemptHistory(state.history)`, a small mapper from the
+agent's own `AttemptSummary[]` (docs shape: attempt/actions/failedChecks/validatorNotes) to core's
+`AttemptHistory[]` (actionTypes/status/verdict). This is why `retry_same_action` and
+`alternative_action` don't need two different code branches in `replan`: the actual "alternative"
+selection already lives in `recommendedTypes`, keyed off `history`, not off which strategy string
+Jev picked.
+
+**`AttemptSummary` gained a `verdict: ValidationVerdict` field** (packages/shared/src/agents.ts) —
+needed by `toAttemptHistory` above. Deliberately did *not* add a `status` field alongside it: every
+`AttemptSummary` in this codebase is built by `replan`, which by construction only ever runs after
+a validated attempt (an execution failure escalates directly, per the graph shape above), so
+`toAttemptHistory` hardcodes `status: 'VALIDATED'` rather than duplicating a value that can never
+vary.
+
+**Attempt tabs (Investigation.tsx).** `AgentStepItem` carries no `attempt` field, and adding one
+would mean threading attempt-tracking state through every node's `PayOpsUpdate` just for display.
+Instead, `groupByAttempt` scans the flat step list once and starts a new group after every
+`replan` `NODE_COMPLETED` step — the one place the graph decides to loop back to `resolve` or
+`plan` (an `escalate_to_human` `replan` also gets a `NODE_COMPLETED`, but produces no further
+steps afterwards, so it never yields a spurious trailing empty group). `Trace` renders a flat
+`StepList` unchanged when there's only one attempt (the common case, zero visual change from
+Phase 4), and reuses the existing `Tabs` primitive (`ResolutionSection`'s `Attempts`) once there's
+more than one, defaulting to the newest attempt.
+
+**Verification:** `pnpm typecheck` and `pnpm lint` clean across all packages. `pnpm test`: 395
+passed (0 skipped) — the 12 new tests are `nodes.test.ts`'s `replan` describe block (history
+recording, retry/alternative leaving diagnosis alone, reinvestigate clearing it, both code caps,
+the J5 fallback), `graph.test.ts`'s rewritten `replay_fails_then_replan` coverage (attempt 1 FAILs
+and escalates when J5 says so; attempt 2 actually resolves end-to-end through a real
+MARK_ORDER_PAID + POST_LEDGER_ENTRY approval/execute/validate cycle when J5 says
+`alternative_action` — this is docs/03 §13's demo scenario, now actually exercised, not just
+described in a doc; J5 is asked exactly once when attempt 2 already resolves), and
+`Investigation.test.tsx`'s three attempt-tab tests. `apps/web`'s `vite build` could not be run in
+this cloud session — `Cannot find module '../lightningcss.linux-arm64-gnu.node'`, the same class
+of macOS/Linux native-binary bridge gap documented for rollup/esbuild in `docs/PROGRESS.md`
+Blockers, this time for Tailwind v4's CSS engine. `tsc --noEmit` (the first half of the build
+script) passed cleanly before hitting it, and the full `pnpm test` run already exercises
+`Trace`/`Tabs` through React Testing Library, so this is a lower-confidence gap than a real
+regression, but a real browser pass on the Mac is still recommended before trusting the UI fully.

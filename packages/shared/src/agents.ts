@@ -35,6 +35,10 @@ export type RunPath = (typeof RUN_PATHS)[number];
 export const DECISION_TAGS = ['J1_INTAKE', 'J2_PLAN', 'J3_RISK', 'J4_GROUND', 'J5_REPLAN', 'J6_DIAGNOSE'] as const;
 export type DecisionTag = (typeof DECISION_TAGS)[number];
 
+/** J5's `strategy` Choice (docs/03 §4 "J5", §13 "Replan loop"). */
+export const REPLAN_STRATEGIES = ['retry_same_action', 'alternative_action', 'reinvestigate', 'escalate_to_human'] as const;
+export type ReplanStrategy = (typeof REPLAN_STRATEGIES)[number];
+
 // ── Root cause & finding vocabulary (docs/03 §10, §7) ───────────────────────
 export const ROOT_CAUSES = [
   'WEBHOOK_PROCESSING_FAILURE',
@@ -196,6 +200,11 @@ export interface AttemptSummary {
   actions: CatalogAction[];
   failedChecks: string[];
   validatorNotes: string;
+  /** The validator's verdict for this attempt (docs/DECISIONS.md D047: a `replan`-built
+   * `AttemptSummary` always comes from a validated attempt -- `execute` failures never reach
+   * `replan`, they escalate directly -- so `status` in the core `AttemptHistory` sense is always
+   * `'VALIDATED'` here and isn't duplicated as its own field). */
+  verdict: ValidationVerdict;
 }
 
 // ── Budget ───────────────────────────────────────────────────────────────────
@@ -300,6 +309,7 @@ export const AGENT_STEP_KINDS = [
   'APPROVAL_RESOLVED',
   'EXECUTION_STEP',
   'VALIDATION_COMPLETED',
+  'RUN_REPLANNING',
   'RUN_COMPLETED',
   'RUN_FAILED',
 ] as const;

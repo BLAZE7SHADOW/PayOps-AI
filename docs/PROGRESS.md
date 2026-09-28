@@ -4,14 +4,13 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · complete.** All 9 tasks done; `pnpm cassette:record` ran successfully on Shivam's
-Mac (all 3 scenarios `RESOLVED`/`PASS`), the 3 `graph.test.ts` cassette-replay tests are
-un-skipped and green, and Phase 4's own literal "Done when" list (docs/06-phases.md) was checked
-criterion by criterion against the actual code and test suite rather than assumed from task-level
-completion -- this caught and closed two real gaps (context-size visibility in the UI, missing
-J2/J6 fallback tests; see D046). `pnpm typecheck`, `pnpm lint`, `pnpm test` (383 passed, 0
-skipped) all clean. **Start a new chat session for Phase 5** per this project's one-phase-per-chat
-rule -- read `CLAUDE.md` and this file at the top of that session.
+**Phase 5 · in progress.** Phase 4 is complete (see below). Phase 5 task 1 (replan node, J5,
+attempt tabs) is done: `execute`/`validate`/`closeResolved`/`replan` graph nodes, J5 decision +
+its two code caps, `AttemptSummary`/history now actually feeds `resolve`'s proposal (see D047),
+and the Investigation screen splits its trace into per-attempt tabs once a run has replanned.
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (395 passed, 0 skipped) all clean. Tasks 2-6 of
+docs/06-phases.md's Phase 5 (evals package, injection eval, budget guard, failure drills) are not
+started.
 
 ## Phase checklist
 
@@ -20,16 +19,21 @@ rule -- read `CLAUDE.md` and this file at the top of that session.
 - [x] Phase 2 · Resolution spine
 - [x] Phase 3 · First agent (resume-ready milestone)
 - [x] Phase 4 · Multi-agent, context, evidence, Jev
-- [ ] Phase 5 · Replan, evals, hardening
+- [ ] Phase 5 · Replan, evals, hardening (task 1 of 6 done)
 - [ ] Phase 6 · Polish, public demo, deploy
 
 ## Next task
 
-**Phase 4 is done. Start a new chat session for Phase 5 (Replan loop, evals, hardening) per
-CLAUDE.md's one-phase-per-chat rule.** Read `docs/06-phases.md`'s Phase 5 section and
-`docs/DECISIONS.md`'s recent entries (D043-D046) first for full context on what Phase 4 actually
-built and the couple of documented known gaps (see "Known gaps" below) that were deliberately
-left for later phases.
+**Phase 5 task 1 is done (replan/J5/attempt-tabs, see D047 and the session log below). Start a
+new chat session for Phase 5 task 2** ("`replay_fails_then_replan` passes on attempt 2" --
+already proven true by `graph.test.ts`'s new test, but docs/06-phases.md lists it as its own
+task; worth re-checking whether there's anything left there beyond what task 1 already covers) or
+task 3 (`packages/evals`: golden expectations, runner, markdown report). Read
+`docs/06-phases.md`'s Phase 5 section and `docs/DECISIONS.md`'s D047 first. Per CLAUDE.md's
+one-phase-per-chat rule this is still within Phase 5, but each task is its own reasonable
+session-sized chunk (same granularity Phase 4's tasks 3-9 each got their own session) --
+consider starting a fresh chat per task rather than doing the rest of Phase 5 in one sitting,
+same as every prior phase.
 
 ## How to run locally
 
@@ -101,6 +105,62 @@ Shivam's Mac directly, same as task 9 did.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 5 task 1: replan node (J5), execute/validate/close split, attempt tabs (see D047)
+- Split `ResolutionService.finish()` (core) into `execute` / `validate` / `closeExecutionFailed` /
+  `closeValidated`, all newly public, so the agent graph can run execute -> validate and see the
+  verdict before deciding whether to close anything. `finish()` itself unchanged in behavior --
+  now just these four composed with no decision point in between -- confirmed by the entire
+  pre-existing test suite passing unmodified.
+- Graph (`packages/agents/src/graph.ts`): old single `execute` node split into `execute` (actions
+  only; an execution failure still closes ESCALATED and ends the run directly, same as before) ->
+  `validate` (runs the validator, leaves the resolution un-closed) -> conditional: PASS ->
+  new `closeResolved` node; PARTIAL/FAIL -> new `replan` node (J5). `replan`'s three routes
+  (`closeEscalated` / `plan` / `resolve`) are derived from state it already set (`status`,
+  `diagnosis`), no new state field. `closeEscalated` (nodes.ts) is now dual-purpose: a no-op when
+  reached via `awaitApproval`'s ESCALATE decision (already closed elsewhere), a real DB close when
+  reached via `replan`'s `escalate_to_human` (distinguished by whether `state.validation` is set).
+- `replan` (nodes.ts): asks Jev J5's `strategy` Choice, always records an `AttemptSummary` in
+  `history` regardless of outcome, and enforces the two doc-mandated code caps that always beat
+  Jev: the attempt cap (`AGENT_BUDGET_LIMITS.maxAttempts`, already `2`) skips the Jev call
+  entirely once spent; a 0.5 confidence floor forces `escalate_to_human` even when Jev answered
+  something else. `reinvestigate` clears the stale `diagnosis` so `resolve` reruns the full LLM
+  path with fresh evidence instead of reusing attempt 1's answer.
+- `resolve` (nodes.ts) now actually passes `history` into `buildProposal` (it was hardcoded to
+  `[]` since Phase 3) via a new `toAttemptHistory` mapper. This is the piece that makes
+  `retry_same_action`/`alternative_action` produce a different action set on attempt 2: the
+  "alternative" logic already existed in `core/actions/options.ts`'s pre-Phase-5
+  `recommendedTypes`/`replayFailedBefore` (built for the manual Resolve form), it just was never
+  fed the agent's own attempt history until now.
+- `AttemptSummary` (shared) gained a `verdict: ValidationVerdict` field. `AgentStepKind` gained
+  `RUN_REPLANNING` (-> `run.replanning`, already named in docs/03 §16's event list but never
+  emitted before this task).
+- Investigation.tsx: `Trace` now groups steps into per-attempt tabs (reusing the existing `Tabs`
+  primitive from `ResolutionSection`) whenever a run replanned, splitting at each `replan`
+  `NODE_COMPLETED` step; a single-attempt run renders exactly as before (no visual change from
+  Phase 4). Defaults to showing the newest attempt.
+- Tests: `nodes.test.ts` gained a `replan` describe block (7 tests: history recorded regardless
+  of outcome, retry/alternative leave diagnosis alone, reinvestigate clears it, both code caps,
+  the J5 Jev-throws fallback). `graph.test.ts`'s old "escalates a failed execution without
+  replanning" test is now two tests: one proving J5-says-escalate still escalates on attempt 1
+  (as before), and a new one that actually drives `replay_fails_then_replan` through a real
+  attempt 2 -- REPLAY_WEBHOOK_EVENT fails, `alternative_action` is chosen, `resolve` proposes
+  MARK_ORDER_PAID + POST_LEDGER_ENTRY (now needing a manager approval, resumed via the existing
+  interrupt/Command pattern), attempt 2 validates PASS. This is docs/03 §13's demo scenario,
+  genuinely exercised end to end for the first time. `Investigation.test.tsx` gained 3 tests for
+  the attempt-tab grouping/switching.
+- Verification: `pnpm typecheck` and `pnpm lint` clean across all packages. `pnpm test`: 395
+  passed, 0 skipped (was 383; +12 from the tests above). `apps/web`'s `vite build` could not run
+  in this cloud session -- `Cannot find module '../lightningcss.linux-arm64-gnu.node'`, the same
+  class of macOS/Linux native-binary bridge gap already documented for rollup/esbuild below (this
+  time Tailwind v4's CSS engine); `tsc --noEmit` (the build script's first half) passed cleanly
+  before hitting it. A real browser pass on the Mac is recommended before fully trusting the new
+  attempt-tabs UI, same caveat every prior cloud session has carried for anything visual.
+- Not done this session: Phase 5 tasks 2-6 (docs/06-phases.md) -- the replan scenario itself is
+  now proven (see above, arguably closing task 2 too, worth confirming next session), but the
+  `packages/evals` runner/report, the injection eval, the budget-guard escalation test, and the
+  three failure-drill scenarios (Gemini timeout, Jev timeout, DB serialization conflict) are all
+  still open. See Next task.
 
 ### 2026-09-29 · Phase 4 complete: cassette recording succeeded, two Done-when gaps closed, phase verified
 - `pnpm cassette:record` ran successfully on Shivam's Mac (`npx pnpm@10.28.0 cassette:record`,

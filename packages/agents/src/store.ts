@@ -91,6 +91,7 @@ const AGENT_STEP_EVENT: Record<AgentStepKind, string> = {
   APPROVAL_RESOLVED: 'approval.resolved',
   EXECUTION_STEP: 'execution.step',
   VALIDATION_COMPLETED: 'validation.completed',
+  RUN_REPLANNING: 'run.replanning',
   RUN_COMPLETED: 'run.completed',
   RUN_FAILED: 'run.failed',
 };

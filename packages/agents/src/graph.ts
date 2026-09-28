@@ -4,9 +4,12 @@
  * via LangGraph `Send`, converging on `join`. Phase 4 task 6 adds `groundCheck` (J4) between
  * `join` and `resolve`, with a conditional edge back to `plan` for one targeted extra
  * investigation round when the evidence is insufficient and the round budget allows it (§4 "J4",
- * §5's `groundCheck -> plan` arrow). `replan` is still a later Phase 5 task. The fast path
- * (`diagnose` -> `resolve` directly) never touches `plan`, the specialists, `join` or
- * `groundCheck` -- unchanged by this task.
+ * §5's `groundCheck -> plan` arrow). Phase 5 task 1 (docs/DECISIONS.md D047) splits the old
+ * single `execute` node into `execute -> validate`, and adds `closeResolved` (PASS) and `replan`
+ * (J5, PARTIAL/FAIL) after it: `replan` either closes via `closeEscalated`
+ * (`escalate_to_human`) or loops back to `resolve` (`retry_same_action`/`alternative_action`) or
+ * `plan` (`reinvestigate`). The fast path (`diagnose` -> `resolve` directly) never touches
+ * `plan`, the specialists, `join` or `groundCheck` -- unchanged by this task.
  */
 import { END, Send, START, StateGraph, type BaseCheckpointSaver } from '@langchain/langgraph';
 import { AGENT_NAMES, type AgentName } from '@payops/shared';
@@ -38,6 +41,9 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     .addNode('policyGate', nodes.policyGate)
     .addNode('awaitApproval', nodes.awaitApproval)
     .addNode('execute', nodes.execute)
+    .addNode('validate', nodes.validate)
+    .addNode('closeResolved', nodes.closeResolved)
+    .addNode('replan', nodes.replan)
     .addNode('closeBlocked', nodes.closeBlocked)
     .addNode('closeRejected', nodes.closeRejected)
     .addNode('closeEscalated', nodes.closeEscalated)
@@ -94,7 +100,34 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
       },
       { execute: 'execute', closeRejected: 'closeRejected', closeEscalated: 'closeEscalated' },
     )
-    .addEdge('execute', END)
+    // execute -> validate, except an execution failure (docs/03 §5): `execute` itself already
+    // closed and escalated in that case (see nodes.ts), so there is nothing left for `validate`
+    // to check -- `state.status` is the only signal since `execute`'s `PayOpsUpdate` return is
+    // otherwise indistinguishable from the success case at this point in the graph.
+    .addConditionalEdges(
+      'execute',
+      (state: PayOpsStateType) => (state.status === 'ESCALATED' ? END : 'validate'),
+      { validate: 'validate', [END]: END },
+    )
+    .addConditionalEdges(
+      'validate',
+      (state: PayOpsStateType) => (state.validation?.verdict === 'PASS' ? 'closeResolved' : 'replan'),
+      { closeResolved: 'closeResolved', replan: 'replan' },
+    )
+    // replan's three routes (docs/03 §13), derived from what `replan` already put in state
+    // rather than a separate "strategy" field (docs/DECISIONS.md D047): `status === 'ESCALATED'`
+    // is only ever set here for `escalate_to_human`; `diagnosis === null` only for
+    // `reinvestigate` (it deliberately clears a stale diagnosis); otherwise `retry_same_action`/
+    // `alternative_action`, which are the same route (a fresh proposal via `resolve`).
+    .addConditionalEdges(
+      'replan',
+      (state: PayOpsStateType) => {
+        if (state.status === 'ESCALATED') return 'closeEscalated';
+        return state.diagnosis === null ? 'plan' : 'resolve';
+      },
+      { closeEscalated: 'closeEscalated', plan: 'plan', resolve: 'resolve' },
+    )
+    .addEdge('closeResolved', END)
     .addEdge('closeBlocked', END)
     .addEdge('closeRejected', END)
     .addEdge('closeEscalated', END);

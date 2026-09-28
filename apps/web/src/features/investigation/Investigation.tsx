@@ -11,6 +11,7 @@ import { EvidenceRef, evidenceAnchor } from '../../ui/EvidenceRef';
 import { Section } from '../../ui/Section';
 import { Select } from '../../ui/Select';
 import { Skeleton } from '../../ui/Skeleton';
+import { Tabs } from '../../ui/Tabs';
 import { Tag } from '../../ui/Tag';
 import { cx } from '../../ui/cx';
 import { activeRun, useRuns, useRunSteps, useStartRun } from './api';
@@ -89,8 +90,41 @@ export function Investigation({ c }: { c: CaseDetail }) {
   );
 }
 
+/**
+ * Splits the flat step list into per-attempt groups (Phase 5 task 1, docs/06-phases.md: "attempt
+ * tabs in UI"). Steps carry no `attempt` field of their own -- a `replan` `NODE_COMPLETED` step
+ * is the one place the graph ever decides to go around again (retry_same_action /
+ * alternative_action -> `resolve`, reinvestigate -> `plan`; docs/03 §13), so it's the natural,
+ * derivable attempt boundary: everything up to and including it is one attempt, everything after
+ * starts the next. `replan` choosing `escalate_to_human` ends the run instead of starting a new
+ * attempt, but is indistinguishable from the other three outcomes at this point from the step
+ * list alone -- harmless here, since a trailing empty group is simply never produced (there are
+ * no more steps after the last one).
+ */
+function groupByAttempt(steps: AgentStepItem[]): AgentStepItem[][] {
+  const groups: AgentStepItem[][] = [[]];
+  for (const step of steps) {
+    groups[groups.length - 1]!.push(step);
+    if (step.node === 'replan' && step.kind === 'NODE_COMPLETED') groups.push([]);
+  }
+  return groups.filter((g) => g.length > 0);
+}
+
 export function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
+  const attempts = groupByAttempt(steps);
+  const [tab, setTab] = useState(String(attempts.length || 1));
   if (!steps.length) return <EmptyState message="Investigation queued. Waiting for the first step." />;
+  if (attempts.length <= 1) return <StepList steps={steps} run={run} />;
+  // A new attempt arriving over the socket should not strand the user on a vanished tab; land on
+  // the newest attempt by default, same pattern as ResolutionSection's `Attempts`.
+  const value = attempts.some((_, i) => String(i + 1) === tab) ? tab : String(attempts.length);
+  return <div className="pt-1">
+    <Tabs label="Investigation attempts" value={value} onChange={setTab}
+      tabs={attempts.map((group, i) => ({ value: String(i + 1), label: `Attempt ${i + 1}`, content: <StepList steps={group} run={run} /> }))} />
+  </div>;
+}
+
+function StepList({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
   return <ol className="max-h-[640px] overflow-y-auto">{steps.map((step) => {
     const finished = steps.some((s) => s.seq > step.seq && s.node === step.node && s.kind === 'NODE_COMPLETED');
     const status = step.kind === 'RUN_FAILED' ? 'FAILED' : step.kind === 'NODE_STARTED' && !finished

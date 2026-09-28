@@ -16,18 +16,20 @@
  * evidence to cite.
  */
 import { interrupt } from '@langchain/langgraph';
-import { agentWriteContext, choice, loadCaseState, noul, score, type CaseState } from '@payops/core';
+import { agentWriteContext, choice, loadCaseState, noul, score, type AttemptHistory, type CaseState } from '@payops/core';
 import {
   AGENT_BUDGET_LIMITS,
   AGENT_NAMES,
   zeroBudget,
   type AgentApprovalDecision,
   type AgentName,
+  type AttemptSummary,
   type Diagnosis,
   type EvidenceItem,
   type Finding,
   type GroundingReport,
   type InvestigationPlan,
+  type ReplanStrategy,
   type RiskAssessment,
   type RootCause,
   type RunStatus,
@@ -85,6 +87,22 @@ const PRIMARY_HYPOTHESIS_CRITERIA: Record<string, string> = {
   settlement_reconciliation: "A settlement batch's fees or net amount do not match what the ledger expects.",
   fraud_or_abuse: 'The velocity, device or identity signals on this payment look abusive rather than a data-sync issue.',
 };
+
+/** J5's `strategy` Choice (docs/03 §4 "J5", §13 "Replan loop"). */
+const REPLAN_STRATEGY_CRITERIA: Record<ReplanStrategy, string> = {
+  retry_same_action: 'The same action set should work if tried again -- the failure looks transient rather than a wrong choice.',
+  alternative_action: 'A different action set from the catalog would fix this case instead of the one just tried.',
+  reinvestigate: 'The diagnosis itself may be wrong; another investigation round is needed before proposing anything else.',
+  escalate_to_human: 'This needs a person to review rather than another automatic attempt.',
+};
+
+/** `AttemptSummary` (agent state) -> `AttemptHistory` (core recommendation input, docs/DECISIONS.md
+ * D047): every entry here was built by `replan`, which only ever runs after a validated attempt
+ * (an `execute` failure escalates directly, never reaching `replan`), so `status` is always
+ * `'VALIDATED'` by construction. */
+function toAttemptHistory(history: readonly AttemptSummary[]): AttemptHistory[] {
+  return history.map((h) => ({ actionTypes: h.actions.map((a) => a.type), status: 'VALIDATED', verdict: h.verdict }));
+}
 
 function evidenceFrom(existing: readonly EvidenceItem[], caseState: CaseState, tools: readonly ToolDef[], stepId: string): EvidenceItem[] {
   const created: EvidenceItem[] = [];
@@ -566,7 +584,7 @@ export function buildNodes(deps: AgentDeps) {
       await onEvent('resolve', 'FINDING_CREATED', { findingIds: [finding.id] });
     }
 
-    const proposal = buildProposal(diagnosis, caseState, []);
+    const proposal = buildProposal(diagnosis, caseState, toAttemptHistory(state.history));
     await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal });
     await onEvent('resolve', 'NODE_COMPLETED', {});
     return { diagnosis, proposal, findings, budget };
@@ -599,23 +617,103 @@ export function buildNodes(deps: AgentDeps) {
     return { approval: decided, status };
   }
 
+  /**
+   * Runs the proposal's actions only (docs/03 §5 "execute"). Phase 3-4 folded execute + validate
+   * + close into one `resolutions.finish()` call; Phase 5's replan loop (docs/03 §13, D047)
+   * needs to see the validator's verdict before deciding whether to close at all, so `execute`
+   * and `validate` are now separate nodes. An execution failure is unchanged from before: it
+   * still closes and escalates immediately here, without ever reaching `replan` -- only a
+   * validator PARTIAL/FAIL (validate node) is a "failure" `replan` reasons about (docs/03 §4 "J5":
+   * "attempt summary ... validator checks that failed").
+   */
   async function execute(state: PayOpsStateType): Promise<PayOpsUpdate> {
     await onEvent('execute', 'NODE_STARTED', { resolutionId: state.resolutionId });
     const write = agentWriteContext(state.caseId, state.runId);
-    const item = await core.resolutions.finish(state.resolutionId!, write, { onFailure: 'ESCALATE' });
-    await onEvent('execute', 'EXECUTION_STEP', { executions: item.executions });
-    await onEvent('execute', 'VALIDATION_COMPLETED', { validation: item.validation });
+    const { execution } = await core.resolutions.execute(state.resolutionId!, write);
+    await onEvent('execute', 'EXECUTION_STEP', { executions: execution.steps });
+    if (!execution.ok) {
+      await core.resolutions.closeExecutionFailed(state.resolutionId!, execution, write, { onFailure: 'ESCALATE' });
+      await onEvent('execute', 'RUN_COMPLETED', { status: 'ESCALATED' });
+      return { executions: execution.steps, status: 'ESCALATED' };
+    }
+    await onEvent('execute', 'NODE_COMPLETED', {});
+    return { executions: execution.steps };
+  }
+
+  /** Validates the executed resolution against fresh state (docs/03 §5 "validate"). Does not close. */
+  async function validate(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    await onEvent('validate', 'NODE_STARTED', { resolutionId: state.resolutionId });
+    const result = await core.resolutions.validate(state.resolutionId!);
+    const validation = { verdict: result.verdict, checks: result.checks };
+    await onEvent('validate', 'VALIDATION_COMPLETED', { validation });
+    await onEvent('validate', 'NODE_COMPLETED', {});
+    return { validation };
+  }
+
+  /** Verdict PASS: close the resolution and resolve (or escalate, if the proposal itself escalates). */
+  async function closeResolved(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    await onEvent('closeResolved', 'NODE_STARTED', {});
+    const write = agentWriteContext(state.caseId, state.runId);
+    await core.resolutions.closeValidated(state.resolutionId!, 'PASS', write, { onFailure: 'ESCALATE' });
     const escalates = (state.proposal?.actions ?? []).some((a) => a.type === 'ESCALATE_TO_HUMAN');
-    let status: RunStatus;
-    if (item.status === 'EXECUTION_FAILED') status = 'ESCALATED';
-    else if (item.validation?.verdict === 'PASS') status = escalates ? 'ESCALATED' : 'RESOLVED';
-    else status = 'ESCALATED';
-    await onEvent('execute', 'RUN_COMPLETED', { status });
-    return {
-      executions: item.executions,
-      validation: item.validation ? { verdict: item.validation.verdict, checks: item.validation.checks } : null,
-      status,
-    };
+    const status: RunStatus = escalates ? 'ESCALATED' : 'RESOLVED';
+    await onEvent('closeResolved', 'RUN_COMPLETED', { status });
+    return { status };
+  }
+
+  /**
+   * J5 (docs/03 §4 "J5", §13 "Replan loop"). Only reached after a PARTIAL/FAIL verdict; the
+   * current attempt's resolution is executed and validated but deliberately left un-closed by
+   * `validate` (D047) so the case doesn't look ESCALATED/OPEN before this decision is made.
+   * Code caps always win over Jev and never spend a call: the attempt cap
+   * (`AGENT_BUDGET_LIMITS.maxAttempts`) and a confidence floor of 0.5 both fall through to
+   * `escalate_to_human`, matching the J5 fallback in the adapter contract table.
+   */
+  async function replan(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    await onEvent('replan', 'NODE_STARTED', { attempt: state.attempt });
+    const validation = state.validation!;
+    const failedChecks = validation.checks.filter((c) => !c.pass).map((c) => c.id);
+    const validatorNotes = `Validator ${validation.verdict}: ${failedChecks.length ? failedChecks.join(', ') : 'an invariant'} failed on attempt ${state.attempt}.`;
+    const summary: AttemptSummary = { attempt: state.attempt, actions: state.proposal?.actions ?? [], failedChecks, validatorNotes, verdict: validation.verdict };
+
+    if (state.attempt >= AGENT_BUDGET_LIMITS.maxAttempts) {
+      await onEvent('replan', 'NODE_COMPLETED', { strategy: 'escalate_to_human', reason: 'attempt cap' });
+      return { history: [summary], status: 'ESCALATED' };
+    }
+
+    try {
+      const result = await decision.ask({
+        tag: 'J5_REPLAN',
+        state: { attempt: state.attempt, failedChecks, validatorNotes },
+        questions: { strategy: choice('What should happen next, given this attempt failed verification?', REPLAN_STRATEGY_CRITERIA) },
+      });
+      await onEvent('replan', 'DECISION_MADE', { tag: 'J5_REPLAN', answers: result.answers, usage: result.usage });
+      const budget = { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens };
+      // Confidence floor (docs/03 §4 "J5"): "Confidence < 0.5 → escalate_to_human", same as the
+      // attempt cap above -- code always overrides a low-confidence answer, never trusts it.
+      const strategy: ReplanStrategy = result.answers.strategy.confidence < 0.5 ? 'escalate_to_human' : result.answers.strategy.choice;
+      await onEvent('replan', 'NODE_COMPLETED', { strategy, confidence: result.answers.strategy.confidence });
+      if (strategy === 'escalate_to_human') {
+        return { history: [summary], status: 'ESCALATED', budget };
+      }
+      await onEvent('replan', 'RUN_REPLANNING', { strategy, nextAttempt: state.attempt + 1 });
+      if (strategy === 'reinvestigate') {
+        // A fresh investigation round: clear the stale diagnosis so `resolve` runs the full LLM
+        // diagnosis path again instead of reusing attempt 1's (possibly wrong) fast-path answer.
+        return { history: [summary], diagnosis: null, gaps: [], investigationRound: 0, budget };
+      }
+      // retry_same_action / alternative_action both go straight back to `resolve`. Both are the
+      // same code path today: `resolve` rebuilds the proposal from `recommendedTypes(state,
+      // history)` (core/actions/options.ts), which already alternates its own recommendation once
+      // a replay is seen to have failed before -- the strategy distinction matters to Jev's
+      // reasoning and to what's recorded in `history`, but not to a second branch in this node
+      // (see docs/DECISIONS.md D047).
+      return { history: [summary], budget };
+    } catch (err) {
+      // J5 fallback (docs/03 §4 "Jev adapter contract"): "escalate".
+      await onEvent('replan', 'NODE_COMPLETED', { strategy: 'escalate_to_human', fallback: true, error: err instanceof Error ? err.message : String(err) });
+      return { history: [summary], status: 'ESCALATED', budget: { ...zeroBudget(), jevCalls: 1 } };
+    }
   }
 
   async function closeBlocked(_state: PayOpsStateType): Promise<PayOpsUpdate> {
@@ -628,7 +726,18 @@ export function buildNodes(deps: AgentDeps) {
     return { status: 'REJECTED' };
   }
 
-  async function closeEscalated(_state: PayOpsStateType): Promise<PayOpsUpdate> {
+  /**
+   * Reached two ways (docs/03 §5): `awaitApproval`'s ESCALATE decision (that path's own service
+   * call already closed the resolution and case -- `state.validation` is still `null`, since
+   * `validate` never ran, so there is nothing more to close here), or `replan`'s
+   * `escalate_to_human` route (validate did run and left the current attempt un-closed on
+   * purpose -- close it now, the same way `closeResolved` closes a PASS).
+   */
+  async function closeEscalated(state: PayOpsStateType): Promise<PayOpsUpdate> {
+    if (state.validation) {
+      const write = agentWriteContext(state.caseId, state.runId);
+      await core.resolutions.closeValidated(state.resolutionId!, state.validation.verdict, write, { onFailure: 'ESCALATE' });
+    }
     await onEvent('close', 'RUN_COMPLETED', { status: 'ESCALATED' });
     return { status: 'ESCALATED' };
   }
@@ -647,6 +756,9 @@ export function buildNodes(deps: AgentDeps) {
     policyGate,
     awaitApproval,
     execute,
+    validate,
+    closeResolved,
+    replan,
     closeBlocked,
     closeRejected,
     closeEscalated,

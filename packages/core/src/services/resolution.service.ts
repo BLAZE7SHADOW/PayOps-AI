@@ -21,9 +21,10 @@ import {
   type ResolutionItem,
   type ResolutionStatus,
   type SessionUser,
+  type ValidationVerdict,
 } from '@payops/shared';
 import type { Db } from '../db/client';
-import type { CaseRow, ResolutionRow } from '../db/rows';
+import type { CaseRow, ResolutionRow, ValidationResultRow } from '../db/rows';
 import { approvals, cases, resolutions } from '../db/schema';
 import { AppError, notFound } from '../errors';
 import type { ClockPort } from '../ports/clock';
@@ -32,7 +33,7 @@ import type { PaymentGatewayPort } from '../ports/gateway';
 import { checkPreconditions } from '../actions/registry';
 import { loadCaseState } from '../actions/state';
 import type { CaseState } from '../actions/types';
-import type { ExecutorService } from '../execution/executor.service';
+import type { ExecutionOutcome, ExecutorService } from '../execution/executor.service';
 import { approverHint, evaluatePolicy } from '../policy/evaluate';
 import { riskTierFromRules } from '../policy/risk';
 import { isCaptured } from '../reconciliation/facts';
@@ -344,33 +345,64 @@ export class ResolutionService {
    * Execute → validate → close. Called for AUTO proposals and after an approval.
    * PASS resolves the case (or leaves it ESCALATED when the resolution escalated); PARTIAL, FAIL
    * and execution failures send it back to OPEN with the outcome visible on the resolution.
+   *
+   * Phase 5 (docs/DECISIONS.md D047) splits this into `execute`/`validate`/`closeExecutionFailed`/
+   * `closeValidated` so the agent graph's `replan` node (J5) can run execute → validate without
+   * closing, decide whether to retry before anyone sees a final outcome, and only close once a
+   * `replan` round actually ends (PASS, or `escalate_to_human`). `finish` itself is unchanged --
+   * still one call, still used by a person's proposal and by the pre-Phase-5 approval flow -- it
+   * is now just these same four steps composed with no decision point in between.
    */
   async finish(resolutionId: string, write: WriteContext, opts: { onFailure?: 'OPEN' | 'ESCALATE' } = {}): Promise<ResolutionItem> {
+    const { execution } = await this.execute(resolutionId, write);
+    if (!execution.ok) return this.closeExecutionFailed(resolutionId, execution, write, opts);
+    const validation = await this.validate(resolutionId);
+    return this.closeValidated(resolutionId, validation.verdict, write, opts);
+  }
+
+  /** Runs a resolution's actions. Does not validate or close -- callers decide what happens next. */
+  async execute(resolutionId: string, write: WriteContext): Promise<{ resolution: ResolutionRow; execution: ExecutionOutcome }> {
+    const resolution = await this.queries.row(resolutionId);
+    const ctx: WriteContext = { ...write, caseId: resolution.caseId, runId: resolution.runId };
+    const execution = await this.executor.execute(resolutionId, ctx);
+    return { resolution, execution };
+  }
+
+  /** Validates a resolution's outcome against fresh state. Does not close. */
+  async validate(resolutionId: string): Promise<ValidationResultRow> {
+    return this.validator.validate(resolutionId, VALIDATOR_CTX);
+  }
+
+  /** Closes a resolution whose execution itself failed (never validated). */
+  async closeExecutionFailed(resolutionId: string, execution: ExecutionOutcome, write: WriteContext, opts: { onFailure?: 'OPEN' | 'ESCALATE' } = {}): Promise<ResolutionItem> {
     const resolution = await this.queries.row(resolutionId);
     const ctx: WriteContext = { ...write, caseId: resolution.caseId, runId: resolution.runId };
     const onFailureStatus: 'OPEN' | 'ESCALATED' = opts.onFailure === 'ESCALATE' ? 'ESCALATED' : 'OPEN';
-    const execution = await this.executor.execute(resolutionId, ctx);
+    const failed = execution.steps.find((s) => s.status === 'FAILED');
+    const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
+    await this.close(resolution, 'EXECUTION_FAILED', onFailureStatus, `Execution failed at step ${(failed?.index ?? 0) + 1}: ${failed?.error?.message ?? 'unknown error'}. Case ${reopened}`, ctx, null);
+    await this.refreshDetection(resolution.caseId);
+    await this.publish(resolutionId, resolution.caseId);
+    return this.queries.item(resolutionId);
+  }
 
-    if (!execution.ok) {
-      const failed = execution.steps.find((s) => s.status === 'FAILED');
-      const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
-      await this.close(resolution, 'EXECUTION_FAILED', onFailureStatus, `Execution failed at step ${(failed?.index ?? 0) + 1}: ${failed?.error?.message ?? 'unknown error'}. Case ${reopened}`, ctx, null);
+  /** Closes a resolution that ran the validator (PASS resolves; PARTIAL/FAIL reopens or escalates). */
+  async closeValidated(resolutionId: string, verdict: ValidationVerdict, write: WriteContext, opts: { onFailure?: 'OPEN' | 'ESCALATE' } = {}): Promise<ResolutionItem> {
+    const resolution = await this.queries.row(resolutionId);
+    const ctx: WriteContext = { ...write, caseId: resolution.caseId, runId: resolution.runId };
+    const onFailureStatus: 'OPEN' | 'ESCALATED' = opts.onFailure === 'ESCALATE' ? 'ESCALATED' : 'OPEN';
+    const escalates = resolution.actions.some((a) => a.type === 'ESCALATE_TO_HUMAN');
+    const summary = `${actionsSummary(resolution.actions)}. Validator ${verdict} on attempt ${resolution.attempt}`;
+    if (verdict === 'PASS') {
+      await this.close(resolution, 'VALIDATED', escalates ? 'ESCALATED' : 'RESOLVED', summary, ctx, escalates ? null : {
+        by: resolution.proposedBy.type === 'AGENT' ? 'AGENT' : 'USER',
+        summary,
+        runId: resolution.runId,
+      });
     } else {
-      const validation = await this.validator.validate(resolutionId, VALIDATOR_CTX);
-      const escalates = resolution.actions.some((a) => a.type === 'ESCALATE_TO_HUMAN');
-      const summary = `${actionsSummary(resolution.actions)}. Validator ${validation.verdict} on attempt ${resolution.attempt}`;
-      if (validation.verdict === 'PASS') {
-        await this.close(resolution, 'VALIDATED', escalates ? 'ESCALATED' : 'RESOLVED', summary, ctx, escalates ? null : {
-          by: resolution.proposedBy.type === 'AGENT' ? 'AGENT' : 'USER',
-          summary,
-          runId: resolution.runId,
-        });
-      } else {
-        const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
-        await this.close(resolution, 'VALIDATED', onFailureStatus, `${summary}. Case ${reopened}`, ctx, null);
-      }
+      const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
+      await this.close(resolution, 'VALIDATED', onFailureStatus, `${summary}. Case ${reopened}`, ctx, null);
     }
-
     await this.refreshDetection(resolution.caseId);
     await this.publish(resolutionId, resolution.caseId);
     return this.queries.item(resolutionId);

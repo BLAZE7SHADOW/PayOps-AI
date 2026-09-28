@@ -88,6 +88,41 @@ describe('Trace: LLM call context size (docs/03 §8, Phase 4 "context sizes per 
   });
 });
 
+describe('Trace: attempt tabs (Phase 5 task 1, docs/06-phases.md "attempt tabs in UI")', () => {
+  it('renders a flat list, no tabs, when the run never replanned', () => {
+    render(<Trace run={baseRun} steps={[step({ seq: 1, node: 'loadCase', kind: 'NODE_STARTED' }), step({ seq: 2, node: 'loadCase', kind: 'NODE_COMPLETED' })]} />);
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getAllByText('loadCase')).toHaveLength(2);
+  });
+
+  it('splits into one tab per attempt at each replan NODE_COMPLETED boundary, defaulting to the newest', () => {
+    render(<Trace run={baseRun} steps={[
+      step({ seq: 1, node: 'execute', kind: 'NODE_STARTED' }),
+      step({ seq: 2, node: 'replan', kind: 'NODE_COMPLETED' }),
+      step({ seq: 3, node: 'resolve', kind: 'NODE_STARTED' }),
+    ]} />);
+    expect(screen.getByRole('tablist', { name: 'Investigation attempts' })).toBeInTheDocument();
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Attempt 1', 'Attempt 2']);
+    // Attempt 2 (the newest) is shown by default.
+    expect(screen.getByText('resolve')).toBeInTheDocument();
+    expect(screen.queryByText('execute')).not.toBeInTheDocument();
+  });
+
+  it('switching to attempt 1 shows that attempt\'s own steps', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<Trace run={baseRun} steps={[
+      step({ seq: 1, node: 'execute', kind: 'NODE_STARTED' }),
+      step({ seq: 2, node: 'replan', kind: 'NODE_COMPLETED' }),
+      step({ seq: 3, node: 'resolve', kind: 'NODE_STARTED' }),
+    ]} />);
+    await user.click(screen.getByRole('tab', { name: 'Attempt 1' }));
+    expect(screen.getByText('execute')).toBeInTheDocument();
+    expect(screen.queryByText('resolve')).not.toBeInTheDocument();
+  });
+});
+
 const ev01Finding: Finding = {
   id: 'fd_01',
   agent: 'payment',

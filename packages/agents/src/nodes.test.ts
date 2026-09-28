@@ -277,3 +277,76 @@ describe('diagnose: J6 fast-path diagnosis and its fallback (docs/03 §4a "J6", 
     expect(update.budget?.jevCalls).toBe(1);
   });
 });
+
+describe('replan: J5 replan strategy and its caps/fallback (docs/03 §4 "J5", §13)', () => {
+  const validation = { verdict: 'FAIL' as const, checks: [{ id: 'post.0', subject: 'order.status', description: 'Order paid', expected: 'PAID', actual: 'FAILED', pass: false, kind: 'POSTCONDITION' as const, actionIndex: 0 }] };
+  const proposal = { actions: [{ type: 'REPLAY_WEBHOOK_EVENT', params: {} }], rationale: 'r', expectedPostconditions: [] } as unknown as PayOpsStateType['proposal'];
+
+  function replanState(attempt: number, diagnosis: Partial<PayOpsStateType> = {}): PayOpsStateType {
+    return {
+      caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief,
+      attempt, validation, proposal, history: [],
+      diagnosis: { rootCause: 'WEBHOOK_PROCESSING_FAILURE', narrative: 'n', confidence: 0.9, supportingFindingIds: [], path: 'FAST' },
+      ...diagnosis,
+    } as unknown as PayOpsStateType;
+  }
+
+  const j5Decision = (choiceValue: string, confidence = 0.9): DecisionPort => ({
+    ask: vi.fn(async () => ({
+      answers: { strategy: { type: 'choice', choice: choiceValue, confidence, probabilities: {} } },
+      usage: { input_tokens: 8, output_tokens: 3 },
+    })) as unknown as DecisionPort['ask'],
+  });
+  const throwingDecision: DecisionPort = { ask: vi.fn(async () => { throw new Error('Jev timed out'); }) as unknown as DecisionPort['ask'] };
+
+  it('records the failed attempt in history no matter what strategy is chosen', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j5Decision('alternative_action'), onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.history).toEqual([{ attempt: 1, actions: proposal!.actions, failedChecks: ['post.0'], validatorNotes: expect.stringContaining('FAIL'), verdict: 'FAIL' }]);
+  });
+
+  it('retry_same_action / alternative_action leave diagnosis untouched so `resolve` reuses it', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j5Decision('alternative_action'), onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.status).toBeUndefined();
+    expect('diagnosis' in update).toBe(false);
+    expect(update.budget?.jevCalls).toBe(1);
+  });
+
+  it('reinvestigate clears the stale diagnosis and resets the investigation round', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j5Decision('reinvestigate'), onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.diagnosis).toBeNull();
+    expect(update.gaps).toEqual([]);
+    expect(update.investigationRound).toBe(0);
+    expect(update.status).toBeUndefined();
+  });
+
+  it('escalate_to_human sets status ESCALATED', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j5Decision('escalate_to_human'), onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.status).toBe('ESCALATED');
+  });
+
+  it('code cap: low confidence always escalates, ignoring the choice Jev actually made', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j5Decision('alternative_action', 0.2), onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.status).toBe('ESCALATED');
+  });
+
+  it('code cap: the attempt cap escalates without ever asking Jev', async () => {
+    const neverCalled: DecisionPort = { ask: vi.fn(async () => { throw new Error('J5 should never be asked once the attempt cap is spent'); }) as unknown as DecisionPort['ask'] };
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: neverCalled, onEvent: noopEvent });
+    const update = await nodes.replan(replanState(2)) as Partial<PayOpsStateType>;
+    expect(update.status).toBe('ESCALATED');
+    expect(neverCalled.ask).not.toHaveBeenCalled();
+  });
+
+  it('J5 fallback: Jev throwing escalates, never crashing the graph', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+    const update = await nodes.replan(replanState(1)) as Partial<PayOpsStateType>;
+    expect(update.status).toBe('ESCALATED');
+    expect(update.history).toHaveLength(1);
+    expect(update.budget?.jevCalls).toBe(1);
+  });
+});

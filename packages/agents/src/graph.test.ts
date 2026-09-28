@@ -3,7 +3,7 @@ import { Command, isInterrupted } from '@langchain/langgraph';
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { createCore, createDecisionPort, createLlmPort, tables, type Core, type DecisionPort, type LlmPort } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
-import { newId, type RootCause, type ScenarioKey } from '@payops/shared';
+import { newId, type ReplanStrategy, type RootCause, type ScenarioKey } from '@payops/shared';
 // Scenario writers are test fixtures here; the production agent never imports the simulator.
 import { generateScenario } from '../../simulator/src/index';
 import { buildGraph } from './graph';
@@ -13,11 +13,24 @@ let db: TestDatabase;
 let core: Core;
 let saver: PostgresSaver;
 const noLlm: LlmPort = { invokeStructured: vi.fn(async () => { throw new Error('Unexpected LLM call'); }) };
-const decision = (rootCause: RootCause, consistent = 0.99): DecisionPort => ({
-  ask: vi.fn(async () => ({
-    answers: { root_cause: { choice: rootCause, confidence: 0.99 }, evidence_consistent: { noul: consistent, confidence: 0.99 }, needs_human: { noul: 0, confidence: 0.99 } },
-    usage: { input_tokens: 10, output_tokens: 3 },
-  })) as unknown as DecisionPort['ask'],
+/**
+ * J6's diagnosis answer is fixed per test; J5's replan answer defaults to `escalate_to_human`
+ * (matching every pre-Phase-5 test's expectation of "fails once, stops") unless a test asks for
+ * a specific `replanStrategy` (docs/DECISIONS.md D047's `replay_fails_then_replan` scenario).
+ */
+const decision = (rootCause: RootCause, opts: { consistent?: number; replanStrategy?: ReplanStrategy } = {}): DecisionPort => ({
+  ask: vi.fn(async (req: { tag: string }) => {
+    if (req.tag === 'J5_REPLAN') {
+      return {
+        answers: { strategy: { choice: opts.replanStrategy ?? 'escalate_to_human', confidence: 0.9 } },
+        usage: { input_tokens: 10, output_tokens: 3 },
+      };
+    }
+    return {
+      answers: { root_cause: { choice: rootCause, confidence: 0.99 }, evidence_consistent: { noul: opts.consistent ?? 0.99, confidence: 0.99 }, needs_human: { noul: 0, confidence: 0.99 } },
+      usage: { input_tokens: 10, output_tokens: 3 },
+    };
+  }) as unknown as DecisionPort['ask'],
 });
 
 beforeAll(async () => {
@@ -28,12 +41,12 @@ beforeAll(async () => {
 });
 afterAll(async () => { await db?.close(); });
 
-async function run(scenario: ScenarioKey, rootCause: RootCause, seed: number) {
+async function run(scenario: ScenarioKey, rootCause: RootCause, seed: number, replanStrategy?: ReplanStrategy) {
   const generated = await generateScenario(core, { scenario, seed });
   const caseId = generated.casesOpened[0]!.id;
   const runId = newId('run');
   await createRunRow(core, { id: runId, caseId });
-  const deps = { core, llm: noLlm, decision: decision(rootCause), onEvent: createEventSink(core, runId, caseId) };
+  const deps = { core, llm: noLlm, decision: decision(rootCause, { replanStrategy }), onEvent: createEventSink(core, runId, caseId) };
   const config = { configurable: { thread_id: runId } };
   const graph = buildGraph(deps, saver);
   const result = await graph.invoke({ caseId, runId, aiMode: 'REPLAY' }, config);
@@ -74,11 +87,44 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
     expect(after.filter((s) => s.kind === 'PROPOSAL_CREATED')).toHaveLength(1);
   });
 
-  it('escalates a failed execution without replanning', async () => {
-    const { result } = await run('replay_fails_then_replan', 'WEBHOOK_PROCESSING_FAILURE', 704);
+  it('escalates a failed execution when J5 says escalate_to_human', async () => {
+    const { result } = await run('replay_fails_then_replan', 'WEBHOOK_PROCESSING_FAILURE', 704, 'escalate_to_human');
     expect(result.status).toBe('ESCALATED');
     expect(result.validation?.verdict).toBe('FAIL');
     expect(result.attempt).toBe(1);
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({ attempt: 1, verdict: 'FAIL' });
+  });
+
+  it('replans and resolves on attempt 2 (docs/03 §13)', async () => {
+    // Attempt 1 proposes REPLAY_WEBHOOK_EVENT -> validator FAIL (order still FAILED at the
+    // simulated version-conflict fault). J5 says alternative_action; `resolve` rebuilds the
+    // proposal with attempt 1 in `history`, which `recommendedTypes` (core/actions/options.ts)
+    // already turns into MARK_ORDER_PAID + POST_LEDGER_ENTRY once a replay has failed before ->
+    // attempt 2 validates PASS. Exactly docs/03 §13's demo scenario. This action set carries a
+    // higher policy tier than a plain replay, so attempt 2 pauses for approval first -- the same
+    // `interrupt`/resume path the "pauses a large refund" test above already exercises.
+    const run705 = await run('replay_fails_then_replan', 'WEBHOOK_PROCESSING_FAILURE', 705, 'alternative_action');
+    const { deps, config } = run705;
+    let result = run705.result;
+    expect(result.attempt).toBe(2);
+    expect(result.history).toHaveLength(1);
+    expect(result.history[0]).toMatchObject({ attempt: 1, verdict: 'FAIL', actions: [{ type: 'REPLAY_WEBHOOK_EVENT' }] });
+    expect(result.proposal?.actions.map((a: { type: string }) => a.type)).toEqual(['MARK_ORDER_PAID', 'POST_LEDGER_ENTRY']);
+    if (isInterrupted(result)) {
+      const manager = { id: 'usr_replan_manager', name: 'Replan manager', email: 'replan@payops.dev', role: 'MANAGER' as const };
+      await db.db.insert(tables.users).values({ ...manager, passwordHash: 'unused' }).onConflictDoNothing();
+      await core.approvals.decide(result.approvalId!, { decision: 'APPROVE', comment: '' }, manager);
+      result = await buildGraph(deps, new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' })).invoke(new Command({ resume: { approvalId: result.approvalId, decision: 'APPROVE', decidedBy: null, comment: null } }), config);
+    }
+    expect(result.status).toBe('RESOLVED');
+    expect(result.validation?.verdict).toBe('PASS');
+  });
+
+  it('asks J5 exactly once when attempt 2 already resolves', async () => {
+    const { deps } = await run('replay_fails_then_replan', 'WEBHOOK_PROCESSING_FAILURE', 706, 'alternative_action');
+    const j5Calls = (deps.decision.ask as unknown as { mock: { calls: [{ tag: string }][] } }).mock.calls.filter(([req]) => req.tag === 'J5_REPLAN');
+    expect(j5Calls).toHaveLength(1);
   });
 });
 
