@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { formatMoney, type AgentRunItem, type AgentStepItem, type CaseDetail, type Finding, type GroundingViolation } from '@payops/shared';
+import { CONTEXT_BUDGET, formatMoney, type AgentName, type AgentRunItem, type AgentStepItem, type CaseDetail, type Finding, type GroundingViolation } from '@payops/shared';
 import { formatDateTime, formatDecisionAnswer, statusLabel } from '../../lib/format';
 import { can } from '../../lib/permissions';
 import { useUser } from '../../lib/session';
@@ -100,6 +100,7 @@ export function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunIte
       <p className="mt-1 text-ink-2">{statusLabel(step.kind)} · <time dateTime={step.at} className="font-mono">{formatDateTime(step.at)}</time></p>
       {Array.isArray(step.payload.tools) ? <p className="mt-1 font-mono break-words">{step.payload.tools.join(', ')}</p> : null}
       {step.kind === 'DECISION_MADE' ? <DecisionSummary payload={step.payload} /> : null}
+      {step.kind === 'LLM_CALLED' ? <LlmCallSummary node={step.node} payload={step.payload} /> : null}
       {typeof step.payload.error === 'string' ? <p className="mt-1 break-words text-bad">{step.payload.error}</p> : null}
     </li>;
   })}</ol>;
@@ -120,6 +121,31 @@ function DecisionSummary({ payload }: { payload: Record<string, unknown> }) {
     {tag ? <p className="font-mono text-11 text-ink-2">{tag}</p> : null}
     {lines.length ? <ul className="mt-0.5 space-y-0.5">{lines.map((line, i) => <li key={i} className="font-mono text-12 break-words">{line}</li>)}</ul> : null}
   </div>;
+}
+
+const NODE_AGENT: Partial<Record<string, AgentName | 'resolve'>> = {
+  paymentAgent: 'payment',
+  reconciliationAgent: 'reconciliation',
+  riskAgent: 'risk',
+  resolve: 'resolve',
+};
+
+/**
+ * A model call's context size against its per-agent budget (docs/03 §8: "every built context is
+ * hashed and its token estimate stored on the agentStep. The Agent Runs screen shows context
+ * size per call" -- this is that screen, Phase 4's own "context sizes per call are visible and
+ * within budget" done-when check). Plain mono text, same density as DecisionSummary.
+ */
+function LlmCallSummary({ node, payload }: { node: string; payload: Record<string, unknown> }) {
+  const tokens = typeof payload.contextTokenEstimate === 'number' ? payload.contextTokenEstimate : null;
+  if (tokens === null) return null;
+  const agent = NODE_AGENT[node];
+  const budget = agent ? CONTEXT_BUDGET[agent] : undefined;
+  const over = budget !== undefined && tokens > budget;
+  const call = typeof payload.call === 'string' ? payload.call : 'call';
+  return <p className={cx('mt-1 font-mono text-11', over ? 'text-bad' : 'text-ink-2')}>
+    {call} context: {tokens.toLocaleString('en-IN')}{budget !== undefined ? ` / ${budget.toLocaleString('en-IN')} tok budget` : ' tok'}{over ? ' (over budget, sections dropped)' : ''}
+  </p>;
 }
 
 /**

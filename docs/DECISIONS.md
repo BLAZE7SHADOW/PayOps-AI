@@ -477,3 +477,40 @@ that run happens -- typechecked clean, and its logic mirrors already-passing tes
 enough (the REPLAY variant of the exact same three-scenario flow is `graph.test.ts`'s skipped
 suite) that the main remaining risk is real-world Gemini/Jev response shape drift since Phase 3's
 original recording, not a bug in the harness.
+
+## D046 · Closed two gaps against Phase 4's own "Done when" list before calling the phase done
+
+Cassette recording (task 9) ran successfully on Shivam's Mac via `pnpm cassette:record`
+(`npx pnpm@10.28.0` first, since `pnpm` wasn't yet on that machine's PATH -- corepack's global
+symlink step needed root the machine didn't have handy, `npx` sidesteps that entirely). All 3
+scenarios recorded `RESOLVED`/`PASS`; `refund_stuck`'s model diagnosis again names webhook
+delivery rather than the refund-status desync, the same caveat the original Phase 3 recording
+carried (grounding checks citation support, not causal truth -- expected, not a regression).
+Un-skipped the 3 `graph.test.ts` cassette-replay tests; `pnpm test` (379 passed) confirmed them
+green before this decision's own fixes were added.
+
+Before ticking Phase 4's checklist, ran its literal "Done when" list (docs/06-phases.md) against
+the actual test suite rather than assuming task-level "done" implied phase-level "done" -- found
+two real, if narrow, gaps:
+
+- **"Context sizes per call are visible and within budget"** was true in the database
+  (`contextTokenEstimate`/`contextHash` on every `LLM_CALLED` `agent_steps` row since task 4) but
+  not in the UI -- task 8's scope (Jev decisions + grounding status) never covered this line of
+  the doc, and nothing rendered it. Added `LlmCallSummary` to `Investigation.tsx`'s `Trace`:
+  one plain mono line per `LLM_CALLED` step, `<call> context: <tokens> / <budget> tok budget`,
+  looked up per node via `CONTEXT_BUDGET` (task 4, `packages/shared/src/agents.ts`) through a
+  small `NODE_AGENT` map (`paymentAgent`->`payment`, etc.); an over-budget call renders in
+  `--bad` with "(over budget, sections dropped)" rather than silently looking identical to one
+  within budget. 3 new tests in `Investigation.test.tsx`.
+- **"Every Jev decision point has a tested fallback path"**: J1 (signal-intake.service.test.ts),
+  J3 (risk.test.ts/nodes.test.ts), J4 (grounding.test.ts/nodes.test.ts) all already had this: a
+  mocked `DecisionPort` that throws, asserting the node still completes with the documented
+  fallback rather than crashing. J2 (`plan`'s fresh-J2-route branch -- the gap-targeted re-round
+  branch was already tested, but not the branch that actually calls Jev) and J6 (`diagnose`) had
+  **zero node-level tests at all**, in any phase -- only ever exercised indirectly through
+  `graph.test.ts`'s full-graph runs with a mocked `DecisionPort` that never throws. Added two new
+  `describe` blocks to `nodes.test.ts`: J2's confident-route and Jev-throws-falls-back-to-
+  `DEFAULT_ALL` cases, and J6's confident-FAST-path and Jev-throws-leaves-`diagnosis`-null cases.
+
+`pnpm typecheck`, `pnpm lint`, `pnpm test` (383 passed, 0 skipped) all clean after both fixes.
+Phase 4's "Done when" list is now true and verified, not just asserted.

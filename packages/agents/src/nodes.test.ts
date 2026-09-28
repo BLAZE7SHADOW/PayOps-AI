@@ -206,3 +206,74 @@ describe('plan: gap-targeted re-round (docs/03 §5 "groundCheck -> plan")', () =
     expect(neverCalled.ask).not.toHaveBeenCalled();
   });
 });
+
+describe('plan: fresh J2 routing and its fallback (docs/03 §4 "J2", "Jev adapter contract")', () => {
+  const j2Decision = (): DecisionPort => ({
+    ask: vi.fn(async () => ({
+      answers: {
+        primary_hypothesis: { type: 'choice', choice: 'webhook_or_state_sync', confidence: 0.9, probabilities: {} },
+        need_payment: { type: 'noul', noul: 0.9 },
+        need_reconciliation: { type: 'noul', noul: 0.1 },
+        need_risk: { type: 'noul', noul: 0.1 },
+      },
+      usage: { input_tokens: 15, output_tokens: 6 },
+    })) as unknown as DecisionPort['ask'],
+  });
+  const throwingDecision: DecisionPort = { ask: vi.fn(async () => { throw new Error('Jev timed out'); }) as unknown as DecisionPort['ask'] };
+
+  function freshState(): PayOpsStateType {
+    return { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief, gaps: [], investigationRound: 0 } as unknown as PayOpsStateType;
+  }
+
+  it('routes by J2 when Jev answers normally', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: j2Decision(), onEvent: noopEvent });
+    const update = await nodes.plan(freshState()) as Partial<PayOpsStateType>;
+    expect(update.investigationPlan).toMatchObject({ primaryHypothesis: 'webhook_or_state_sync', routedBy: 'JEV' });
+    expect(update.investigationPlan?.specialists).toContain('payment');
+    expect(update.investigationRound).toBe(1);
+    expect(update.budget?.jevCalls).toBe(1);
+  });
+
+  it('falls back to running every specialist, never crashing the graph, when Jev throws (J2 fallback)', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+    const update = await nodes.plan(freshState()) as Partial<PayOpsStateType>;
+    expect(update.investigationPlan).toMatchObject({ routedBy: 'DEFAULT_ALL' });
+    expect(update.investigationPlan?.specialists).toEqual(['payment', 'reconciliation', 'risk']);
+    expect(update.investigationRound).toBe(1);
+  });
+});
+
+describe('diagnose: J6 fast-path diagnosis and its fallback (docs/03 §4a "J6", "Jev adapter contract")', () => {
+  const fastEvidence: EvidenceItem[] = [
+    { id: 'ev_01', source: 'getWebhookDeliveries', system: 'WEBHOOK', entityRef: 'wh_a', observedAt: '2026-01-01T00:00:00Z', stepId: 'triage', facts: { finalStatus: 'FAILED', lastHttpStatus: 500 } },
+  ];
+  const confidentJ6 = (): DecisionPort => ({
+    ask: vi.fn(async () => ({
+      answers: {
+        root_cause: { type: 'choice', choice: 'WEBHOOK_PROCESSING_FAILURE', confidence: 0.95, probabilities: {} },
+        evidence_consistent: { type: 'noul', noul: 0.9 },
+        needs_human: { type: 'noul', noul: 0.1 },
+      },
+      usage: { input_tokens: 12, output_tokens: 4 },
+    })) as unknown as DecisionPort['ask'],
+  });
+  const throwingDecision: DecisionPort = { ask: vi.fn(async () => { throw new Error('Jev timed out'); }) as unknown as DecisionPort['ask'] };
+
+  function state(evidence: EvidenceItem[]): PayOpsStateType {
+    return { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief, evidence, findings: [] } as unknown as PayOpsStateType;
+  }
+
+  it('reaches the FAST path with no LLM call when Jev is confident and evidence supports the root cause', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: confidentJ6(), onEvent: noopEvent });
+    const update = await nodes.diagnose(state(fastEvidence)) as Partial<PayOpsStateType>;
+    expect(update.diagnosis).toMatchObject({ rootCause: 'WEBHOOK_PROCESSING_FAILURE', path: 'FAST' });
+    expect(update.budget?.jevCalls).toBe(1);
+  });
+
+  it('falls back to the FULL path (diagnosis left null), never crashing the graph, when Jev throws (J6 fallback)', async () => {
+    const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: throwingDecision, onEvent: noopEvent });
+    const update = await nodes.diagnose(state(fastEvidence)) as Partial<PayOpsStateType>;
+    expect(update.diagnosis).toBeNull();
+    expect(update.budget?.jevCalls).toBe(1);
+  });
+});

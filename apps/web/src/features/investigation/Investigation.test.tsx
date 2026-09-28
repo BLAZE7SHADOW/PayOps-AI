@@ -64,6 +64,30 @@ describe('Trace: Jev decisions (docs/03 §4, docs/05 §11)', () => {
   });
 });
 
+describe('Trace: LLM call context size (docs/03 §8, Phase 4 "context sizes per call are visible and within budget")', () => {
+  it('shows a within-budget call in the muted color', () => {
+    const { container } = render(<Trace run={baseRun} steps={[step({
+      node: 'paymentAgent', kind: 'LLM_CALLED', payload: { call: 'findings', contextTokenEstimate: 900 },
+    })]} />);
+    expect(screen.getByText('findings context: 900 / 1,800 tok budget')).toBeInTheDocument();
+    expect(container.querySelector('.text-bad')).not.toBeInTheDocument();
+  });
+
+  it('flags an over-budget call in --bad with a note that sections were dropped', () => {
+    render(<Trace run={baseRun} steps={[step({
+      node: 'paymentAgent', kind: 'LLM_CALLED', payload: { call: 'findings', contextTokenEstimate: 2500 },
+    })]} />);
+    const line = screen.getByText(/findings context: 2,500/);
+    expect(line).toHaveClass('text-bad');
+    expect(line).toHaveTextContent('(over budget, sections dropped)');
+  });
+
+  it('renders nothing when the payload has no token estimate', () => {
+    render(<Trace run={baseRun} steps={[step({ node: 'paymentAgent', kind: 'LLM_CALLED', payload: { call: 'findings' } })]} />);
+    expect(screen.queryByText(/context:/)).not.toBeInTheDocument();
+  });
+});
+
 const ev01Finding: Finding = {
   id: 'fd_01',
   agent: 'payment',

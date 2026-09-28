@@ -4,13 +4,14 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress, tasks 1-8 done, task 9 needs a person at a real terminal.**
-`pnpm typecheck`, `pnpm lint`, and `pnpm test` (373 passed, 3 intentionally skipped) are all
-clean. Task 9 (cassette recordings) has its tooling built and committed
-(`pnpm cassette:record`, D045) but could not be run from this cloud session: the sandboxed
-shell's network egress rejects both `generativelanguage.googleapis.com` and `api.typesafe.ai`
-(confirmed by a direct `curl` probe, not a guess). **This is the one remaining step to fully
-close Phase 4 -- see "Next task" below for exactly what to run.**
+**Phase 4 · complete.** All 9 tasks done; `pnpm cassette:record` ran successfully on Shivam's
+Mac (all 3 scenarios `RESOLVED`/`PASS`), the 3 `graph.test.ts` cassette-replay tests are
+un-skipped and green, and Phase 4's own literal "Done when" list (docs/06-phases.md) was checked
+criterion by criterion against the actual code and test suite rather than assumed from task-level
+completion -- this caught and closed two real gaps (context-size visibility in the UI, missing
+J2/J6 fallback tests; see D046). `pnpm typecheck`, `pnpm lint`, `pnpm test` (383 passed, 0
+skipped) all clean. **Start a new chat session for Phase 5** per this project's one-phase-per-chat
+rule -- read `CLAUDE.md` and this file at the top of that session.
 
 ## Phase checklist
 
@@ -18,33 +19,17 @@ close Phase 4 -- see "Next task" below for exactly what to run.**
 - [x] Phase 1 · Product core without AI
 - [x] Phase 2 · Resolution spine
 - [x] Phase 3 · First agent (resume-ready milestone)
-- [ ] Phase 4 · Multi-agent, context, evidence, Jev
+- [x] Phase 4 · Multi-agent, context, evidence, Jev
 - [ ] Phase 5 · Replan, evals, hardening
 - [ ] Phase 6 · Polish, public demo, deploy
 
 ## Next task
 
-**Run this on the Mac itself, in a normal Terminal (not through the Claude
-Cowork device bridge, whose network is more restricted than the Mac's own):**
-
-```
-pnpm cassette:record
-```
-
-That's `packages/agents/scripts/record-cassettes.ts` (D045) -- it regenerates all 3 scenario
-cassettes end to end (fresh ephemeral DB, real `AI_MODE=RECORD` Gemini + Jev calls, handles the
-`refund_never_initiated` manager-approval interrupt/resume, asserts each ends `RESOLVED`/`PASS`)
-using the real `.env` keys already on the Mac. It takes a few minutes and makes real, billed API
-calls. After it succeeds:
-
-1. Remove the `it.skip` in `packages/agents/src/graph.test.ts`'s "recorded Phase 3 scenarios"
-   describe block (currently `it.skip.each(...)`, with a comment pointing at this task) and run
-   `pnpm test` to confirm those 3 tests now pass in REPLAY against the freshly recorded
-   cassettes.
-2. Update `fixtures/cassettes/README.md`'s recording date/notes.
-3. Commit the 3 regenerated `.jsonl` files, the un-skipped test, and the README update together.
-4. Run Phase 4's own "Done when" list (docs/06-phases.md) literally and tick the phase checklist
-   below.
+**Phase 4 is done. Start a new chat session for Phase 5 (Replan loop, evals, hardening) per
+CLAUDE.md's one-phase-per-chat rule.** Read `docs/06-phases.md`'s Phase 5 section and
+`docs/DECISIONS.md`'s recent entries (D043-D046) first for full context on what Phase 4 actually
+built and the couple of documented known gaps (see "Known gaps" below) that were deliberately
+left for later phases.
 
 ## How to run locally
 
@@ -81,12 +66,13 @@ hitting the same rollup/esbuild "Cannot find module" error should redo this rath
 it as an unfixable blocker.
 
 The 10 test failures task 7's session found (real bugs in tasks 3-6's code, invisible until
-`pnpm test` could actually run) are fixed -- see D043 for the full account. `pnpm typecheck`,
-`pnpm lint`, and `pnpm test` (373 passed, 3 skipped) are all clean as of task 8's session as well.
-Intentionally still red-adjacent: 3 tests in `graph.test.ts` (`it.skip.each(...)`, "recorded
-Phase 3 scenarios") are skipped rather than fixed, because their cassette fixtures went stale
-across tasks 3-4's node renames/prompt rewrites and re-recording them needs `AI_MODE=RECORD`
-with real API keys -- that is Phase 4 task 9's job, the only task left in the phase.
+`pnpm test` could actually run) are fixed -- see D043 for the full account. All 3 cassette-replay
+tests in `graph.test.ts` are un-skipped and passing against cassettes re-recorded live on
+Shivam's Mac (D046). Also note: live API calls (Gemini/Jev) cannot be made from this cloud
+session's `device_bash` shell -- its network egress allowlist rejects both
+`generativelanguage.googleapis.com` and `api.typesafe.ai` (confirmed by direct `curl` probes,
+D045). Anything needing a real, non-cassette API call in a future phase needs to run on
+Shivam's Mac directly, same as task 9 did.
 
 ## Known gaps (deliberate, later phases)
 
@@ -115,6 +101,35 @@ with real API keys -- that is Phase 4 task 9's job, the only task left in the ph
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 4 complete: cassette recording succeeded, two Done-when gaps closed, phase verified
+- `pnpm cassette:record` ran successfully on Shivam's Mac (`npx pnpm@10.28.0 cassette:record`,
+  since plain `pnpm` wasn't on PATH there and `corepack enable`'s global symlink step needed root
+  the machine didn't have handy). All 3 scenarios recorded `RESOLVED`/`PASS`; `refund_stuck`'s
+  model diagnosis again names webhook delivery rather than the refund-status desync, the same
+  documented caveat the original Phase 3 recording carried (grounding checks citation support,
+  not causal truth -- expected, not a regression).
+- Un-skipped the 3 `graph.test.ts` "recorded Phase 3 scenarios" cassette-replay tests
+  (`it.skip.each` -> `it.each`); `pnpm test` confirmed them green against the fresh cassettes.
+  Rewrote `fixtures/cassettes/README.md` to document this Phase 4 re-recording.
+- Before ticking the phase checklist, ran Phase 4's own literal "Done when" list
+  (docs/06-phases.md) against the actual code and test suite rather than assuming task-level
+  "done" implied phase-level "done". Found and closed two real gaps (full account in D046):
+  - **Context sizes per call were not visible in the UI** (only in the database) -- added
+    `LlmCallSummary` to `Investigation.tsx`'s `Trace`, one line per `LLM_CALLED` step showing
+    `<call> context: <tokens> / <budget> tok budget`, flagging an over-budget call in `--bad`.
+    3 new tests in `Investigation.test.tsx`.
+  - **J2 (`plan`'s fresh Jev-routing branch) and J6 (`diagnose`) had zero node-level fallback
+    tests**, in any phase -- only ever exercised indirectly through `graph.test.ts`'s full-graph
+    runs with a `DecisionPort` mock that never throws. Added two new `describe` blocks to
+    `nodes.test.ts`: J2's confident-route + Jev-throws-falls-back-to-`DEFAULT_ALL` cases, J6's
+    confident-FAST-path + Jev-throws-leaves-`diagnosis`-null cases.
+- Verification: `pnpm typecheck`, `pnpm lint`, `pnpm test` (383 passed, 0 skipped) all clean.
+  All 9 Phase 4 tasks done; all of Phase 4's "Done when" criteria checked true against real code,
+  not just asserted. Phase 4 is complete.
+- Not done this session: nothing left in this phase. Next: start a new chat session for Phase 5
+  (Replan loop, evals, hardening) per the one-phase-per-chat rule.
+
 
 ### 2026-09-29 · Phase 4 task 9 attempt: recording tooling built, blocked on this session's network
 - Built `packages/agents/scripts/record-cassettes.ts` (`pnpm cassette:record`): regenerates all
