@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createCore, tables, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
 import type { EvidenceItem, Finding, GroundingReport } from '@payops/shared';
-import { createRunRow, listEvidence, listFindings, syncEvidenceAndFindings } from './store';
+import { createRunRow, getRunRow, listEvidence, listFindings, patchRunRow, syncEvidenceAndFindings } from './store';
 
 const { cases } = tables;
 
@@ -66,6 +66,21 @@ function fd(overrides: Partial<Finding>): Finding {
     ...overrides,
   };
 }
+
+describe('agentRuns.grounding (Phase 4 task 8, docs/DECISIONS.md D044)', () => {
+  it('defaults to null on creation and round-trips a real GroundingReport through patchRunRow', async () => {
+    const caseId = 'case_store_grounding';
+    const runId = 'run_store_grounding';
+    await seedCaseAndRun(caseId, runId);
+
+    expect((await getRunRow(core, runId))?.grounding).toBeNull();
+
+    const grounding: GroundingReport = { checked: 2, violations: [{ findingId: 'fd_02', reason: 'contradicted' }], sufficient: true };
+    await patchRunRow(core, runId, { grounding });
+
+    expect((await getRunRow(core, runId))?.grounding).toEqual(grounding);
+  });
+});
 
 describe('syncEvidenceAndFindings (docs/04-data-model.md, D042)', () => {
   it('writes one evidence row and one finding row, grounded true by default (never checked by J4)', async () => {

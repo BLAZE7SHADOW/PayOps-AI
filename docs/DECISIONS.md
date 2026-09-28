@@ -410,3 +410,40 @@ sufficient here -- neither catches a runtime graph-construction error or a wrong
 Whenever `pnpm test` becomes runnable in a session (check for the rollup workaround before
 assuming the known bridge issue still applies), run it before declaring a task done, even if the
 task's own new tests pass in isolation.
+
+## D044 · Task 8 UI: `agentRuns.grounding` column, dropped findings struck through (not colored `--bad`)
+
+Closed a real backend gap before this could be a pure UI task: `AgentRunItem` had `findings`
+and `evidence` but no `grounding` at all, and `agentRuns` had no `grounding` jsonb column --
+`groundCheck`'s `GroundingReport` (task 6) only ever reached the web app buried inside individual
+`agent_steps` payloads, not as a queryable field on the run. Added `agentRuns.grounding: jsonb`
+(migration `0004`), `syncRunRow` now writes `state.grounding` onto it same as the other jsonb
+columns, and `AgentRunItem.grounding: GroundingReport | null` round-trips it through
+`apps/server/src/routes/runs.ts`. Kept as one jsonb blob, not a normalized table: a run has at
+most one grounding report (unlike `agentFindings`/`evidence`, task 7's D042, which justified
+normalizing because a UI needs to query/join many rows). `apps/web/src/mocks/resolution.ts`'s
+fixtures were not touched -- `grounding` defaults to `null` there via the same "not present on
+this fixture" pattern already used for other optional `AgentRunItem` fields, confirmed by the
+mock-backed component tests still passing.
+
+Trace UI (`Investigation.tsx`): `DECISION_MADE` steps now render the Jev `tag` plus one line per
+answer (`formatDecisionAnswer` in `apps/web/src/lib/format.ts`, new), reading the Choice/Noul/
+Score shape by structural check (`answer.type`) rather than importing `@typesafe-ai/sdk`'s
+response types into `web`, which has no dependency on `core`/the SDK today and shouldn't gain one
+for three field reads. Kept dense, mono, one line per answer -- no badges, no JSON dump, per
+docs/05 §9's warning against decorating an AI-decision surface.
+
+Findings UI: a finding named by a `GroundingViolation` (matched by `findingId`) renders struck
+through (`line-through`) in `--ink-2` (the existing muted secondary-text color), with its
+`reason` shown underneath as plain text, and its evidence citations as plain mono `[ev_xx]`
+spans rather than clickable `EvidenceRef` links. Deliberately never `--bad` (the red/error
+color): docs/05's status colors are reserved for a live PASS/FAIL/MISMATCH verdict the reader
+needs to act on, and a dropped finding is an already-resolved past state ("the system decided
+not to trust this"), not an alarm. The evidence-citation decision (plain text, not a link) is a
+judgment call, not spec-mandated: a struck-through claim's evidence shouldn't invite the reader
+to click through as if the finding were still live.
+
+Verified against `docs/05-ui-design.md` §8 (copy: "Dropped: <reason>" is plain and specific, no
+hedging or hype) and §9 (no new badge/pill component invented for confidence or grounding
+status -- both render as plain mono text inline, consistent with every other status line already
+in the trace).

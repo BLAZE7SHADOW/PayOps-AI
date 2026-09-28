@@ -15,6 +15,7 @@ import {
   type Diagnosis,
   type EvidenceItem,
   type Finding,
+  type GroundingReport,
   type PolicyDecision,
   type ResolutionProposal,
   type RunBudget,
@@ -44,6 +45,16 @@ export const agentRuns = pgTable(
     diagnosis: jsonb().$type<Diagnosis | null>(),
     proposal: jsonb().$type<ResolutionProposal | null>(),
     policy: jsonb().$type<PolicyDecision | null>(),
+    /**
+     * The run's final J4 grounding report (docs/03 §4a "J4"), Phase 4 task 8. Set once
+     * `groundCheck` runs (full path only); stays null on the fast path, where `groundCheck` is
+     * never reached, and null for a run created before this column existed. The web trace reads
+     * this to strike through a dropped finding with its violation reason (docs/05 §9's "no
+     * loud red for a muted state" -- see D044). Kept as one jsonb blob rather than a second
+     * normalized table: a run has at most one grounding report, so there is nothing to query
+     * across rows the way `agentFindings`/`evidence` (task 7) justify normalizing for.
+     */
+    grounding: jsonb().$type<GroundingReport | null>(),
     error: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

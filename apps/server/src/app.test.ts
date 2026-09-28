@@ -2,15 +2,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import type { Express } from 'express';
 import type {
+  AgentRunItem,
   CaseDetail,
   CaseListItem,
   GenerateScenarioResult,
+  GroundingReport,
   OverviewMetrics,
   Page,
   PaymentDetail,
   PaymentListItem,
   AuditEventItem,
 } from '@payops/shared';
+import { createRunRow, patchRunRow } from '@payops/agents';
 import { createCore, createLogger, loadServerEnv, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
 import type { PgBoss } from 'pg-boss';
@@ -204,5 +207,23 @@ describe('overview and audit API', () => {
     const all = (await ops.get('/api/audit?limit=2').expect(200)).body as Page<AuditEventItem>;
     expect(all.items).toHaveLength(2);
     expect(all.nextCursor).not.toBeNull();
+  });
+});
+
+describe('agent runs API: grounding round-trips (Phase 4 task 8, docs/DECISIONS.md D044)', () => {
+  it('GET /api/runs/:id includes grounding: null until groundCheck has run, and the real report once it has', async () => {
+    const cases = (await ops.get('/api/cases?type=PAYMENT_MISMATCH').expect(200)).body as Page<CaseListItem>;
+    const caseId = cases.items[0]!.id;
+    const runId = 'run_grounding_apitest';
+    await createRunRow(core, { id: runId, caseId });
+
+    const fresh = (await ops.get(`/api/runs/${runId}`).expect(200)).body as AgentRunItem;
+    expect(fresh.grounding).toBeNull(); // fast path / not yet checked (docs/03 §4a)
+
+    const grounding: GroundingReport = { checked: 2, violations: [{ findingId: 'fd_02', reason: 'contradicted' }], sufficient: true };
+    await patchRunRow(core, runId, { grounding });
+
+    const checked = (await ops.get(`/api/runs/${runId}`).expect(200)).body as AgentRunItem;
+    expect(checked.grounding).toEqual(grounding);
   });
 });

@@ -1,7 +1,7 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { formatMoney, type AgentRunItem, type AgentStepItem, type CaseDetail } from '@payops/shared';
-import { formatDateTime, statusLabel } from '../../lib/format';
+import { formatMoney, type AgentRunItem, type AgentStepItem, type CaseDetail, type Finding, type GroundingViolation } from '@payops/shared';
+import { formatDateTime, formatDecisionAnswer, statusLabel } from '../../lib/format';
 import { can } from '../../lib/permissions';
 import { useUser } from '../../lib/session';
 import { Button } from '../../ui/Button';
@@ -58,7 +58,7 @@ export function Investigation({ c }: { c: CaseDetail }) {
           <Section title="Findings & resolution" titleId="findings-title" className="border-t border-rule xl:border-t-0 xl:border-l" bodyClassName="space-y-4 p-4 text-13">
             {runs.isPending ? <InvestigationSkeleton /> : !run?.diagnosis ? <p className="text-ink-2">{run ? 'Collecting evidence. Findings appear when the investigation completes.' : 'No findings yet.'}</p> : <>
               <div><h3 className="mb-1 font-semibold">Root cause</h3><p>{narrative(run.diagnosis.narrative)}</p></div>
-              {run.findings.map((finding) => <p key={finding.id}>{finding.statement}{' '}{finding.evidenceIds.map((id) => <Fragment key={id}>{citation(id)}{' '}</Fragment>)}</p>)}
+              {run.findings.map((finding) => <FindingLine key={finding.id} finding={finding} violation={run.grounding?.violations.find((v) => v.findingId === finding.id) ?? null} citation={citation} />)}
               {run.proposal ? <div className="space-y-2 border-t border-rule pt-3">
                 <h3 className="font-semibold">Proposed resolution</h3>
                 <ol className="list-decimal space-y-2 pl-5">{run.proposal.actions.map((action, i) => <li key={i} className="font-mono text-12 break-words">{action.type}{'amountMinor' in action.params ? ` · ${formatMoney(action.params.amountMinor)}` : ''}</li>)}</ol>
@@ -89,7 +89,7 @@ export function Investigation({ c }: { c: CaseDetail }) {
   );
 }
 
-function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
+export function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
   if (!steps.length) return <EmptyState message="Investigation queued. Waiting for the first step." />;
   return <ol className="max-h-[640px] overflow-y-auto">{steps.map((step) => {
     const finished = steps.some((s) => s.seq > step.seq && s.node === step.node && s.kind === 'NODE_COMPLETED');
@@ -99,9 +99,51 @@ function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
       <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-ink-2">{String(step.seq).padStart(2, '0')}</span><span className="font-mono">{step.node}</span><Tag tone={status === 'FAILED' ? 'bad' : 'neutral'}>{status}</Tag></div>
       <p className="mt-1 text-ink-2">{statusLabel(step.kind)} · <time dateTime={step.at} className="font-mono">{formatDateTime(step.at)}</time></p>
       {Array.isArray(step.payload.tools) ? <p className="mt-1 font-mono break-words">{step.payload.tools.join(', ')}</p> : null}
+      {step.kind === 'DECISION_MADE' ? <DecisionSummary payload={step.payload} /> : null}
       {typeof step.payload.error === 'string' ? <p className="mt-1 break-words text-bad">{step.payload.error}</p> : null}
     </li>;
   })}</ol>;
+}
+
+/**
+ * A Jev decision point in the trace (docs/03 §4 J1-J6, docs/05 §11 case screen mockup:
+ * "plan · primary: webhook_or_state_sync · conf 0.82"). One line per answer, dense and mono --
+ * this is the "AI decision" surface the doc's §9 tells warn against dressing up with badges or
+ * a wall of JSON, so it stays plain text like every other status line in the trace.
+ */
+function DecisionSummary({ payload }: { payload: Record<string, unknown> }) {
+  const tag = typeof payload.tag === 'string' ? payload.tag : null;
+  const answers = payload.answers && typeof payload.answers === 'object' ? payload.answers as Record<string, unknown> : {};
+  const lines = Object.entries(answers).map(([key, answer]) => formatDecisionAnswer(key, answer)).filter((line): line is string => line !== null);
+  if (!tag && lines.length === 0) return null;
+  return <div className="mt-1">
+    {tag ? <p className="font-mono text-11 text-ink-2">{tag}</p> : null}
+    {lines.length ? <ul className="mt-0.5 space-y-0.5">{lines.map((line, i) => <li key={i} className="font-mono text-12 break-words">{line}</li>)}</ul> : null}
+  </div>;
+}
+
+/**
+ * One finding's statement plus its evidence citations (docs/05 §11). A finding named by a J4
+ * `GroundingViolation` (Phase 4 task 8) is shown struck through in the muted secondary text
+ * color, never `--bad` -- the doc's status colors are reserved for a live PASS/FAIL/MISMATCH
+ * meaning, not for "this claim was dropped", which is a calmer, already-resolved state (see
+ * docs/DECISIONS.md D044). Its citations are plain mono text, not links: a dropped claim isn't
+ * something the reader should be invited to click through to evidence as if it were live.
+ */
+export function FindingLine({ finding, violation, citation }: {
+  finding: Finding;
+  violation: GroundingViolation | null;
+  citation: (id: string) => ReactNode;
+}) {
+  return <div>
+    <p className={violation ? 'text-ink-2 line-through' : undefined}>
+      {finding.statement}{' '}
+      {finding.evidenceIds.map((id) => violation
+        ? <span key={id} className="mr-1 font-mono text-12 text-ink-3">[{id}]</span>
+        : <Fragment key={id}>{citation(id)}{' '}</Fragment>)}
+    </p>
+    {violation ? <p className="text-12 text-ink-2">Dropped: {violation.reason}</p> : null}
+  </div>;
 }
 
 export function InvestigationSkeleton() {

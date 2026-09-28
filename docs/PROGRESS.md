@@ -4,13 +4,12 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-7 (Jev adapter, J1 signal
+**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-8 (Jev adapter, J1 signal
 intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, Risk specialist +
-J3 atomic scores + weighted tier, `groundCheck` + J4 structural/semantic grounding, and
-`agent_findings`/`evidence` persistence) are done. The 4 real regressions from tasks 3-6 that
-task 7's session found (see D043) are now fixed -- `pnpm typecheck`, `pnpm lint`, and `pnpm test`
-(365 passed, 3 intentionally skipped pending task 9) are all clean. The rest of Phase 4 (UI
-decision/grounding trace -- task 8, cassette recordings -- task 9) is not started.
+J3 atomic scores + weighted tier, `groundCheck` + J4 structural/semantic grounding,
+`agent_findings`/`evidence` persistence, and the UI decision/grounding trace) are done.
+`pnpm typecheck`, `pnpm lint`, and `pnpm test` (373 passed, 3 intentionally skipped pending task
+9) are all clean. Only Phase 4 task 9 (cassette recordings) is left.
 
 ## Phase checklist
 
@@ -24,16 +23,18 @@ decision/grounding trace -- task 8, cassette recordings -- task 9) is not starte
 
 ## Next task
 
-Phase 4 task 8: UI -- Jev decisions in the trace with confidence; grounding status on each
-finding; dropped findings shown struck through with the reason (docs/06-phases.md Phase 4 task
-8, docs/05-ui-design.md for UI rules). `agent_findings`/`evidence` persistence (task 7) is done
--- `agentFindings`/`evidence` rows are populated per run and idempotently upserted, so task 8
-can query/join them directly. The graph itself is now confirmed to actually construct and run
-end to end (see D043 -- it could not before, due to the `plan` node/state-channel collision).
-After task 8: cassette recordings (task 9), including re-recording the 3 scenarios currently
-`it.skip`-ped in `graph.test.ts` (`captured_order_failed`, `refund_stuck`,
-`refund_never_initiated`) whose cassettes went stale across tasks 3-4's node renames and prompt
-rewrites.
+Phase 4 task 9 (the last task of the phase): record cassettes for all scenarios
+(docs/06-phases.md Phase 4 task 9). This needs `AI_MODE=RECORD` with real `GEMINI_API_KEY`/
+`TYPESAFE_JEV_API_KEY` values against a running local server -- not available in this cloud
+session (see Secrets in CLAUDE.md: `.env` exists locally with real keys, never read/printed
+here). Concretely: run each seeded scenario once with `AI_MODE=RECORD`, which (per docs/03 §14)
+should write cassette files keyed by `{node, callIndex, prompt}` that REPLAY then reads back
+deterministically. This also finally resolves the 3 `it.skip.each(...)` tests in
+`graph.test.ts` ("recorded Phase 3 scenarios") -- their existing cassettes are stale from tasks
+3-4's node renames (`investigate` -> `paymentAgent`/`reconciliationAgent`/`riskAgent`) and
+ContextBuilder prompt rewrites; re-recording and un-skipping those 3 tests is this task's own
+"done when" check. After task 9, Phase 4's own "Done when" list (docs/06-phases.md) should be
+run literally and the phase checklist below updated to `[x]`.
 
 ## How to run locally
 
@@ -71,11 +72,11 @@ it as an unfixable blocker.
 
 The 10 test failures task 7's session found (real bugs in tasks 3-6's code, invisible until
 `pnpm test` could actually run) are fixed -- see D043 for the full account. `pnpm typecheck`,
-`pnpm lint`, and `pnpm test` (365 passed, 3 skipped) are all clean as of this session.
+`pnpm lint`, and `pnpm test` (373 passed, 3 skipped) are all clean as of task 8's session as well.
 Intentionally still red-adjacent: 3 tests in `graph.test.ts` (`it.skip.each(...)`, "recorded
 Phase 3 scenarios") are skipped rather than fixed, because their cassette fixtures went stale
 across tasks 3-4's node renames/prompt rewrites and re-recording them needs `AI_MODE=RECORD`
-with real API keys -- that is Phase 4 task 9's job, not a blocker on task 8.
+with real API keys -- that is Phase 4 task 9's job, the only task left in the phase.
 
 ## Known gaps (deliberate, later phases)
 
@@ -104,6 +105,33 @@ with real API keys -- that is Phase 4 task 9's job, not a blocker on task 8.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 4 task 8: UI decision/grounding trace (closes out the phase but task 9)
+- Closed a backend gap first: `agentRuns` had no `grounding` jsonb column and `AgentRunItem` had
+  no `grounding` field at all, so `groundCheck`'s `GroundingReport` (task 6) never reached the
+  web app except buried in individual `agent_steps` payloads. Added the column (migration
+  `0004`), `syncRunRow` now persists `state.grounding`, and `apps/server/src/routes/runs.ts`
+  round-trips it through `AgentRunItem.grounding: GroundingReport | null`.
+- `apps/web/src/features/investigation/Investigation.tsx`: `Trace`'s `DECISION_MADE` steps now
+  render the Jev tag and one line per answer via new `formatDecisionAnswer`/`formatConfidence`
+  helpers (`apps/web/src/lib/format.ts`) -- Choice/Noul/Score read structurally, no new
+  dependency on `@typesafe-ai/sdk` from `web`. New `FindingLine` component: a finding named by a
+  `GroundingViolation` (matched by `findingId` against `run.grounding.violations`) renders
+  struck through in the existing muted `--ink-2` color (never `--bad` -- that's reserved for
+  live verdicts, not an already-resolved drop) with its reason shown underneath, and its
+  citations as plain mono text rather than clickable evidence links.
+- Tests: `Investigation.test.tsx` (new, 6 tests) covers Choice/Noul/Score answer formatting, the
+  no-`DECISION_MADE`-payload no-op case, a surviving finding's normal/clickable rendering, and a
+  dropped finding's strikethrough/reason/non-clickable-citation/never-`--bad` rendering.
+  `apps/server/src/app.test.ts` gained a round-trip assertion that `grounding` reaches the API.
+- Verification: `pnpm typecheck`, `pnpm lint`, `pnpm test` (373 passed, 3 skipped) all clean.
+  Checked against `docs/05-ui-design.md` §8 (plain copy: "Dropped: <reason>") and §9 (no new
+  badge/pill invented for confidence or grounding status -- both are plain mono text inline,
+  matching every other status line already in the trace). See D044 for the full account.
+- Not done this session: Phase 4 task 9 (cassette recordings) -- the only task left in the
+  phase; needs `AI_MODE=RECORD` with real API keys this environment doesn't have. Also un-skips
+  the 3 `graph.test.ts` "recorded Phase 3 scenarios" tests once cassettes are re-recorded.
+
 
 ### 2026-09-28 · Fixed the 4 real regressions pnpm test surfaced from tasks 3-6 (see D043)
 - Renamed the `plan` state channel to `investigationPlan` in `state.ts`/`nodes.ts`/`graph.ts`

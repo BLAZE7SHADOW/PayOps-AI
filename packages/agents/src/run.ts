@@ -59,6 +59,7 @@ async function syncRunRow(core: Core, runId: string, caseId: string, state: Part
     diagnosis: state.diagnosis ?? null,
     proposal: state.proposal ?? null,
     policy: state.policy ?? null,
+    grounding: state.grounding ?? null,
     finishedAt: interrupted ? null : core.clock.now(),
   });
   await syncEvidenceAndFindings(core, runId, caseId, {

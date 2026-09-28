@@ -42,6 +42,7 @@ async function toRunItem(core: Core, row: typeof agentRuns.$inferSelect): Promis
     validation,
     findings: row.findings,
     evidence: row.evidence,
+    grounding: row.grounding,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,

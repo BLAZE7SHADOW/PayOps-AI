@@ -278,6 +278,9 @@ export interface AgentRunItem {
   validation: { verdict: ValidationVerdict; checks: ValidationCheck[] } | null;
   findings: Finding[];
   evidence: EvidenceItem[];
+  /** J4's final report for this run (docs/03 §4a "J4"), Phase 4 task 8. Null on the fast path
+   * (groundCheck never runs) and for runs recorded before this field existed. */
+  grounding: GroundingReport | null;
   createdAt: string;
   updatedAt: string;
   finishedAt: string | null;

@@ -26,6 +26,7 @@ export async function createRunRow(core: Core, input: { id: string; caseId: stri
     diagnosis: null,
     proposal: null,
     policy: null,
+    grounding: null,
     createdAt: now,
     updatedAt: now,
   });
@@ -44,6 +45,7 @@ export interface RunPatch {
   diagnosis?: unknown;
   proposal?: unknown;
   policy?: unknown;
+  grounding?: unknown;
   error?: string | null;
   finishedAt?: Date | null;
 }
