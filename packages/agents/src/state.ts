@@ -47,7 +47,7 @@ export const PayOpsState = Annotation.Root({
   entityRefs: Annotation<EntityRefs>({ reducer: (_, b) => b, default: () => ({}) }),
 
   // planning (Phase 4)
-  plan: Annotation<InvestigationPlan | null>({ reducer: (_, b) => b, default: () => null }),
+  investigationPlan: Annotation<InvestigationPlan | null>({ reducer: (_, b) => b, default: () => null }),
   investigationRound: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
   gaps: Annotation<EvidenceGap[]>({ reducer: (_, b) => b, default: () => [] }),
 

@@ -355,3 +355,58 @@ Phase 4 task 7 (docs/04-data-model.md's `agent_findings`/`evidence` rows).
   `agent_steps` independently in a later phase without cascading into evidence. Left as a
   same-shaped text column instead, matching how `agentRuns.approvalId` (agents.ts) already omits
   a `.references()` for a similar reason.
+
+## D043 · `pnpm test` finally ran end to end in this cloud bridge and surfaced four real regressions from tasks 3–6
+
+Every session from task 3 through task 7 could only run `pnpm typecheck`/`pnpm lint` in this cloud
+bridge (`pnpm test` failed with a missing `@rollup/rollup-linux-arm64-gnu` native binary,
+documented repeatedly in `docs/PROGRESS.md` Blockers). Task 7's session found a workaround and ran
+the full suite for the first time since task 3 -- which had never actually been exercised end to
+end. It surfaced ten failures; four were real bugs, fixed directly in this session rather than as
+a new task, since they blocked confidence in everything already built this phase:
+
+- **`plan` was used as both a state channel name and a node name** (`state.ts`'s
+  `plan: Annotation<InvestigationPlan | null>` vs. `graph.ts`'s `.addNode('plan', nodes.plan)`).
+  LangGraph forbids this and threw `"plan is already being used as a state attribute ... cannot
+  also be used as a node name"` on every `buildGraph()` call -- meaning the entire full-path graph
+  (`plan` → specialists → `join` → `groundCheck` → `resolve`) has been unable to construct at all
+  since task 3, only invisible because `graph.test.ts` never ran. Fixed by renaming the state
+  channel to `investigationPlan` (matching `InvestigationPlan`'s own type name, and the sibling
+  `investigationRound`/`gaps` fields); the node keeps its doc-given name `plan`.
+- **`riskAgent`'s return shape didn't match its own test's expectations** for whether `findings`
+  and `budget.llmCalls` should be present when Jev is confident and the LLM fallback never runs.
+  Resolved in favour of a clear rule, not just chasing the test: `findings` is only included in
+  the node's `PayOpsUpdate` when the LLM fallback path actually ran (even if every candidate
+  finding was then dropped by structural grounding -- an empty array, not an absent key); `budget`
+  is always a complete `RunBudget` with real `0`s (matching `zeroBudget()` and every other node in
+  this codebase), never a partially-absent object, so the test's `toBeUndefined()` on
+  `budget.llmCalls` was the wrong expectation and was corrected to `toBe(0)` instead.
+- **`context.test.ts`'s two `applyBudget`/scoping failures were test bugs, not implementation
+  bugs.** The budget-threshold test hand-recomputed `draftText`'s output without rendering the
+  evidence slice or filtering empty sections, so its computed budget window didn't match what
+  `applyBudget` actually measures -- fixed by reproducing `draftText`'s real join formula in the
+  test. The scoping test asserted the reconciliation specialist's context never contains the
+  literal string `"ev_02"`, which collided with `SYSTEM_PROMPT`'s own hardcoded citation example
+  (`Cite evidence ids exactly as given (e.g. "ev_02")`) -- an accidental match between a prompt
+  example and a test fixture's evidence id, not a real evidence leak. Changed the example to
+  `"ev_00"`, which no fixture in this codebase uses.
+- **`graph.test.ts`'s fast-path tool-call count (`toolCalls: 7`) was stale.** `triage` runs every
+  baseline tool; task 5 added four Risk baseline tools, so the real count became 11. Updated the
+  assertion with a comment explaining why.
+
+Also found, and left **unfixed as scoped, pre-existing work for task 9**: the three "recorded
+Phase 3 scenarios" replay tests (`captured_order_failed`, `refund_stuck`, `refund_never_initiated`)
+now `ReplayMissError` on every cassette lookup. Task 3 renamed `investigate` to
+`paymentAgent`/`reconciliationAgent`/`riskAgent` and task 4 rewrote every prompt's exact text
+(`ContextBuilder`); the cassette key is a hash of `{node, callIndex, prompt}`, so both changes
+independently invalidate every recorded entry. Re-recording cassettes is Phase 4 task 9 by design
+("Record cassettes for all scenarios") and needs `AI_MODE=RECORD` with real API keys, which this
+environment does not have -- so the three tests are marked `it.skip.each(...)` with a comment
+pointing at task 9, rather than left silently red or deleted. Whoever picks up task 9 should
+remove the skip once cassettes are re-recorded.
+
+**Lesson for future sessions:** `pnpm typecheck && pnpm lint` clean is necessary but was not
+sufficient here -- neither catches a runtime graph-construction error or a wrong test assertion.
+Whenever `pnpm test` becomes runnable in a session (check for the rollup workaround before
+assuming the known bridge issue still applies), run it before declaring a task done, even if the
+task's own new tests pass in isolation.

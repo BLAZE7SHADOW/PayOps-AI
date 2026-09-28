@@ -76,9 +76,12 @@ describe('applyBudget (docs/03 §8 drop order [5] -> [4] -> oldest evidence)', (
   });
 
   it('drops history first, before touching peers or evidence', () => {
+    // Matches applyBudget's internal draftText: slice rendered as its joined text, empty
+    // sections (history='') dropped from the join entirely rather than left as ''.
+    const sliceText = draft.slice.map((s) => s.text).join('\n');
     // Budget below the full draft's size but comfortably above the draft with history removed.
-    const full = estimateTokens([draft.prefix, draft.brief, draft.sliceHeader, draft.peers, draft.history, draft.task].join('\n\n'));
-    const withoutHistory = estimateTokens([draft.prefix, draft.brief, draft.sliceHeader, draft.peers, draft.task].join('\n\n'));
+    const full = estimateTokens([draft.prefix, draft.brief, draft.sliceHeader, sliceText, draft.peers, draft.history, draft.task].join('\n\n'));
+    const withoutHistory = estimateTokens([draft.prefix, draft.brief, draft.sliceHeader, sliceText, draft.peers, draft.task].join('\n\n'));
     const budget = Math.floor((full + withoutHistory) / 2);
     const result = applyBudget(draft, budget);
     expect(result.droppedHistory).toBe(true);

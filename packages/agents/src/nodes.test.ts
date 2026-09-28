@@ -68,7 +68,7 @@ describe('riskAgent (docs/03 §4 "J3", §5 node table)', () => {
     expect(update.risk?.meanConfidence).toBeCloseTo(0.95);
     expect(update.findings).toBeUndefined();
     expect(update.budget?.jevCalls).toBe(1);
-    expect(update.budget?.llmCalls).toBeUndefined();
+    expect(update.budget?.llmCalls).toBe(0);
   });
 
   it('falls through to one LLM findings call when Jev\'s mean confidence is under 0.5', async () => {
@@ -199,9 +199,9 @@ describe('plan: gap-targeted re-round (docs/03 §5 "groundCheck -> plan")', () =
     const priorPlan: InvestigationPlan = { primaryHypothesis: 'webhook_or_state_sync', specialists: ['payment', 'reconciliation', 'risk'], routedBy: 'JEV', confidence: 0.9 };
     const neverCalled: DecisionPort = { ask: vi.fn(async () => { throw new Error('J2 should never be asked on a targeted re-round'); }) as unknown as DecisionPort['ask'] };
     const nodes = buildNodes({ core: {} as Core, llm: failingLlm, decision: neverCalled, onEvent: noopEvent });
-    const state = { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief, plan: priorPlan, gaps: [{ agent: 'payment', reason: 'payment ran but has no findings that survived grounding' }], investigationRound: 1 } as unknown as PayOpsStateType;
+    const state = { caseId: 'case_a', runId: 'run_a', aiMode: 'REPLAY', case: brief, investigationPlan: priorPlan, gaps: [{ agent: 'payment', reason: 'payment ran but has no findings that survived grounding' }], investigationRound: 1 } as unknown as PayOpsStateType;
     const update = await nodes.plan(state) as Partial<PayOpsStateType>;
-    expect(update.plan).toMatchObject({ specialists: ['payment'], routedBy: 'GAP_TARGETED' });
+    expect(update.investigationPlan).toMatchObject({ specialists: ['payment'], routedBy: 'GAP_TARGETED' });
     expect(update.investigationRound).toBe(2);
     expect(neverCalled.ask).not.toHaveBeenCalled();
   });

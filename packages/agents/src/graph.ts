@@ -54,7 +54,7 @@ export function buildGraph(deps: AgentDeps, checkpointer: BaseCheckpointSaver) {
     .addConditionalEdges(
       'plan',
       (state: PayOpsStateType) => {
-        const specialists = state.plan?.specialists ?? [...AGENT_NAMES];
+        const specialists = state.investigationPlan?.specialists ?? [...AGENT_NAMES];
         return specialists.map((s) => new Send(SPECIALIST_NODE[s], state));
       },
       ['paymentAgent', 'reconciliationAgent', 'riskAgent'],

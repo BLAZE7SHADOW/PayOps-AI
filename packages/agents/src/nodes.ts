@@ -174,13 +174,13 @@ export function buildNodes(deps: AgentDeps) {
     if (state.gaps.length > 0) {
       const specialists = AGENT_NAMES.filter((name) => state.gaps.some((g) => g.agent === name));
       const investigationPlan: InvestigationPlan = {
-        primaryHypothesis: state.plan?.primaryHypothesis ?? 'UNKNOWN',
+        primaryHypothesis: state.investigationPlan?.primaryHypothesis ?? 'UNKNOWN',
         specialists,
         routedBy: 'GAP_TARGETED',
-        confidence: state.plan?.confidence ?? 0,
+        confidence: state.investigationPlan?.confidence ?? 0,
       };
       await onEvent('plan', 'NODE_COMPLETED', { specialists, routedBy: 'GAP_TARGETED', targeted: true, gaps: state.gaps });
-      return { plan: investigationPlan, investigationRound: state.investigationRound + 1 };
+      return { investigationPlan, investigationRound: state.investigationRound + 1 };
     }
 
     try {
@@ -219,7 +219,7 @@ export function buildNodes(deps: AgentDeps) {
       };
       await onEvent('plan', 'NODE_COMPLETED', { specialists, routedBy: 'JEV', primaryHypothesis: investigationPlan.primaryHypothesis });
       return {
-        plan: investigationPlan,
+        investigationPlan,
         investigationRound: state.investigationRound + 1,
         budget: { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens },
       };
@@ -233,7 +233,7 @@ export function buildNodes(deps: AgentDeps) {
         fallback: true,
         error: err instanceof Error ? err.message : String(err),
       });
-      return { plan: investigationPlan, investigationRound: state.investigationRound + 1, budget: { ...zeroBudget(), jevCalls: 1 } };
+      return { investigationPlan, investigationRound: state.investigationRound + 1, budget: { ...zeroBudget(), jevCalls: 1 } };
     }
   }
 
@@ -399,7 +399,9 @@ export function buildNodes(deps: AgentDeps) {
       budget = { ...zeroBudget(), jevCalls: 1, tokensIn: result.usage.input_tokens, tokensOut: result.usage.output_tokens };
 
       const findings: Finding[] = [];
+      let llmFallbackRan = false;
       if (meanConfidence < 0.5) {
+        llmFallbackRan = true;
         const brief = state.case!;
         const findingsContext = buildSpecialistContext({ agent: 'risk', callType: 'findings', brief, evidence: state.evidence, ownTools: RISK_TOOLS });
         const findingsResult = await llm.invokeStructured(FindingsSchema, findingsContext.messages, {
@@ -428,7 +430,11 @@ export function buildNodes(deps: AgentDeps) {
       }
 
       await onEvent('riskAgent', 'NODE_COMPLETED', { tier: risk.tier, meanConfidence: risk.meanConfidence, findingCount: findings.length });
-      return { risk, findings, agentsVisited: ['risk'], budget };
+      // Only touch the `findings` channel when the LLM fallback actually ran -- a confident
+      // Jev-only pass never calls the LLM at all, so there is nothing (not even an empty array)
+      // to report; once the fallback runs, `findings` is meaningful even if every candidate was
+      // dropped by structural grounding (an empty array, not an absent key).
+      return llmFallbackRan ? { risk, findings, agentsVisited: ['risk'], budget } : { risk, agentsVisited: ['risk'], budget };
     } catch (err) {
       // J3 fallback (docs/03 §4 "Jev adapter contract"): rules-only tier, no LLM. Never leaves
       // `state.risk` unset — a run must always have a risk assessment once Risk has run.

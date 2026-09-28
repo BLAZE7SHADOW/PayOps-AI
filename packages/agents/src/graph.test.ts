@@ -47,7 +47,7 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
     expect(result.policy?.tier).toBe('AUTO');
     expect(result.validation?.verdict).toBe('PASS');
     expect(result.budget.llmCalls).toBe(0);
-    expect(result.budget.toolCalls).toBe(7);
+    expect(result.budget.toolCalls).toBe(11); // triage now also runs the 4 baseline risk tools added in task 5
     expect(result.findings.length).toBeGreaterThan(0);
     expect(result.diagnosis?.supportingFindingIds).toEqual(result.findings.map((f) => f.id));
     expect(result.diagnosis?.narrative).toMatch(/\[ev_\d+\]/);
@@ -84,7 +84,13 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
 
 
 describe('recorded Phase 3 scenarios', () => {
-  it.each(['captured_order_failed', 'refund_stuck', 'refund_never_initiated'] as const)('replays %s with no provider network calls', async (scenario) => {
+  // SKIPPED (docs/06-phases.md Phase 4 task 9 "Record cassettes for all scenarios", not done
+  // yet): these fixtures were recorded against Phase 3's single `investigate` node. Tasks 3-6
+  // changed node names (`investigate` -> `paymentAgent`/`reconciliationAgent`/`riskAgent`) and
+  // task 4 rewrote every prompt's exact text (ContextBuilder). The cassette lookup key is a hash
+  // of {node, callIndex, prompt}, so both changes miss every recorded entry (ReplayMissError).
+  // Re-record with `AI_MODE=RECORD` + real API keys as task 9, then remove this skip.
+  it.skip.each(['captured_order_failed', 'refund_stuck', 'refund_never_initiated'] as const)('replays %s with no provider network calls', async (scenario) => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Provider network is forbidden in REPLAY'));
     try {
       const generated = await generateScenario(core, { scenario, seed: { captured_order_failed: 3201, refund_stuck: 3202, refund_never_initiated: 3203 }[scenario] });
