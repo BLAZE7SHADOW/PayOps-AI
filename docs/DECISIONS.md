@@ -147,3 +147,48 @@ name a ledger tool) without waiting on task 4's full budget/projection machinery
 gathers the combined baseline evidence for every group up front (unchanged from Phase 3), because
 the fast path (`diagnose` → `resolve` directly) skips `plan` and every specialist entirely and
 still needs evidence to cite in its narrative template.
+
+## D039 · ContextBuilder: chars/4 token estimate, prompts.ts folded into context.ts, no PII exists yet
+Phase 4 task 4. `packages/agents/src/context.ts` replaces `prompts.ts` entirely (deleted) as the
+one place every model call's `LlmMessage[]` is assembled, implementing docs/03 §8's six ordered
+sections and per-agent budgets (`CONTEXT_BUDGET`, `packages/shared/src/agents.ts`, alongside
+`AGENT_BUDGET_LIMITS`).
+- **Token estimate:** `estimateTokens` is `Math.ceil(text.length / 4)`, not a real tokenizer.
+  Simple, deterministic, and good enough to compare calls and bound prompts; matching Gemini's
+  actual BPE count exactly is not needed for a budget guard. Documented in `context.ts` itself so
+  the heuristic's limits are visible next to its use.
+- **Hash:** `hashContext` is `sha256(fullPromptText).slice(0, 16)`, stored as `contentHash` next
+  to `tokenEstimate` on the `LLM_CALLED`/`DECISION_MADE` event payload for `paymentAgent`/
+  `reconciliationAgent`/`riskAgent`'s follow-up and findings calls and `resolve`'s diagnosis call.
+  No `agent_steps` schema change was needed: `payload` is already `jsonb`, so these two fields
+  just ride along in the same event write Phase 3 already made.
+- **Budget dropping** (`applyBudget`, pure and unit-tested independent of any graph/LLM
+  wiring): [5] history → [4] peers → oldest evidence in [3], one item at a time, sorted by
+  `observedAt` ascending (items with no timestamp — resolve's structural summary — sort last, so
+  real evidence goes before summaries). `prefix`/`brief`/`task` never drop: without them the call
+  has no instructions at all.
+- **Scoping moved into the builder, not the caller:** `sliceEvidenceForAgent` (and therefore the
+  "never contains" rule) now lives in `context.ts` itself — `buildSpecialistContext` takes the
+  *full* evidence pool plus `ownTools` and scopes internally, rather than trusting `nodes.ts` to
+  pre-filter (superseding D038's caller-side `evidenceForTools`, which is now `sliceEvidenceForAgent`
+  in `context.ts`). This makes the "never contains" property something a unit test can assert
+  directly on a `ContextBuilder`'s output.
+- **Resolve's [3]/[4] split:** the doc's table lists resolve's slice as "findings, risk tier,
+  grounding report, action catalog, history", but findings and history are sections [4]/[5], not
+  [3]. Read literally: [3] is resolve's own structural summary (risk tier, grounding report, the
+  closed action catalog from `shared/actions.ts`, and an evidence *count*, never raw facts), and
+  [4] is the findings themselves, rendered as statements grouped by `finding.agent` — exactly the
+  "other agents' finding statements (no raw evidence)" the doc describes, since resolve has no
+  "own" evidence of its own to distinguish from anyone else's.
+- **Payment's pre-digested comparison:** `gatewayVsOrderAmount: EQUAL|MISMATCH|UNKNOWN` is
+  computed from `getGatewayPayment`/`getOrder` evidence facts in code and formatted through
+  `shared/money.ts`, matching the doc's literal example. No equivalent was added for
+  Reconciliation: `getFeeBreakdown` (tools.ts) already emits a code-computed `matched`/`diffMinor`
+  pair, so nothing was missing there.
+- **PII masking:** `maskEmail`/`maskPhone`/`maskCard`/`maskPiiInFacts` are written and unit-tested
+  as pure functions, and `promptFacts` runs `maskPiiInFacts` before its existing
+  id/date-scrubbing. No current `ToolDef.run` in `tools.ts` projects an email, phone or card
+  number into an `EvidenceItem`'s facts — this product's evidence is all statuses, amounts and
+  internal ids — so today this is a safety net with nothing to catch, not dead functionality: the
+  day a tool starts projecting `customerEmail`/`customerPhone`, it is masked without that tool's
+  author having to remember to do it.

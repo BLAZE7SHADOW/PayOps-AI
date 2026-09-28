@@ -5,9 +5,10 @@ Update at the end of every session. Newest session log entry on top.
 ## Current phase
 
 **Phase 4 · in progress.** Phases 0–3 are done. Phase 4 task 1 (Jev adapter), task 2 (J1 signal
-intake) and task 3 (specialist split + J2 `plan` + `Send` fan-out + `join`) are done; the rest of
-Phase 4 (context builders, risk specialist + J3, groundCheck + J4, evidence persistence, UI
-decision/grounding trace, cassette recordings) is not started.
+intake), task 3 (specialist split + J2 `plan` + `Send` fan-out + `join`) and task 4 (per-agent
+ContextBuilders: budgets, projection, PII masking, token estimate logging) are done; the rest of
+Phase 4 (risk specialist + J3, groundCheck + J4, evidence persistence, UI decision/grounding
+trace, cassette recordings) is not started.
 
 ## Phase checklist
 
@@ -21,12 +22,17 @@ decision/grounding trace, cassette recordings) is not started.
 
 ## Next task
 
-Phase 4 task 4: ContextBuilders per agent (budgets, projection, PII masking, token estimate
-logging), docs/06-phases.md Phase 4 task 4, docs/03-agent-system.md §8. Note for that session:
-`riskAgent` (nodes.ts) currently has an empty tool set (`RISK_TOOLS = []` in tools.ts) by design —
-task 5 (Risk specialist: signal bucketing + J3 atomic scores → tier) is what gives it real tools
-and fills `state.risk`; do not build risk scoring as part of task 4. After task 4: Risk specialist
-+ J3 (task 5), groundCheck + J4 (task 6), evidence/finding persistence (task 7), UI
+Phase 4 task 5: Risk specialist (signal bucketing in code + J3 atomic scores + weights → tier),
+docs/06-phases.md Phase 4 task 5, docs/03-agent-system.md §4 "J3" and §9 (risk tool group).
+`RISK_TOOLS`/`RISK_FOLLOWUP_TOOLS` are still empty arrays (tools.ts) and `riskAgent` still skips
+both its LLM calls — this task adds the real tools (`getCustomerHistory`/`getDeviceSignals`/
+`getFailedAttempts`/`getChargebackHistory`) and J3's Score questions
+(`velocity_abuse`/`identity_mismatch`/`chargeback_pattern`/`merchant_exposure`), then a
+code-weighted composite into `state.risk` (`RiskAssessment`, already defined in
+`packages/shared/src/agents.ts`). The new tools slot straight into task 4's
+`buildSpecialistContext({ agent: 'risk', ... })` — no context-builder changes should be needed,
+only `CONTEXT_BUDGET.risk` (1200) to revisit if real risk evidence turns out to need more room.
+After task 5: groundCheck + J4 (task 6), evidence/finding persistence (task 7), UI
 decision/grounding trace (task 8), cassette recordings (task 9).
 
 ## How to run locally
@@ -76,6 +82,63 @@ on the Mac to verify.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 4 task 4: ContextBuilders (budgets, projection, PII masking, token logging)
+- New `packages/agents/src/context.ts` (docs/03 §8) is now the single place every model call's
+  `LlmMessage[]` is assembled. It replaces `prompts.ts` entirely (deleted, along with
+  `prompts.test.ts`, whose cassette-stability assertions moved into `context.test.ts`), building
+  the doc's six ordered sections — `[1]` stable prefix (role + rules + output schema + tool
+  catalog, identical across runs), `[2]` case brief, `[3]` this call's own evidence slice, `[4]`
+  peer finding summaries (resolve only), `[5]` prior-attempt history (resolve only), `[6]` the
+  task instruction — via two entry points: `buildSpecialistContext` (payment/reconciliation/risk
+  follow-up and findings calls) and `buildResolveContext` (the diagnosis call).
+- `sliceEvidenceForAgent` (formerly `nodes.ts`'s local `evidenceForTools`, D038) now lives inside
+  `context.ts` and does the "never contains" scoping itself from the *full* evidence pool, rather
+  than trusting the caller to pre-filter — so a specialist's built context can be asserted
+  directly (by test) to never contain another agent's evidence, instead of relying on `nodes.ts`
+  getting the filter right before it calls in.
+- `applyBudget` (pure, unit-tested independent of the graph) implements the doc's drop order:
+  `[5]` history → `[4]` peers → oldest evidence in `[3]` one item at a time (sorted by
+  `observedAt` ascending; items with no timestamp, i.e. resolve's structural summary, sort last).
+  `prefix`/`brief`/`task` never drop. New `CONTEXT_BUDGET` (`packages/shared/src/agents.ts`,
+  alongside `AGENT_BUDGET_LIMITS`) gives payment/reconciliation 1800, risk 1200, resolve 2200 —
+  chars/4 token-estimate units (see D039 for why chars/4).
+- Numbers pre-digested (docs/03 §8): payment's slice now includes a code-computed
+  `gatewayVsOrderAmount: EQUAL|MISMATCH|UNKNOWN` line (comparing `getGatewayPayment`/`getOrder`
+  facts, formatted through `shared/money.ts`) so the model never infers the comparison itself
+  from two raw numbers. Reconciliation needed nothing extra — `getFeeBreakdown` (tools.ts) was
+  already emitting a code-computed `matched`/`diffMinor` pair.
+- PII masking (`maskEmail`, `maskPhone`, `maskCard`, `maskPiiInFacts`) is written and unit-tested
+  as pure functions, wired into `promptFacts` ahead of its existing id/date scrubbing. No current
+  `ToolDef.run` in `tools.ts` projects an email, phone or card number into an `EvidenceItem` —
+  this product's evidence is all statuses, amounts and internal ids — so this is a forward-looking
+  safety net with nothing to catch yet, not simulated PII. Noted in DECISIONS.md D039 rather than
+  inventing a fake field to mask.
+- Token estimate + content hash are logged on every specialist/resolve LLM call: `nodes.ts`'s
+  `LLM_CALLED` events for the follow-up call, the findings call (which previously had no
+  `LLM_CALLED` event of its own — added one for consistency) and `resolve`'s diagnosis call now
+  carry `contextTokenEstimate`/`contextHash` alongside the existing `usage`. No `agent_steps`
+  schema change was needed — `payload` is already `jsonb` (`packages/core/src/db/schema/
+  agents.ts`), so these ride along in the same event write Phase 3 already made; the UI to show
+  them is Phase 4 task 8, not this task.
+- Tests: `packages/agents/src/context.test.ts` (new, replacing `prompts.test.ts`) covers the
+  budget drop order at each stage (keeps everything when it fits; drops history only; drops
+  history then peers; drops the oldest evidence item first, by `observedAt`; empties the slice
+  entirely under an impossible budget), per-agent evidence scoping (payment's built context
+  never contains reconciliation/ledger evidence and vice versa, and a follow-up call's tool
+  catalog never leaks another agent's tools), the payment amount comparison, resolve's peer
+  summaries (grouped by `finding.agent`, never repeating raw evidence facts), PII masking, and
+  token-estimate sanity bounds. The old `prompts.test.ts` cassette-stability assertions (same
+  facts with regenerated ids/dates replay identically; different amounts never do) were ported
+  onto `buildSpecialistContext` and extended to also assert on `.contentHash`.
+- Checks: `pnpm typecheck` and `pnpm lint` clean across all packages. `pnpm test` still cannot run
+  in this cloud session — same documented bridge issue (`Cannot find module
+  '@rollup/rollup-linux-arm64-gnu'`), confirmed by re-reading the error text before assuming it
+  was the known one rather than a real failure from this session's changes. Ask Shivam to run
+  `pnpm test` (including the new `context.test.ts`) locally on the Mac before trusting it fully.
+- Not done this session: Risk specialist + J3 (task 5), groundCheck + J4 (task 6),
+  evidence/finding persistence (task 7), UI trace (task 8), cassettes (task 9) — see Next task.
+
 
 ### 2026-09-28 · Phase 4 task 3: specialist split, J2 plan, Send fan-out, join
 - Replaced the single `investigate` node with the doc's fan-out shape (docs/03 §5): `plan`

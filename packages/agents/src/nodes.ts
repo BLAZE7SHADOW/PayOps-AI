@@ -33,7 +33,7 @@ import type { AgentDeps } from './deps';
 import { buildCaseBrief } from './brief';
 import { choosePlanSpecialists } from './planning';
 import { buildProposal } from './proposal';
-import { diagnosisPrompt, findingsPrompt, followUpPrompt } from './prompts';
+import { buildResolveContext, buildSpecialistContext, sliceEvidenceForAgent } from './context';
 import { narrativeFor } from './templates';
 import { DiagnosisSchema, FindingsSchema, buildFollowUpChoiceSchema } from './schemas';
 import type { PayOpsStateType, PayOpsUpdate } from './state';
@@ -206,14 +206,6 @@ export function buildNodes(deps: AgentDeps) {
     }
   }
 
-  /** Restricts evidence to the facts a specific tool group produced, so a specialist's own
-   * prompt (and therefore anything it can cite) never contains another agent's evidence
-   * (docs/03 §3/§8 "never contains"). A preview of Phase 4 task 4's real ContextBuilder. */
-  function evidenceForTools(evidence: readonly EvidenceItem[], tools: readonly ToolDef[]): EvidenceItem[] {
-    const names = new Set(tools.map((t) => t.name));
-    return evidence.filter((e) => names.has(e.source));
-  }
-
   /**
    * Builds one specialist node (`paymentAgent` / `reconciliationAgent` / `riskAgent`), each
    * running the same two-stage pattern Phase 3's `investigate` used (docs/03 §2), but scoped to
@@ -228,7 +220,7 @@ export function buildNodes(deps: AgentDeps) {
     const followUpSchema = buildFollowUpChoiceSchema(followUpTools);
     return async function specialistNode(state: PayOpsStateType): Promise<PayOpsUpdate> {
       await onEvent(nodeName, 'NODE_STARTED', {});
-      const ownBaseline = evidenceForTools(state.evidence, ownTools);
+      const ownBaseline = sliceEvidenceForAgent(state.evidence, ownTools);
 
       if (!followUpSchema || ownBaseline.length === 0) {
         await onEvent(nodeName, 'NODE_COMPLETED', { evidenceCount: ownBaseline.length, findingCount: 0, skipped: true });
@@ -238,13 +230,28 @@ export function buildNodes(deps: AgentDeps) {
       const caseState = await loadCaseState(core.db, core.gateway, state.caseId, core.clock.now());
       const brief = state.case!;
 
-      const choiceResult = await llm.invokeStructured(followUpSchema, followUpPrompt(brief, ownBaseline, followUpTools), {
+      const followUpContext = buildSpecialistContext({
+        agent: agentName,
+        callType: 'followUp',
+        brief,
+        evidence: state.evidence,
+        ownTools,
+        followUpTools,
+      });
+      const choiceResult = await llm.invokeStructured(followUpSchema, followUpContext.messages, {
         node: nodeName,
         callIndex: 0,
         scenarioKey: state.scenarioKey,
       });
       const wanted = choiceResult.data.followUps.slice(0, AGENT_BUDGET_LIMITS.maxFollowupToolCalls);
-      await onEvent(nodeName, 'LLM_CALLED', { call: 'followUps', followUps: wanted, usage: choiceResult.usage });
+      await onEvent(nodeName, 'LLM_CALLED', {
+        call: 'followUps',
+        followUps: wanted,
+        usage: choiceResult.usage,
+        // docs/03 §8: "every built context is hashed and its token estimate stored on the agentStep".
+        contextTokenEstimate: followUpContext.tokenEstimate,
+        contextHash: followUpContext.contentHash,
+      });
 
       const chosenTools = followUpTools.filter((t) => wanted.some((w) => w.tool === t.name));
       const followUpEvidence = evidenceFrom(state.evidence, caseState, chosenTools, nodeName);
@@ -253,10 +260,23 @@ export function buildNodes(deps: AgentDeps) {
       }
       const ownEvidence = [...ownBaseline, ...followUpEvidence];
 
-      const findingsResult = await llm.invokeStructured(FindingsSchema, findingsPrompt(brief, ownEvidence), {
+      const findingsContext = buildSpecialistContext({
+        agent: agentName,
+        callType: 'findings',
+        brief,
+        evidence: [...state.evidence, ...followUpEvidence],
+        ownTools,
+      });
+      const findingsResult = await llm.invokeStructured(FindingsSchema, findingsContext.messages, {
         node: nodeName,
         callIndex: 1,
         scenarioKey: state.scenarioKey,
+      });
+      await onEvent(nodeName, 'LLM_CALLED', {
+        call: 'findings',
+        usage: findingsResult.usage,
+        contextTokenEstimate: findingsContext.tokenEstimate,
+        contextHash: findingsContext.contentHash,
       });
       const validIds = new Set(ownEvidence.map((e) => e.id));
       let pool = state.findings;
@@ -314,14 +334,28 @@ export function buildNodes(deps: AgentDeps) {
     let budget = zeroBudget();
     const findings: Finding[] = [];
     if (!diagnosis) {
-      const result = await llm.invokeStructured(DiagnosisSchema, diagnosisPrompt(brief, state.findings, state.evidence, state.history), {
+      const resolveContext = buildResolveContext({
+        brief,
+        findings: state.findings,
+        evidenceCount: state.evidence.length,
+        risk: state.risk,
+        grounding: state.grounding,
+        history: state.history,
+      });
+      const result = await llm.invokeStructured(DiagnosisSchema, resolveContext.messages, {
         node: 'resolve',
         callIndex: 0,
         scenarioKey: state.scenarioKey,
       });
       diagnosis = { ...result.data, path: 'FULL' };
       budget = { ...zeroBudget(), llmCalls: 1, tokensIn: result.usage.inputTokens, tokensOut: result.usage.outputTokens };
-      await onEvent('resolve', 'LLM_CALLED', { call: 'diagnosis', diagnosis, usage: result.usage });
+      await onEvent('resolve', 'LLM_CALLED', {
+        call: 'diagnosis',
+        diagnosis,
+        usage: result.usage,
+        contextTokenEstimate: resolveContext.tokenEstimate,
+        contextHash: resolveContext.contentHash,
+      });
     } else if (!diagnosis.narrative) {
       // Fast path: code narrative template, no LLM (docs/03 §4a).
       const narrative = narrativeFor(diagnosis.rootCause, state.evidence);

@@ -213,6 +213,20 @@ export const AGENT_BUDGET_LIMITS = {
   maxAttempts: 2,
 } as const;
 
+/**
+ * Per-agent context token budgets (docs/03 §8 "Budgets"). Token counts are the chars/4 heuristic
+ * documented in `packages/agents/src/context.ts` (see docs/DECISIONS.md D039), not an exact
+ * tokenizer count — just enough to keep prompts bounded and comparable call to call. When a
+ * built context exceeds its agent's budget, `applyBudget` (context.ts) drops sections in the
+ * order the doc specifies: [5] history → [4] peer summaries → oldest evidence in [3].
+ */
+export const CONTEXT_BUDGET: Record<AgentName | 'resolve', number> = {
+  payment: 1800,
+  reconciliation: 1800,
+  risk: 1200,
+  resolve: 2200,
+} as const;
+
 // ── API DTOs (docs/02 §5) ───────────────────────────────────────────────────
 export const CreateRunBody = z
   .object({
