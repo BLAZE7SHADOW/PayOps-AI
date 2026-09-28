@@ -4,12 +4,13 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 4 · in progress.** Phases 0–3 are done. Phase 4 tasks 1-8 (Jev adapter, J1 signal
-intake, specialist split + J2 `plan`/`Send`/`join`, per-agent ContextBuilders, Risk specialist +
-J3 atomic scores + weighted tier, `groundCheck` + J4 structural/semantic grounding,
-`agent_findings`/`evidence` persistence, and the UI decision/grounding trace) are done.
-`pnpm typecheck`, `pnpm lint`, and `pnpm test` (373 passed, 3 intentionally skipped pending task
-9) are all clean. Only Phase 4 task 9 (cassette recordings) is left.
+**Phase 4 · in progress, tasks 1-8 done, task 9 needs a person at a real terminal.**
+`pnpm typecheck`, `pnpm lint`, and `pnpm test` (373 passed, 3 intentionally skipped) are all
+clean. Task 9 (cassette recordings) has its tooling built and committed
+(`pnpm cassette:record`, D045) but could not be run from this cloud session: the sandboxed
+shell's network egress rejects both `generativelanguage.googleapis.com` and `api.typesafe.ai`
+(confirmed by a direct `curl` probe, not a guess). **This is the one remaining step to fully
+close Phase 4 -- see "Next task" below for exactly what to run.**
 
 ## Phase checklist
 
@@ -23,18 +24,27 @@ J3 atomic scores + weighted tier, `groundCheck` + J4 structural/semantic groundi
 
 ## Next task
 
-Phase 4 task 9 (the last task of the phase): record cassettes for all scenarios
-(docs/06-phases.md Phase 4 task 9). This needs `AI_MODE=RECORD` with real `GEMINI_API_KEY`/
-`TYPESAFE_JEV_API_KEY` values against a running local server -- not available in this cloud
-session (see Secrets in CLAUDE.md: `.env` exists locally with real keys, never read/printed
-here). Concretely: run each seeded scenario once with `AI_MODE=RECORD`, which (per docs/03 §14)
-should write cassette files keyed by `{node, callIndex, prompt}` that REPLAY then reads back
-deterministically. This also finally resolves the 3 `it.skip.each(...)` tests in
-`graph.test.ts` ("recorded Phase 3 scenarios") -- their existing cassettes are stale from tasks
-3-4's node renames (`investigate` -> `paymentAgent`/`reconciliationAgent`/`riskAgent`) and
-ContextBuilder prompt rewrites; re-recording and un-skipping those 3 tests is this task's own
-"done when" check. After task 9, Phase 4's own "Done when" list (docs/06-phases.md) should be
-run literally and the phase checklist below updated to `[x]`.
+**Run this on the Mac itself, in a normal Terminal (not through the Claude
+Cowork device bridge, whose network is more restricted than the Mac's own):**
+
+```
+pnpm cassette:record
+```
+
+That's `packages/agents/scripts/record-cassettes.ts` (D045) -- it regenerates all 3 scenario
+cassettes end to end (fresh ephemeral DB, real `AI_MODE=RECORD` Gemini + Jev calls, handles the
+`refund_never_initiated` manager-approval interrupt/resume, asserts each ends `RESOLVED`/`PASS`)
+using the real `.env` keys already on the Mac. It takes a few minutes and makes real, billed API
+calls. After it succeeds:
+
+1. Remove the `it.skip` in `packages/agents/src/graph.test.ts`'s "recorded Phase 3 scenarios"
+   describe block (currently `it.skip.each(...)`, with a comment pointing at this task) and run
+   `pnpm test` to confirm those 3 tests now pass in REPLAY against the freshly recorded
+   cassettes.
+2. Update `fixtures/cassettes/README.md`'s recording date/notes.
+3. Commit the 3 regenerated `.jsonl` files, the un-skipped test, and the README update together.
+4. Run Phase 4's own "Done when" list (docs/06-phases.md) literally and tick the phase checklist
+   below.
 
 ## How to run locally
 
@@ -105,6 +115,24 @@ with real API keys -- that is Phase 4 task 9's job, the only task left in the ph
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-29 · Phase 4 task 9 attempt: recording tooling built, blocked on this session's network
+- Built `packages/agents/scripts/record-cassettes.ts` (`pnpm cassette:record`): regenerates all
+  3 Phase 3 demo scenarios' cassettes with real `AI_MODE=RECORD` Gemini + Jev calls against a
+  fresh ephemeral PGlite DB, deleting each stale `.jsonl` first (the underlying `appendCassette`
+  only appends), handling the `refund_never_initiated` manager-approval interrupt/resume, and
+  asserting each run ends `RESOLVED`/`PASS`. Added `packages/agents/tsconfig.json`'s `scripts`
+  directory to its `include` so the script participates in `pnpm typecheck` (clean).
+- Ran it: failed immediately, `fetch failed` from the Gemini call. Confirmed by direct `curl`
+  probe from the same shell that this cloud session's network egress allowlist rejects both
+  `generativelanguage.googleapis.com` and `api.typesafe.ai` (`403 from proxy after CONNECT`) --
+  not a bug in the script or adapters. See D045 for the full account and exactly what command to
+  run locally to finish this.
+- `pnpm typecheck`, `pnpm lint` clean. `pnpm test` unaffected (373 passed, 3 skipped, unchanged).
+- Not done this session: the actual recording (needs a real terminal on the Mac, per the "Next
+  task" instructions above) and the follow-up steps that depend on it (un-skip the 3 cassette
+  tests, update the README, tick the Phase 4 checklist).
+
 
 ### 2026-09-29 · Phase 4 task 8: UI decision/grounding trace (closes out the phase but task 9)
 - Closed a backend gap first: `agentRuns` had no `grounding` jsonb column and `AgentRunItem` had

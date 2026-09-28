@@ -18,7 +18,8 @@
     "db:migrate": "pnpm --filter @payops/core db:migrate",
     "db:generate": "pnpm --filter @payops/core db:generate",
     "seed": "pnpm --filter @payops/server seed",
-    "jev:ping": "tsx scripts/jev-ping.ts"
+    "jev:ping": "tsx scripts/jev-ping.ts",
+    "cassette:record": "tsx packages/agents/scripts/record-cassettes.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

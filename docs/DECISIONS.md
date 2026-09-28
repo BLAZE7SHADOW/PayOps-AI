@@ -447,3 +447,33 @@ Verified against `docs/05-ui-design.md` §8 (copy: "Dropped: <reason>" is plain 
 hedging or hype) and §9 (no new badge/pill component invented for confidence or grounding
 status -- both render as plain mono text inline, consistent with every other status line already
 in the trace).
+
+## D045 · Task 9 cassette recording: script built, but this cloud session's network can't reach Gemini/Jev
+
+Built `packages/agents/scripts/record-cassettes.ts` (`pnpm cassette:record`) to do task 9's job:
+for each of the 3 Phase 3 demo scenarios, spin up a fresh ephemeral PGlite database (same
+harness `graph.test.ts`'s "recorded Phase 3 scenarios" suite already uses), generate the
+scenario at its documented seed (`fixtures/cassettes/README.md`'s table), run the real graph
+with `AI_MODE=RECORD` real `LlmPort`/`DecisionPort` (not mocks), handle the
+`refund_never_initiated` manager-approval interrupt/resume, assert each ends `RESOLVED`/`PASS`,
+and delete-then-rewrite that scenario's `.jsonl` cassette file cleanly (the underlying
+`appendCassette` only ever appends, so a stale file must be removed first or old and new entries
+would mix).
+
+Running it from this environment failed immediately with `fetch failed` /
+`curl: (56) Received HTTP code 403 from proxy after CONNECT` against both
+`generativelanguage.googleapis.com` and `api.typesafe.ai` -- confirmed by a direct `curl` probe
+from the same `device_bash` shell the script ran in. This is this session's network egress
+allowlist rejecting both provider hosts, not a bug in the script or the adapters (the identical
+`JevDecisionAdapter`/`GeminiLlmAdapter` code already works when `pnpm jev:ping` or a locally-run
+`pnpm dev` calls them outside this sandboxed shell -- see `docs/PROGRESS.md`'s prior sessions).
+Nothing about this is fixable from in here: it needs `pnpm cassette:record` run in a real
+Terminal on Shivam's Mac (outside the Claude Cowork device-bridge shell), where `.env`'s real
+keys and the Mac's normal network are both available.
+
+The script itself, and the `packages/agents/tsconfig.json` include-list addition (`"scripts"`,
+so it participates in `pnpm typecheck`) are committed as working infrastructure for whenever
+that run happens -- typechecked clean, and its logic mirrors already-passing test code closely
+enough (the REPLAY variant of the exact same three-scenario flow is `graph.test.ts`'s skipped
+suite) that the main remaining risk is real-world Gemini/Jev response shape drift since Phase 3's
+original recording, not a bug in the harness.
