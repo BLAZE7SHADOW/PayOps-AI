@@ -29,6 +29,7 @@ export const ID_PREFIX = {
   settlementLine: 'sln',
   resolution: 'rsl',
   validation: 'val',
+  agentStep: 'ast',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

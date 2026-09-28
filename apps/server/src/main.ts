@@ -7,12 +7,14 @@ import {
   describeEnv,
   loadServerEnv,
   runMigrations,
+  type AgentResumer,
   type EventPublisherPort,
 } from '@payops/core';
 import { createApp } from './app';
 import { seedDemoUsers } from './auth/demo-users';
 import { sessionConfig } from './auth/session';
-import { startBoss } from './jobs/boss';
+import { registerAgentJobs, type AgentResumeJobPayload } from './jobs/agents';
+import { startBoss, QUEUES } from './jobs/boss';
 import { registerReconcileSweep } from './jobs/reconcile';
 import { createRealtime } from './realtime/socket';
 
@@ -33,12 +35,26 @@ const realtime: { publisher?: EventPublisherPort } = {};
 const events: EventPublisherPort = {
   publish: (room, event, payload) => realtime.publisher?.publish(room, event, payload),
 };
-const core = createCore({ db: database.db, events });
+// pg-boss (below) needs `core`, and `core`'s agent resumer needs pg-boss: same forwarding-box
+// pattern as `events` above, resolved once startBoss() returns.
+const boxedResumer: { resume?: AgentResumer['resume'] } = {};
+const agentResumer: AgentResumer = {
+  resume: (runId, decision) => {
+    if (!boxedResumer.resume) throw new Error('agent resumer not ready yet');
+    return boxedResumer.resume(runId, decision);
+  },
+};
+const core = createCore({ db: database.db, events, agentResumer });
 
 const boss = await startBoss(database.pool, log);
 await registerReconcileSweep(boss, core, env, log);
+await registerAgentJobs(boss, core, env, log);
+boxedResumer.resume = async (runId, decision) => {
+  const payload: AgentResumeJobPayload = { runId, decision: { approvalId: null, decision } };
+  await boss.send(QUEUES.agentResume, payload);
+};
 
-const app = createApp({ env, log, database, core, session });
+const app = createApp({ env, log, database, core, session, boss });
 const http = createServer(app);
 const { io, publisher } = createRealtime(http, { origin: env.WEB_ORIGIN, log, session });
 realtime.publisher = publisher;

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { PgBoss } from 'pg-boss';
 import { pingDatabase, type Core, type Database, type ServerEnv } from '@payops/core';
 import type { SessionConfig } from '../auth/session';
 import { approvalRoutes } from './approvals';
@@ -8,11 +9,13 @@ import { auditRoutes } from './audit';
 import { caseRoutes } from './cases';
 import { overviewRoutes } from './overview';
 import { paymentRoutes } from './payments';
+import { runRoutes } from './runs';
 import { simulatorRoutes } from './simulator';
 
 export interface RouteDeps {
   database: Database;
   core: Core;
+  boss: PgBoss;
 }
 
 interface RouterDeps extends RouteDeps {
@@ -31,7 +34,8 @@ export function buildRouter(deps: RouterDeps): Router {
   router.use('/auth', authRoutes(deps.core, deps.env, deps.session));
   router.use('/overview', overviewRoutes(deps.core));
   router.use('/payments', paymentRoutes(deps.core));
-  router.use('/cases', caseRoutes(deps.core));
+  router.use('/cases', caseRoutes(deps.core, deps.boss));
+  router.use('/runs', runRoutes(deps.core));
   router.use('/simulator', simulatorRoutes(deps.core, deps.env));
   router.use('/audit', auditRoutes(deps.core));
   router.use('/approvals', approvalRoutes(deps.core));

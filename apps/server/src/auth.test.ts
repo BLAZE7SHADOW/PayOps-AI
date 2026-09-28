@@ -15,6 +15,7 @@ import type {
 } from '@payops/shared';
 import { createCore, createLogger, loadServerEnv, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
+import type { PgBoss } from 'pg-boss';
 import { createApp } from './app';
 import { DEMO_PASSWORD, seedDemoUsers } from './auth/demo-users';
 import { hashPassword, verifyPassword } from './auth/password';
@@ -34,8 +35,9 @@ async function signIn(email: string): Promise<Agent> {
 beforeAll(async () => {
   t = await startTestDatabase();
   core = createCore({ db: t.db, clock: fixedClock('2026-09-28T12:00:00.000Z') });
+  const fakeBoss = { send: async () => null } as unknown as PgBoss;
   const env = loadServerEnv({ NODE_ENV: 'test' });
-  app = createApp({ env, log: createLogger(env, 'test'), database: t, core });
+  app = createApp({ env, log: createLogger(env, 'test'), database: t, core, boss: fakeBoss });
   await seedDemoUsers(t.db);
 });
 afterAll(async () => {

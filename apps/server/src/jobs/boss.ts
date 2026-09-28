@@ -8,6 +8,8 @@ import type { Database, Logger } from '@payops/core';
  */
 export const QUEUES = {
   reconcileSweep: 'reconcile-sweep',
+  agentRun: 'agent-run',
+  agentResume: 'agent-resume',
 } as const;
 
 /**

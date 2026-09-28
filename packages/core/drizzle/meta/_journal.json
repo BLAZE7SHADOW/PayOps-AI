@@ -15,6 +15,13 @@
       "when": 1790579015457,
       "tag": "0001_resolution_spine",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790590953826,
+      "tag": "0002_fancy_chronomancer",
+      "breakpoints": true
     }
   ]
 }

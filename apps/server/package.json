@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "start": "node dist/main.js",
-    "build": "tsup src/main.ts --format esm --target node22 --out-dir dist --clean --no-splitting --noExternal @payops/shared --noExternal @payops/core --noExternal @payops/simulator",
+    "build": "tsup src/main.ts --format esm --target node22 --out-dir dist --clean --no-splitting --noExternal @payops/shared --noExternal @payops/core --noExternal @payops/simulator --noExternal @payops/agents",
     "typecheck": "tsc -p tsconfig.json",
     "seed": "tsx src/scripts/seed.ts"
   },
@@ -23,7 +23,8 @@
     "pg-boss": "^12.0.0",
     "pino-http": "^10.5.0",
     "socket.io": "^4.8.1",
-    "zod": "^4.1.0"
+    "zod": "^4.1.0",
+    "@payops/agents": "workspace:*"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.9",

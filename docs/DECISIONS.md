@@ -86,3 +86,21 @@ Queue and approval views read `cases.matrix/mismatched`. After a resolution fini
 
 ## D026 · Jev-first fast path before any LLM investigation
 Most cases match known patterns that code can describe as facts. A Jev diagnosis (J6) plus code resolution and narrative templates resolves them with zero Gemini tokens; the full multi-agent investigation runs only when Jev confidence is below 0.80, the case is novel, or it needs reasoning (replan, risk). Why: lower cost and latency, more deterministic evals, and it follows TypeSafe's guidance (code in control, narrow typed decisions). The agent stays agentic where it matters: uncertainty, failures and replanning.
+
+## D027 · Agent DB writes happen before the interrupt, never after
+LangGraph re-runs a node from its top on resume, so any node that writes to the database must not also call `interrupt()` — resuming would replay the write. `policyGate` (writes the resolution/approval row via `proposeFromAgent`) and `awaitApproval` (only calls `interrupt()` and returns the resume value) are split into two graph nodes for this reason.
+
+## D028 · `agentResumer` wired through a mutable box, like the realtime publisher
+`core`'s `AgentResumer` needs to enqueue a pg-boss `agent-resume` job, but `boss`'s job handlers need `core` to already exist. `main.ts` creates a mutable box, passes it into `createCore`, then fills it once `boss` is ready — the same pattern already used for `EventPublisherPort`.
+
+## D029 · Fast-path template actions reuse the existing recommendation engine
+`templateActions()` calls the same `recommendedTypes()` / `actionOptions()` (`core/actions/options.ts`) that the manual "Resolve" UI uses, keyed by root cause, instead of a new static root-cause → action table. Why: guarantees the agent can never propose an action with an invalid id or stale params — it can only ever propose what a human could also propose for that case shape.
+
+## D030 · Agent execution failures escalate instead of reopening the case
+`ResolutionService.finish()` gained an `onFailure` option (`'OPEN' | 'ESCALATE'`, default `'OPEN'`). Manual/human proposals keep the existing default (reopen for another attempt). The agent's `execute` node passes `onFailure: 'ESCALATE'`, since an agent-caused execution failure should stop and wait for a human rather than silently retry.
+
+## D031 · Investigate node uses a bounded two-call pattern, not an open ReAct loop
+`LlmPort.invokeStructured` is single-shot (needed for RECORD/REPLAY cassette determinism — each call is one cassette entry keyed by call index). The `investigate` node therefore does not run an open tool-calling loop: call 1 picks up to `AGENT_BUDGET_LIMITS.maxFollowupToolCalls` (6) follow-up tools from `FOLLOWUP_TOOLS`, code executes them, call 2 emits structured `Finding[]`. Full ReAct-style iterative tool calling is deferred; revisit if two calls prove insufficient for real cases.
+
+## D032 · `scenarioKey` is optional and only meaningful for RECORD/REPLAY
+Production cases have no natural scenario key. `CreateRunBody` and the agent job payloads carry an optional `scenarioKey`, defaulting to `'default'` when omitted; `LIVE` mode ignores it, `RECORD`/`REPLAY` use it to select the cassette file.

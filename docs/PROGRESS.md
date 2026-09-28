@@ -4,7 +4,7 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 3 · First agent** (not started). Phases 0, 1 and 2 are done.
+**Phase 3 · First agent** (backend done, web UI + cassette recording remaining). Phases 0, 1 and 2 are done.
 
 ## Phase checklist
 
@@ -18,7 +18,7 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Next task
 
-Phase 3, task 1: `DecisionPort` + `JevDecisionAdapter` (pulled forward from Phase 4 for the J6 fast path, D026), then `LlmPort` + `GeminiLlmAdapter` (`@langchain/google-genai`, `AI_MODEL`, temperature 0, `withStructuredOutput`), then the record/replay wrappers and `AI_MODE` switch. The seam for resuming an agent run after approval is `ApprovalContinuation.onApproved` in `packages/core/src/container.ts` (`TODO(Phase 3)`); the LangGraph checkpointer must reuse the shared database pool (D023).
+Phase 3, task 7: Web UI. Investigation column needs to stream live from Socket.IO agent-step events (see `packages/agents/src/store.ts`'s `AGENT_STEP_EVENT` map for event names); Findings & resolution panel with `EvidenceRef`s; Evidence panel; attempt header; on reconnect, rebuild state from `GET /api/runs/:id/steps` (already implemented, see `apps/server/src/routes/runs.ts`). Then task 8: record real cassettes for `captured_order_failed`, `refund_stuck`, `refund_never_initiated` by running the server locally with `AI_MODE=RECORD` and real `GEMINI_API_KEY`/`TYPESAFE_JEV_API_KEY` — this needs Shivam's machine or a persistent local dev server; the cloud session used for the backend work could not keep a background dev server alive across tool calls. Once cassettes exist, re-verify the three "Done when" scenarios in `docs/06-phases.md` (AUTO resolves with no human action in LIVE; MANAGER approval pauses/resumes across a restart; REPLAY has zero network calls).
 
 ## How to run locally
 
@@ -49,7 +49,8 @@ None.
 - Detection never closes a case by itself; cases close through a verified resolution.
 - Login rate limiting is in memory (single server process).
 - Signals column (complaint type, urgency, quarantine) stays empty until Jev J1 in Phase 4.
-- Overview "Resolved by investigation" reads 0 until Phase 3.
+- Overview "Resolved by investigation" reads 0 until the web UI (task 7) lands.
+- `packages/agents` has no unit tests yet (nodes, `templateActions`, `narrativeFor`, `buildProposal`); the backend is only covered indirectly via the existing 252-test suite, which exercises none of the new code paths.
 
 ## Later (parked ideas, do not build yet)
 
@@ -60,6 +61,16 @@ None.
 - Validator outcomes block on Overview (needs Phase 2 data)
 
 ## Session log
+
+### 2026-09-28 · Phase 3 (backend)
+- `shared`: full agent vocabulary (`agents.ts`) — run/step status, decision tags, root causes, finding codes, evidence/finding/proposal shapes, `RunBudget`, `AGENT_BUDGET_LIMITS`, `CreateRunBody`/`RunListQuery` DTOs.
+- `core`: `LlmPort` + `GeminiLlmAdapter` (Gemini, structured output, temp 0); `DecisionPort` + `JevDecisionAdapter` (TypeSafe System One, choice/noul/score); a shared RECORD/REPLAY cassette adapter (`adapters/cassette.ts`) wrapping both ports, keyed by node/tag + call index + prompt hash; `agent_runs`/`agent_steps` tables + migration 0002; `ResolutionService.proposeFromAgent` + `finish({onFailure})`; `ApprovalService` continuation now covers approved/rejected/escalated.
+- `packages/agents` (new workspace package): LangGraph state (`PayOpsState`), 11 read-only tools over Payment/Reconciliation data with evidence projection, Zod schemas for structured LLM output, case-brief builder, prompts, fast-path template resolution (D029), graph v1 (`loadCase → triage → diagnose(J6) → [fast: template | full: investigate → resolve] → policyGate → awaitApproval(interrupt) → execute → closeBlocked/closeRejected/closeEscalated`), `PostgresSaver` checkpointer keyed by `runId`, run store + Socket.IO event sink.
+- `apps/server`: `agent-run`/`agent-resume` pg-boss jobs; `POST /api/cases/:id/runs` (create + enqueue), `GET /api/runs`, `/:id`, `/:id/steps`; `agentResumer` wired through a mutable box (D028) so an approval decision resumes the paused LangGraph thread.
+- Design decisions logged: D027 (writes-before-interrupt split), D028 (resumer box), D029 (fast-path reuses `recommendedTypes`), D030 (agent failures escalate, `onFailure`), D031 (bounded two-call investigate instead of open ReAct), D032 (optional `scenarioKey`).
+- Checks: `pnpm typecheck` clean across all 6 packages; `pnpm test` — 252/252 passing (no new tests added yet for the agent package itself — see Known gaps).
+- Not done this session: Web UI (task 7 — investigation stream, findings/evidence panels, reconnect rebuild), cassette recording (task 8 — needs a persistent local server with real API keys, not available in this cloud session), and the three Phase 3 "Done when" scenarios are therefore unverified end to end.
+
 
 ### 2026-09-28 · Phase 2
 - Shared contract: closed action catalog (9 actions, 4 classes), policy vocabulary P0–P11, resolution/approval/verification DTOs.

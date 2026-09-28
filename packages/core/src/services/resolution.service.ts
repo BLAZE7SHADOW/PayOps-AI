@@ -10,6 +10,7 @@ import {
   OPS_EVENTS,
   ProposeActionsBody,
   ROOMS,
+  type PreconditionFailure,
   formatMoney,
   newId,
   roleAtLeast,
@@ -54,6 +55,15 @@ export function userActor(user: Pick<SessionUser, 'id' | 'name'>): ActorRef {
 
 export function userWriteContext(user: Pick<SessionUser, 'id' | 'name'>): WriteContext {
   return { actor: { actorType: 'USER', actorId: user.id, actorName: user.name } };
+}
+
+/** The agent's actor identity for a run, used on its resolution, audit rows and case updates. */
+export function agentActor(runId: string): ActorRef {
+  return { type: 'AGENT', id: runId, name: 'PayOps Agent' };
+}
+
+export function agentWriteContext(caseId: string, runId: string): WriteContext {
+  return { actor: { actorType: 'AGENT', actorId: runId, actorName: 'PayOps Agent' }, caseId, runId };
 }
 
 const VALIDATOR_CTX: WriteContext = { actor: { actorType: 'SYSTEM', actorId: 'validator', actorName: 'Validator' } };
@@ -105,6 +115,126 @@ export class ResolutionService {
     const attempt = (await this.attemptsSoFar(this.db, caseId)) + 1;
     const { decision, preconditionFailures } = this.evaluate(state, actions, attempt);
     return { decision, preconditionFailures, approverHint: approverHint(decision.tier), attempt };
+  }
+
+  /** Policy inputs for an agent's proposal (docs/03-agent-system.md §11). */
+  private evaluateAgent(
+    state: CaseState,
+    actions: readonly CatalogAction[],
+    attempt: number,
+    diagnosisConfidence: number,
+    groundingViolations: number,
+  ) {
+    const preconditionFailures = checkPreconditions(actions, state);
+    const decision = evaluatePolicy({
+      proposer: 'AGENT',
+      actions,
+      riskTier: riskTierFromRules(state.order),
+      attempt,
+      diagnosisConfidence,
+      groundingViolations,
+      preconditionFailures: preconditionFailures.length,
+      gatewayCaptureVerified: state.order ? isCaptured(state.order.primaryGw) : false,
+    });
+    return { decision, preconditionFailures };
+  }
+
+  /**
+   * An agent run proposes a resolution (docs/03-agent-system.md §5, node `policyGate`). Same
+   * policy engine, same resolution/approval tables as a person's proposal; the caller (the graph's
+   * `policyGate` node) reads `decision.tier` off the result to route to `interrupt`, `execute` or
+   * an escalation, and never lets a BLOCKED proposal execute.
+   */
+  async proposeFromAgent(
+    caseId: string,
+    runId: string,
+    proposal: { actions: readonly CatalogAction[]; rationale: string },
+    agentInputs: { diagnosisConfidence: number; groundingViolations: number },
+  ): Promise<{ resolution: ResolutionRow; approvalId: string | null; preconditionFailures: PreconditionFailure[] }> {
+    const write = agentWriteContext(caseId, runId);
+    const state = await loadCaseState(this.db, this.gateway, caseId, this.clock.now());
+
+    const created = await this.db.transaction(async (tx) => {
+      const [row] = await tx.select().from(cases).where(eq(cases.id, caseId)).for('update').limit(1);
+      if (!row) throw notFound('Case', caseId);
+      if (CLOSED_CASE_STATUSES.includes(row.status)) throw new AppError('CONFLICT', `Case ${row.displayId} is ${row.status}`);
+      const previous = await this.queries.rowsForCase(caseId, tx);
+      const attempt = previous.length + 1;
+      const { decision, preconditionFailures } = this.evaluateAgent(
+        state,
+        proposal.actions,
+        attempt,
+        agentInputs.diagnosisConfidence,
+        agentInputs.groundingViolations,
+      );
+      const status: ResolutionStatus =
+        decision.tier === 'BLOCKED' ? 'BLOCKED' : decision.tier === 'AUTO' ? 'EXECUTING' : 'AWAITING_APPROVAL';
+      const now = this.clock.now();
+      const [resolution] = await tx
+        .insert(resolutions)
+        .values({
+          id: newId('resolution'),
+          caseId,
+          runId,
+          attempt,
+          actions: proposal.actions as CatalogAction[],
+          rationale: proposal.rationale,
+          proposedBy: agentActor(runId),
+          policy: decision,
+          status,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!resolution) throw new Error('resolution insert returned no row');
+      await this.audit.record(
+        auditFrom(write, {
+          action: 'resolution.proposed',
+          entityType: 'resolution',
+          entityId: resolution.id,
+          summary: `Agent run ${runId} proposed attempt ${attempt} for ${row.displayId}: ${actionsSummary(proposal.actions as CatalogAction[])}. Policy ${decision.tier} (${decision.reasons.map((r) => r.ruleId).join(', ') || 'no rule'})`,
+          after: { actions: proposal.actions, policy: decision, preconditionFailures },
+        }),
+        tx,
+      );
+
+      let approvalId: string | null = null;
+      if (decision.tier === 'OPS' || decision.tier === 'MANAGER') {
+        approvalId = newId('approval');
+        await tx.insert(approvals).values({
+          id: approvalId,
+          resolutionId: resolution.id,
+          caseId,
+          tier: decision.tier,
+          status: 'PENDING',
+          requestedBy: agentActor(runId),
+          requestedAt: now,
+        });
+        await this.audit.record(
+          auditFrom(write, {
+            action: 'approval.requested',
+            entityType: 'approval',
+            entityId: approvalId,
+            summary: `Agent run ${runId} needs ${decision.tier === 'MANAGER' ? 'a manager' : 'an OPS user'} to approve ${row.displayId}: ${actionsSummary(proposal.actions as CatalogAction[])}`,
+          }),
+          tx,
+        );
+        await this.cases.setStatus(tx, caseId, 'AWAITING_APPROVAL', `${row.displayId} is waiting for ${decision.tier} approval`, write);
+      } else if (decision.tier === 'AUTO') {
+        await this.cases.setStatus(tx, caseId, 'EXECUTING', `${row.displayId} is executing an AUTO-tier resolution`, write);
+      } else {
+        await this.cases.setStatus(tx, caseId, 'ESCALATED', `${row.displayId}: agent proposal blocked by policy, escalated to a person`, write);
+      }
+      return { resolution, approvalId, preconditionFailures };
+    });
+
+    await this.publish(created.resolution.id, caseId);
+    if (created.approvalId && this.approvalItem) {
+      const item = await this.approvalItem(created.approvalId);
+      this.events.publish(ROOMS.ops, OPS_EVENTS.approvalRequested, item);
+      this.events.publish(ROOMS.case(caseId), OPS_EVENTS.approvalRequested, item);
+    }
+    return created;
   }
 
   /**
@@ -215,14 +345,16 @@ export class ResolutionService {
    * PASS resolves the case (or leaves it ESCALATED when the resolution escalated); PARTIAL, FAIL
    * and execution failures send it back to OPEN with the outcome visible on the resolution.
    */
-  async finish(resolutionId: string, write: WriteContext): Promise<ResolutionItem> {
+  async finish(resolutionId: string, write: WriteContext, opts: { onFailure?: 'OPEN' | 'ESCALATE' } = {}): Promise<ResolutionItem> {
     const resolution = await this.queries.row(resolutionId);
     const ctx: WriteContext = { ...write, caseId: resolution.caseId, runId: resolution.runId };
+    const onFailureStatus: 'OPEN' | 'ESCALATED' = opts.onFailure === 'ESCALATE' ? 'ESCALATED' : 'OPEN';
     const execution = await this.executor.execute(resolutionId, ctx);
 
     if (!execution.ok) {
       const failed = execution.steps.find((s) => s.status === 'FAILED');
-      await this.close(resolution, 'EXECUTION_FAILED', 'OPEN', `Execution failed at step ${(failed?.index ?? 0) + 1}: ${failed?.error?.message ?? 'unknown error'}. Case reopened`, ctx, null);
+      const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
+      await this.close(resolution, 'EXECUTION_FAILED', onFailureStatus, `Execution failed at step ${(failed?.index ?? 0) + 1}: ${failed?.error?.message ?? 'unknown error'}. Case ${reopened}`, ctx, null);
     } else {
       const validation = await this.validator.validate(resolutionId, VALIDATOR_CTX);
       const escalates = resolution.actions.some((a) => a.type === 'ESCALATE_TO_HUMAN');
@@ -234,7 +366,8 @@ export class ResolutionService {
           runId: resolution.runId,
         });
       } else {
-        await this.close(resolution, 'VALIDATED', 'OPEN', `${summary}. Case reopened`, ctx, null);
+        const reopened = onFailureStatus === 'ESCALATED' ? 'escalated to a person' : 'reopened';
+        await this.close(resolution, 'VALIDATED', onFailureStatus, `${summary}. Case ${reopened}`, ctx, null);
       }
     }
 

@@ -24,10 +24,17 @@ import { ResolutionService } from './services/resolution.service';
 import { WebhookConsumer } from './services/webhook-consumer';
 import { ValidatorService } from './validation/validator.service';
 
+/** Resumes an agent run's LangGraph thread after a human decides its approval (Phase 3). */
+export interface AgentResumer {
+  resume(runId: string, decision: 'APPROVE' | 'REJECT' | 'ESCALATE'): Promise<void>;
+}
+
 export interface CoreOptions {
   db: Db;
   clock?: ClockPort;
   events?: EventPublisherPort;
+  /** Wired by apps/server once pg-boss is up; undefined in tests that never start an agent run. */
+  agentResumer?: AgentResumer;
   gateway?: PaymentGatewayPort;
 }
 
@@ -89,9 +96,18 @@ export function createCore(opts: CoreOptions): Core {
 
   const continuation: ApprovalContinuation = {
     async onApproved(resolution, write) {
-      // TODO(Phase 3): when resolution.runId is set, resume the agent's LangGraph thread
-      // (boss.send('agent-resume', { runId })) instead; the graph then executes and validates.
+      if (resolution.runId && opts.agentResumer) {
+        await opts.agentResumer.resume(resolution.runId, 'APPROVE');
+        return;
+      }
       await resolutions.finish(resolution.id, write);
+    },
+    async onRejected(resolution) {
+      if (resolution.runId && opts.agentResumer) await opts.agentResumer.resume(resolution.runId, 'REJECT');
+      // Manual proposals: approval.service.ts already set resolution+case status; nothing else to do.
+    },
+    async onEscalated(resolution) {
+      if (resolution.runId && opts.agentResumer) await opts.agentResumer.resume(resolution.runId, 'ESCALATE');
     },
   };
   const approvals = new ApprovalService(db, clock, audit, events, cases, resolutionQueries, continuation);

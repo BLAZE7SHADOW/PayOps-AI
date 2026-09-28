@@ -28,9 +28,17 @@ import { decodeCursor, encodeCursor, isRecord } from './cursor';
 import type { ResolutionQueryService } from './resolution-query.service';
 import { actionsSummary, userActor, userWriteContext } from './resolution.service';
 
-/** What happens after an approval. Phase 3 swaps in "resume the agent's LangGraph thread". */
+/**
+ * What happens after a decision. The default (container.ts) executes+validates manual
+ * proposals on APPROVE and does nothing on REJECT/ESCALATE (already fully handled inline
+ * above). An agent's resolution (`resolution.runId` set) instead resumes its LangGraph thread
+ * for every decision, so the run's own execute/validate/close nodes run and its status never
+ * gets stuck at AWAITING_APPROVAL.
+ */
 export interface ApprovalContinuation {
   onApproved(resolution: ResolutionRow, write: WriteContext): Promise<void>;
+  onRejected(resolution: ResolutionRow, write: WriteContext): Promise<void>;
+  onEscalated(resolution: ResolutionRow, write: WriteContext): Promise<void>;
 }
 
 /** Why this viewer cannot decide, or null if they can. */
@@ -185,6 +193,8 @@ export class ApprovalService {
     this.events.publish(ROOMS.case(c.id), OPS_EVENTS.approvalResolved, payload);
 
     if (input.decision === 'APPROVE') await this.continuation.onApproved(decided.r, write);
+    else if (input.decision === 'REJECT') await this.continuation.onRejected(decided.r, write);
+    else await this.continuation.onEscalated(decided.r, write);
     const after = await this.load(id);
     return this.toItem(after.a, after.c, after.r, viewer);
   }
