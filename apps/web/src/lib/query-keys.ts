@@ -30,6 +30,11 @@ export const qk = {
     list: (scope: ApprovalScope) => ['approvals', 'list', scope] as const,
     detail: (id: string) => ['approvals', 'detail', id] as const,
   },
+  runs: {
+    all: ['runs'] as const,
+    list: (caseId: string) => ['runs', 'list', caseId] as const,
+    steps: (id: string) => ['runs', 'steps', id] as const,
+  },
   policy: () => ['policy'] as const,
   audit: (f: AuditFilters) => ['audit', f] as const,
   scenarios: () => ['simulator', 'scenarios'] as const,

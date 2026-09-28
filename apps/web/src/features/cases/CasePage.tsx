@@ -2,7 +2,7 @@ import { useParams } from 'react-router';
 import { DETECTION_RULE_LABEL, type CaseDetail } from '@payops/shared';
 import { useCaseRoom } from '../../lib/socket';
 import { useDocumentTitle } from '../../lib/use-document-title';
-import { EmptyState } from '../../ui/EmptyState';
+import { Investigation, InvestigationSkeleton } from '../investigation/Investigation';
 import { ErrorState } from '../../ui/ErrorState';
 import { Section } from '../../ui/Section';
 import { StateMatrix, StateMatrixSkeleton, mismatchSummary } from '../../ui/StateMatrix';
@@ -49,7 +49,9 @@ export function CasePage() {
         </div>
       </section>
 
-      <div className="mt-6 grid grid-cols-[minmax(0,4fr)_minmax(0,6fr)_minmax(0,3fr)] border border-rule bg-surface">
+      {c ? <Investigation key={c.id} c={c} /> : <InvestigationSkeleton />}
+
+      <div className="mt-6 grid grid-cols-[minmax(0,4fr)_minmax(0,6fr)] border border-rule bg-surface">
         <Section title="Case details" titleId="details-title">
           {c ? <CaseDetails c={c} /> : <CaseDetailsSkeleton />}
         </Section>
@@ -61,9 +63,6 @@ export function CasePage() {
           bodyClassName="px-4"
         >
           {c ? <Timeline events={c.lifecycle} /> : <TimelineSkeleton rows={8} />}
-        </Section>
-        <Section title="Investigation" titleId="investigation-title" className="border-l border-rule">
-          <EmptyState message="No investigation has run for this case." className="py-6" />
         </Section>
       </div>
 

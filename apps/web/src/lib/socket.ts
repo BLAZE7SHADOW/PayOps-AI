@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
-import { OPS_EVENTS, type ApprovalItem, type CaseDetail, type CaseListItem, type Page, type ResolutionItem } from '@payops/shared';
+import { OPS_EVENTS, RUN_EVENTS, type RunEventEnvelope, type ApprovalItem, type CaseDetail, type CaseListItem, type Page, type ResolutionItem } from '@payops/shared';
 import { qk } from './query-keys';
 import { useRealtimeStore } from './realtime-store';
 
@@ -15,6 +15,7 @@ export interface RealtimeSource {
   onCase(cb: CaseEventHandler): void;
   onApproval(cb: ApprovalEventHandler): void;
   onResolution(cb: ResolutionEventHandler): void;
+  onRun(cb: (event: RunEventEnvelope) => void): void;
   joinCase(caseId: string): void;
   leaveCase(caseId: string): void;
   close(): void;
@@ -40,11 +41,16 @@ function socketIoSource(): RealtimeSource {
       socket.on(OPS_EVENTS.caseUpdated, (item: CaseListItem) => cb('updated', item));
     },
     onApproval(cb) {
-      socket.on(OPS_EVENTS.approvalRequested, (item: ApprovalItem) => cb('requested', item));
-      socket.on(OPS_EVENTS.approvalResolved, (item: ApprovalItem) => cb('resolved', item));
+      socket.on(OPS_EVENTS.approvalRequested, (item: ApprovalItem | RunEventEnvelope) => { if ('case' in item) cb('requested', item); });
+      socket.on(OPS_EVENTS.approvalResolved, (item: ApprovalItem | RunEventEnvelope) => { if ('case' in item) cb('resolved', item); });
     },
     onResolution(cb) {
       socket.on(OPS_EVENTS.resolutionUpdated, (item: ResolutionItem) => cb(item));
+    },
+    onRun(cb) {
+      for (const name of RUN_EVENTS) socket.on(name, (event: RunEventEnvelope | ApprovalItem) => {
+        if ('runId' in event && 'seq' in event) cb(event);
+      });
     },
     joinCase(caseId) {
       rooms.add(caseId);
@@ -102,7 +108,14 @@ export function useRealtime(): void {
       source = s;
       current = s;
       for (const id of wantedRooms.keys()) s.joinCase(id);
-      s.onStatus(setConnection);
+      s.onStatus((status) => {
+        setConnection(status);
+        // Authoritative reads recover steps missed while disconnected, including paused runs.
+        if (status === 'live') invalidateAll(qc, [qk.runs.all, qk.cases.all, qk.approvals.all, qk.overview()]);
+      });
+      s.onRun((event) => {
+        invalidateAll(qc, [qk.runs.list(event.caseId), qk.runs.steps(event.runId), qk.cases.detail(event.caseId), qk.overview()]);
+      });
       s.onCase((kind, item) => {
         invalidateAll(qc, [qk.cases.all, qk.overview(), qk.payments.all]);
         pushNotice({ kind, item, subject: `case:${item.id}` });

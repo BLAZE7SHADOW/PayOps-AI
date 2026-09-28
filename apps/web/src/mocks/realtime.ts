@@ -19,6 +19,7 @@ export function mockRealtimeSource(): RealtimeSource {
     onResolution(cb) {
       on((e) => e.name === 'resolution' && cb(e.item));
     },
+    onRun() {},
     // The mock broadcasts every event to everyone, so rooms are no-ops.
     joinCase() {},
     leaveCase() {},
