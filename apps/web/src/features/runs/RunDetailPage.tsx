@@ -9,6 +9,7 @@ import { Skeleton } from '../../ui/Skeleton';
 import { Tag } from '../../ui/Tag';
 import { useRunSteps } from '../investigation/api';
 import { useRun } from './api';
+import { RunFlow } from './RunFlow';
 import { RUN_TONE, contextTokens, formatCost, formatDuration, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
 
 export function RunDetailPage() {
@@ -56,18 +57,22 @@ export function RunDetailPage() {
         }
       />
       <Figures run={r} />
-      <div className="mt-6 grid grid-cols-12 gap-6">
-        <section aria-labelledby="latency-title" className="col-span-5 min-w-0">
-          <h2 id="latency-title" className="flex h-10 items-center text-13 font-semibold">
+      <section aria-labelledby="flow-title" className="mt-8">
+        <h2 id="flow-title" className="mb-3 text-20 font-semibold">Run orchestration</h2>
+        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} /> : <RunFlow steps={steps.isPending ? undefined : items} status={r?.status} />}
+      </section>
+      <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        <section aria-labelledby="latency-title" className="min-w-0 xl:col-span-5">
+          <h2 id="latency-title" className="flex h-10 items-center text-18 font-semibold">
             Time per node
           </h2>
           <div className="border border-rule bg-surface px-4 py-3">
             <NodeLatency steps={steps.isPending ? undefined : items} />
           </div>
         </section>
-        <section aria-labelledby="steps-title" className="col-span-7 min-w-0">
-          <h2 id="steps-title" className="flex h-10 items-center text-13 font-semibold">
-            Steps
+        <section aria-labelledby="steps-title" className="min-w-0 xl:col-span-7">
+          <h2 id="steps-title" className="flex h-10 items-center text-18 font-semibold">
+            Recorded events
           </h2>
           <StepTable steps={steps.isPending ? undefined : items} />
         </section>
@@ -89,9 +94,9 @@ function Figures({ run }: { run: AgentRunItem | undefined }) {
       ]
     : ['Duration', 'Attempts', 'LLM calls', 'Jev calls', 'Tool calls', 'Tokens', 'Cost'].map((l) => [l, undefined]);
   return (
-    <dl className="grid grid-cols-7 border border-rule bg-surface">
+    <dl className="grid grid-cols-2 overflow-hidden rounded-lg border border-rule bg-surface sm:grid-cols-4 xl:grid-cols-7">
       {cells.map(([label, value], i) => (
-        <div key={label} className={i ? 'border-l border-rule px-4 py-3' : 'px-4 py-3'}>
+        <div key={label} className={`${i ? 'border-l border-rule' : ''} border-b border-rule px-4 py-3 xl:border-b-0`}>
           <dt className="text-12 text-ink-2">{label}</dt>
           <dd className="tabular mt-1 flex h-7 items-center font-mono text-20 font-medium text-ink">
             {value ?? <Skeleton width={48} height={18} />}

@@ -928,3 +928,20 @@ locate. These changes let an operator scan the problem, evidence, action, and re
 server authorization checks. No policy or API behavior changes. Citation links open their collapsed
 evidence panel and focus the cited item. Tables scroll locally on narrow screens, and the shell
 switches to a horizontal navigation list when the side rail no longer fits.
+
+
+## D056 · Visualize orchestration from recorded run events
+
+**Decision.** The Agent run detail page derives a vertical flow from `agent_steps`, grouping consecutive
+node visits into stages. Only visited specialist nodes appear as branches. Repeated visits after a
+replan remain separate, and an unresolved `awaitApproval` node is shown as waiting. Each node
+expands into its recorded events; the raw step table and latency bars remain available below.
+The Case investigation header links to the same run view.
+
+**Why.** A reader can see which agents contributed and how the run moved from evidence to a proposal,
+policy, deterministic execution, and independent verification without interpreting raw node names.
+Showing only persisted events avoids depicting planned work as completed work.
+
+**Consequences.** This is a read-only projection of existing data. No graph, API, policy, or database
+changes are needed. It does not infer which agents were selected from a plan payload; an agent appears
+only when its own node emitted an event. An approval pause stays visually distinct from a failure.

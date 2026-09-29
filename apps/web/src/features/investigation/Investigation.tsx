@@ -32,6 +32,7 @@ export function Investigation({ c }: { c: CaseDetail }) {
         {runs.isPending ? <Skeleton width={200} /> : run ? <>
           <span className="ml-auto font-mono text-12 break-all text-ink-2">attempt {run.attempt}</span>
           <Tag tone={run.status === 'RESOLVED' ? 'ok' : run.status === 'FAILED' ? 'bad' : 'neutral'}>{run.status}</Tag>
+          <Link className="link text-13" to={`/runs/${run.id}`}>View run flow</Link>
         </> : <span className="text-13 text-ink-2">No investigation started</span>}
         <div className="flex items-center gap-3">
           {(runs.data?.items.length ?? 0) > 1 ? <Select label="Investigation run" allLabel="Latest run" value={selected} onChange={setSelected} width={200}

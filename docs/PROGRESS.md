@@ -19,7 +19,7 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope). The UI revamp is implemented (D055).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
+**Phase 6 is complete (parts A-D, D051 scope). The UI revamp and recorded-run orchestration view are implemented (D055-D056).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
 
 Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
@@ -103,6 +103,12 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Recorded multi-agent orchestration view (D056)
+- Agent run details now lead with a stage-by-stage visualization built from `agent_steps`. Only actual specialist visits appear; each node expands to its recorded actions, tool results, evidence ids, and decisions. Approval pauses and replan loops are explicit. The existing raw event table and node timings remain below.
+- Case investigation headers link to the matching run flow. The run-detail figures and diagnostic grid now reflow on narrow screens. Pure and interaction tests cover branch selection, retries, approval waiting, and opening recorded actions.
+- Validation: web typecheck, lint, production build, and 72/72 web tests pass. Headless Chrome checked the flow with representative recorded steps at 1440px and 390px: no page-wide horizontal overflow or browser errors. The mock API has no stored run fixture, so this visual check mounted the production component with a temporary event sample; it did not alter app data.
+
 
 ### 2026-09-29 · Phase 6 UI revamp implementation (D055)
 - Updated UI tokens, type, radii, controls, table density, responsive shell, and the production UI spec. Case pages now show a state-aware next action beside findings; trace, evidence and lifecycle are available on demand. Citation links reveal and focus their evidence item.
