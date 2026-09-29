@@ -986,3 +986,20 @@ responses. Failed transport attempts are not included in successful-call token u
 billing may therefore exceed the run's reported token-based estimate. Jev signal intake outside
 an agent run gets the same retry behavior but has no `agent_steps` trail. The agent-system tool
 description was corrected to match its existing read-only projection implementation.
+
+
+## D059 · Case source records and verification links
+
+**Decision.** The Case page exposes direct links to payment details, resolution checks, case audit
+events, and a read-only source-record table. `GET /api/cases/:id/records` reloads the linked order,
+gateway, webhook, ledger, refund, settlement, and dispute state through the existing core services.
+The web UI can refresh this view without starting an agent or changing data. A pending approval is
+linked only when policy created one; AUTO resolutions say that approval was automatic under policy.
+
+**Why.** A run story and evidence citations alone do not let an operator independently confirm what
+changed. The source-record view and audit trail provide concrete ids, statuses, amounts, timestamps,
+and recorded actions to compare against the agent's claim and validator result.
+
+**Consequences.** This is a read-only operator projection, separate from model output. It uses the
+existing role-protected case route and introduces no new write path, policy decision, or database
+table. It reports the current state at its read time; the audit log and run steps show the history.

@@ -7,12 +7,13 @@ import {
   PreviewActionsBody,
   ProposeActionsBody,
   type CaseDetail,
+  type CaseSourceRecords,
   type CaseListItem,
   type Page,
   type PolicyPreview,
   type ResolutionItem,
 } from '@payops/shared';
-import type { Core } from '@payops/core';
+import { loadCaseState, projectCaseSourceRecords, type Core } from '@payops/core';
 import type { AgentRunJobPayload } from '../jobs/agents';
 import { QUEUES } from '../jobs/boss';
 import { requireRole, sessionUser } from '../auth/middleware';
@@ -28,6 +29,12 @@ export function caseRoutes(core: Core, boss: PgBoss): Router {
 
   router.get('/:id', requireRole('VIEWER'), async (req, res) => {
     const body: CaseDetail = await core.cases.get(param(req, 'id'), sessionUser(req));
+    res.json(body);
+  });
+
+  router.get('/:id/records', requireRole('VIEWER'), async (req, res) => {
+    const state = await loadCaseState(core.db, core.gateway, param(req, 'id'), core.clock.now());
+    const body: CaseSourceRecords = projectCaseSourceRecords(state);
     res.json(body);
   });
 

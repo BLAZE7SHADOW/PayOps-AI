@@ -108,6 +108,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-09-29 · Case verification and source records (D059)
+- Added a visible Case verification row linking to payment detail, source records, resolution checks, audit events, and pending approval. AUTO cases explain why no manual approval appears.
+- Added a read-only endpoint and table for fresh linked order, gateway, webhook, ledger, refund, settlement, and dispute records. Each record exposes its id, status, amount, time, and relevant fields; the table can be refreshed while a LIVE investigation runs. Run detail links back to the source records and audit trail.
+- Validation: full suite passes (473 tests), including payment and settlement source records. Package typechecks, lint, and web production build pass. Tests used temporary test-only URL and JWT overrides; no local configuration was changed.
+
 ### 2026-09-29 · Local seed and clean reset for a LIVE UI walkthrough
 - Ran the server seed script against the configured local PGlite database. Existing standard scenarios were skipped; the four new critical showcase cases were generated. The seed reported 19 open exceptions, and the API listed 20 total cases before reset.
 - Used the authenticated Simulator reset endpoint, which saved an undo snapshot and returned `ok`. Verified the API case count fell from 20 to 0. Demo users and baseline world remain. The existing API process still reports `AI_MODE=REPLAY`; a LIVE walkthrough requires restarting that API with `AI_MODE=LIVE` while keeping the local database running.

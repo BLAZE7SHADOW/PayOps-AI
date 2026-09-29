@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { DETECTION_RULE_LABEL, type CaseDetail } from '@payops/shared';
 import { useCaseRoom } from '../../lib/socket';
 import { useDocumentTitle } from '../../lib/use-document-title';
@@ -12,6 +12,7 @@ import { useCase } from './api';
 import { CaseDetails, CaseDetailsSkeleton } from './CaseDetails';
 import { CaseHeader, CaseHeaderSkeleton } from './CaseHeader';
 import { CaseActions } from './CaseActions';
+import { CaseSourceRecords } from './CaseSourceRecords';
 import { ResolutionSection } from '../resolution/ResolutionSection';
 
 export function CasePage() {
@@ -33,6 +34,16 @@ export function CasePage() {
   return (
     <article aria-busy={!c || undefined}>
       {c ? <CaseHeader c={c} /> : <CaseHeaderSkeleton />}
+
+      {c ? <nav aria-label="Verify this case" className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-rule bg-surface px-4 py-3 text-13">
+        <span className="font-medium">Verify this case</span>
+        <a className="link" href="#source-records">Inspect source records</a>
+        {c.entityRefs.paymentId ? <Link className="link" to={`/payments?payment=${encodeURIComponent(c.entityRefs.paymentId)}`}>Open payment details</Link> : null}
+        <a className="link" href="#resolution">Check action and verification</a>
+        <Link className="link" to={`/audit?caseId=${encodeURIComponent(c.id)}`}>View audit trail</Link>
+        {c.resolutionView?.pendingApprovalId ? <Link className="link" to={`/approvals?approval=${encodeURIComponent(c.resolutionView.pendingApprovalId)}`}>Review approval</Link> : null}
+        {c.resolutionView?.resolutions[0]?.policy.tier === 'AUTO' ? <span className="text-ink-2">Approval: automatic under policy</span> : null}
+      </nav> : null}
 
       <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section aria-labelledby="matrix-title" className="order-2 min-w-0 xl:order-1 xl:col-span-2">
@@ -57,6 +68,8 @@ export function CasePage() {
       </div>
 
       <ResolutionSection c={c} />
+
+      {c ? <CaseSourceRecords caseId={c.id} /> : null}
 
       <details className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">
         <summary className="cursor-pointer px-5 py-4 text-15 font-medium text-ink hover:bg-surface-sunk">Case details and lifecycle</summary>

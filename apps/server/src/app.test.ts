@@ -4,6 +4,7 @@ import type { Express } from 'express';
 import type {
   AgentRunItem,
   CaseDetail,
+  CaseSourceRecords,
   CaseListItem,
   GenerateScenarioResult,
   GroundingReport,
@@ -98,6 +99,24 @@ describe('cases API', () => {
   beforeAll(async () => {
     await generate('refund_never_initiated', 2);
     await generate('settlement_mismatch', 3);
+  });
+
+  it('shows fresh source records for payment and settlement cases without an agent run', async () => {
+    const list = (await ops.get('/api/cases?limit=10').expect(200)).body as Page<CaseListItem>;
+    const paymentCase = list.items.find((item) => item.type === 'PAYMENT_MISMATCH')!;
+    const paymentRecords = (await ops.get(`/api/cases/${paymentCase.id}/records`).expect(200)).body as CaseSourceRecords;
+    expect(paymentRecords.caseId).toBe(paymentCase.id);
+    expect(paymentRecords.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ system: 'GATEWAY', kind: 'Gateway payment' }),
+      expect.objectContaining({ system: 'ORDER', kind: 'Order' }),
+      expect.objectContaining({ system: 'WEBHOOK', kind: 'Webhook delivery' }),
+    ]));
+    const batchCase = list.items.find((item) => item.type === 'SETTLEMENT_MISMATCH')!;
+    const batchRecords = (await ops.get(`/api/cases/${batchCase.id}/records`).expect(200)).body as CaseSourceRecords;
+    expect(batchRecords.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ system: 'SETTLEMENT', kind: 'Settlement batch', id: batchCase.primaryRef.batchId }),
+      expect.objectContaining({ system: 'SETTLEMENT', kind: 'Gateway settlement line' }),
+    ]));
   });
 
   it('orders the queue by priority and returns list items', async () => {

@@ -22,6 +22,7 @@ export const qk = {
     all: ['cases'] as const,
     list: (f: CaseFilters) => ['cases', 'list', f] as const,
     detail: (id: string) => ['cases', 'detail', id] as const,
+    records: (id: string) => ['cases', 'records', id] as const,
   },
   /** Policy previews are keyed by the exact proposal so an unchanged selection is never re-asked. */
   preview: (caseId: string, actionsKey: string) => ['preview', caseId, actionsKey] as const,

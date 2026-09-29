@@ -163,6 +163,7 @@ Table sorted by priority: Case · Type · Amount · Systems in disagreement (min
 - Mismatched matrix cells get `--bad-weak` background and a ▲ marker; the column header of the "source of truth" (gateway) is marked `REFERENCE`.
 - Investigation column: numbered steps, nested tool calls in mono, Jev decisions shown as `plan · primary: webhook_or_state_sync · conf 0.82`. Timing on the right in mono.
 - After execution: a **Verification** block lists every validator check as a row (`order.status = PAID  expected PAID  actual PAID  PASS`).
+- A visible verification row links to the current source records, payment drawer when applicable, resolution checks, case audit events, and any pending approval. Source records show the saved order/payment, gateway, webhook, ledger, refund, settlement, and dispute rows linked to the case; each row can reveal key fields. The records are read from core services separately from the agent trace and can be refreshed during a LIVE run.
 - If replanned: attempts shown as tabs `Attempt 1 · FAIL` / `Attempt 2 · PASS`.
 - Manual path always visible: "Resolve manually" opens the action catalog form.
 

@@ -194,6 +194,23 @@ export interface CaseDetail extends CaseListItem {
   resolutionView: CaseResolutionView;
 }
 
+/** Fresh, read-only projections of the records behind a case, independent of agent findings. */
+export interface CaseSourceRecord {
+  system: SystemKey | 'REFUND' | 'DISPUTE';
+  kind: string;
+  id: string;
+  status: string;
+  amountMinor: number | null;
+  at: string | null;
+  details: Array<{ label: string; value: string }>;
+}
+
+export interface CaseSourceRecords {
+  caseId: string;
+  readAt: string;
+  records: CaseSourceRecord[];
+}
+
 // ── Overview ─────────────────────────────────────────────────────────────────
 export interface OverviewMetrics {
   capturedTodayMinor: number;

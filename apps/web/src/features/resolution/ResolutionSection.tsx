@@ -15,7 +15,7 @@ export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
   const pending = view?.pendingApprovalId ? attempts.find((r) => r.approval?.id === view.pendingApprovalId) : undefined;
 
   return (
-    <section aria-labelledby="resolution-title" className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">
+    <section id="resolution" aria-labelledby="resolution-title" className="mt-8 scroll-mt-6 overflow-hidden rounded-lg border border-rule bg-surface">
       <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule px-5 py-3">
         <h2 id="resolution-title" className="text-18 font-semibold text-ink">
           Resolution

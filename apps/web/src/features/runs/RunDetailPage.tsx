@@ -52,9 +52,10 @@ export function RunDetailPage() {
           )
         }
         actions={
-          <Link to="/runs" className="link text-13">
-            All runs
-          </Link>
+          <span className="flex flex-wrap gap-4 text-13">
+            {r ? <><Link to={`/cases/${r.caseId}#source-records`} className="link">Check source records</Link><Link to={`/audit?caseId=${encodeURIComponent(r.caseId)}`} className="link">Case audit trail</Link></> : null}
+            <Link to="/runs" className="link">All runs</Link>
+          </span>
         }
       />
       <section aria-labelledby="flow-title">
