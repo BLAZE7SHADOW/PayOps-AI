@@ -313,6 +313,7 @@ export function execute(db: MockDb, c: CaseDetail, res: ResolutionItem, now = Da
       idempotencyKey: `idem_${res.id.slice(-8)}_${index}`,
       summary: executionSummary(c, a),
       error: null,
+      before: null,
       startedAt,
       finishedAt: new Date(t).toISOString(),
     };
@@ -540,6 +541,7 @@ export function seedResolutions(db: MockDb): MockDb {
           idempotencyKey: `idem_${c.id.slice(-8)}_a1_0`,
           summary: `Gateway re-delivered payment.captured (${r.eventId}); consumer answered HTTP 409 ORDER_VERSION_CONFLICT`,
           error: null,
+          before: null,
           startedAt: new Date(t0 + S).toISOString(),
           finishedAt: new Date(t0 + S + 1_204).toISOString(),
         },

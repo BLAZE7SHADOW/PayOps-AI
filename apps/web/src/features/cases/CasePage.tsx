@@ -1,4 +1,5 @@
-import { Link, useParams } from 'react-router';
+import { useEffect, useRef } from 'react';
+import { useParams } from 'react-router';
 import { DETECTION_RULE_LABEL, type CaseDetail } from '@payops/shared';
 import { useCaseRoom } from '../../lib/socket';
 import { useDocumentTitle } from '../../lib/use-document-title';
@@ -13,8 +14,15 @@ import { CaseDetails, CaseDetailsSkeleton } from './CaseDetails';
 import { CaseHeader, CaseHeaderSkeleton } from './CaseHeader';
 import { CaseActions } from './CaseActions';
 import { CaseSourceRecords } from './CaseSourceRecords';
+import { CaseStory, StorySkeleton } from './CaseStory';
+import { caseVerdict } from './case-verdict';
 import { ResolutionSection } from '../resolution/ResolutionSection';
 
+/**
+ * One workspace per case (D060): the payment records side by side, then a single story from what
+ * the systems said to what changed, with every claim linked to its record. The raw run, resolution
+ * and record views stay available under "Technical detail".
+ */
 export function CasePage() {
   const { caseId = '' } = useParams();
   const q = useCase(caseId);
@@ -22,6 +30,24 @@ export function CasePage() {
   // Per-case events (resolution.updated, execution steps) arrive only while we are in the room.
   useCaseRoom(caseId);
   useDocumentTitle(c ? c.displayId : 'Case');
+
+  // Links such as /cases/:id#source-records point inside the collapsed technical section.
+  const technical = useRef<HTMLDetailsElement>(null);
+  const loaded = Boolean(c);
+  useEffect(() => {
+    if (!loaded) return;
+    const openForHash = () => {
+      const id = window.location.hash.slice(1);
+      const target = id ? technical.current?.querySelector(`#${CSS.escape(id)}`) : null;
+      if (target && technical.current) {
+        technical.current.open = true;
+        target.scrollIntoView();
+      }
+    };
+    openForHash();
+    window.addEventListener('hashchange', openForHash);
+    return () => window.removeEventListener('hashchange', openForHash);
+  }, [loaded]);
 
   if (q.isError) {
     return (
@@ -34,19 +60,9 @@ export function CasePage() {
   return (
     <article aria-busy={!c || undefined}>
       {c ? <CaseHeader c={c} /> : <CaseHeaderSkeleton />}
+      {c ? <VerdictLine c={c} /> : null}
 
-      {c ? <nav aria-label="Verify this case" className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-rule bg-surface px-4 py-3 text-13">
-        <span className="font-medium">Verify this case</span>
-        <a className="link" href="#source-records">Inspect source records</a>
-        {c.entityRefs.paymentId ? <Link className="link" to={`/payments?payment=${encodeURIComponent(c.entityRefs.paymentId)}`}>Open payment details</Link> : null}
-        <a className="link" href="#resolution">Check action and verification</a>
-        <Link className="link" to={`/audit?caseId=${encodeURIComponent(c.id)}`}>View audit trail</Link>
-        {c.resolutionView?.pendingApprovalId ? <Link className="link" to={`/approvals?approval=${encodeURIComponent(c.resolutionView.pendingApprovalId)}`}>Review approval</Link> : null}
-        {c.resolutionView?.resolutions[0]?.policy.tier === 'AUTO' ? <span className="text-ink-2">Approval: automatic under policy</span> : null}
-      </nav> : null}
-
-      <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-      <section aria-labelledby="matrix-title" className="order-2 min-w-0 xl:order-1 xl:col-span-2">
+      <section aria-labelledby="matrix-title" className="mb-6 min-w-0">
         <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 pb-2">
           <h2 id="matrix-title" className="text-18 font-semibold">
             Compare payment records
@@ -63,29 +79,31 @@ export function CasePage() {
         </div>
       </section>
 
-        <div className="order-3 min-w-0 xl:order-2">{c ? <Investigation key={c.id} c={c} /> : <InvestigationSkeleton />}</div>
-        <div className="order-1 xl:order-3">{c ? <CaseActions c={c} /> : <div className="rounded-lg border border-rule bg-surface p-6"><Skeleton width={140} height={20} /><Skeleton width="80%" className="mt-4" /><Skeleton width="100%" height={40} className="mt-6" /></div>}</div>
+      <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="order-2 min-w-0 xl:order-1">{c ? <CaseStory key={c.id} c={c} /> : <div className="rounded-lg border border-rule bg-surface"><StorySkeleton /></div>}</div>
+        <div className="order-1 xl:order-2">{c ? <CaseActions c={c} /> : <div className="rounded-lg border border-rule bg-surface p-6"><Skeleton width={140} height={20} /><Skeleton width="80%" className="mt-4" /><Skeleton width="100%" height={40} className="mt-6" /></div>}</div>
       </div>
 
-      <ResolutionSection c={c} />
-
-      {c ? <CaseSourceRecords caseId={c.id} /> : null}
-
-      <details className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">
-        <summary className="cursor-pointer px-5 py-4 text-15 font-medium text-ink hover:bg-surface-sunk">Case details and lifecycle</summary>
-        <div className="grid grid-cols-1 border-t border-rule lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
-        <Section title="Case details" titleId="details-title">
-          {c ? <CaseDetails c={c} /> : <CaseDetailsSkeleton />}
-        </Section>
-        <Section
-          title="Lifecycle"
-          titleId="lifecycle-title"
-          className="border-t border-rule lg:border-t-0 lg:border-l"
-          aside={c ? <span className="tabular font-mono">{c.lifecycle.length} events</span> : null}
-          bodyClassName="px-4"
-        >
-          {c ? <Timeline events={c.lifecycle} /> : <TimelineSkeleton rows={8} />}
-        </Section>
+      <details ref={technical} className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">
+        <summary className="cursor-pointer px-5 py-4 text-15 font-medium text-ink hover:bg-surface-sunk">Technical detail: run trace, resolution attempts, source records, case history</summary>
+        <div className="border-t border-rule bg-paper p-4">
+          {c ? <Investigation key={c.id} c={c} /> : <InvestigationSkeleton />}
+          <ResolutionSection c={c} />
+          {c ? <CaseSourceRecords caseId={c.id} /> : null}
+          <div className="mt-8 grid grid-cols-1 overflow-hidden rounded-lg border border-rule bg-surface lg:grid-cols-[minmax(0,4fr)_minmax(0,6fr)]">
+            <Section title="Case details" titleId="details-title">
+              {c ? <CaseDetails c={c} /> : <CaseDetailsSkeleton />}
+            </Section>
+            <Section
+              title="Lifecycle"
+              titleId="lifecycle-title"
+              className="border-t border-rule lg:border-t-0 lg:border-l"
+              aside={c ? <span className="tabular font-mono">{c.lifecycle.length} events</span> : null}
+              bodyClassName="px-4"
+            >
+              {c ? <Timeline events={c.lifecycle} /> : <TimelineSkeleton rows={8} />}
+            </Section>
+          </div>
         </div>
       </details>
     </article>
@@ -98,6 +116,23 @@ function MatrixSummary({ c }: { c: CaseDetail }) {
   return (
     <p className="text-12 text-ink-2">
       <span className="tabular font-mono text-bad">{n}</span> {n === 1 ? 'system disagrees' : 'systems disagree'}: {mismatchSummary(c.matrix.mismatched)}
+    </p>
+  );
+}
+
+const VERDICT_STYLE = {
+  ok: 'border-ok bg-ok-weak text-ink',
+  warn: 'border-warn bg-warn-weak text-ink',
+  bad: 'border-bad bg-bad-weak text-ink',
+  neutral: 'border-rule bg-surface-sunk text-ink',
+} as const;
+
+/** The one-sentence answer to "is this fixed, and do I need to do anything?" (D062). */
+function VerdictLine({ c }: { c: CaseDetail }) {
+  const v = caseVerdict(c);
+  return (
+    <p role="status" data-testid="case-verdict" className={`mb-6 rounded-lg border px-4 py-3 text-15 font-medium ${VERDICT_STYLE[v.tone]}`}>
+      {v.text}
     </p>
   );
 }

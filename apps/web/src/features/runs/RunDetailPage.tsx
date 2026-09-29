@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import type { AgentRunItem, AgentStepItem } from '@payops/shared';
+import { CASE_TYPE_LABEL, DETECTION_RULE_LABEL, formatMoney, type AgentRunItem, type AgentStepItem, type CaseDetail } from '@payops/shared';
 import { formatDateTime, formatFullDateTime, statusLabel } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { ErrorState } from '../../ui/ErrorState';
@@ -9,7 +9,9 @@ import { Skeleton } from '../../ui/Skeleton';
 import { Tag } from '../../ui/Tag';
 import { useRunSteps } from '../investigation/api';
 import { useRun } from './api';
-import { RunFlow } from './RunFlow';
+import { useCase } from '../cases/api';
+import { tone } from '../../lib/status';
+import { RunSteps } from './RunSteps';
 import { RUN_TONE, contextTokens, formatCost, formatDuration, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
 
 export function RunDetailPage() {
@@ -17,6 +19,8 @@ export function RunDetailPage() {
   useDocumentTitle(`Run ${runId}`);
   const run = useRun(runId);
   const steps = useRunSteps(run.data);
+  const caseQuery = useCase(run.data?.caseId ?? '');
+  const c = caseQuery.data;
 
   if (run.isError) {
     return (
@@ -31,7 +35,7 @@ export function RunDetailPage() {
   return (
     <>
       <PageHeader
-        title="Investigation run"
+        title={c ? `Investigation of ${c.displayId}` : 'Investigation run'}
         meta={
           r ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -40,7 +44,7 @@ export function RunDetailPage() {
               <span>
                 Case{' '}
                 <Link to={`/cases/${r.caseId}`} className="link font-mono text-12">
-                  {r.caseId}
+                  {c?.displayId ?? r.caseId}
                 </Link>
               </span>
               <time dateTime={r.createdAt} title={formatFullDateTime(r.createdAt)} className="tabular font-mono text-12">
@@ -58,9 +62,12 @@ export function RunDetailPage() {
           </span>
         }
       />
+      {c ? <CaseBanner c={c} /> : null}
       <section aria-labelledby="flow-title">
-        <h2 id="flow-title" className="mb-3 text-20 font-semibold">What happened</h2>
-        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} /> : <RunFlow steps={steps.isPending ? undefined : items} status={r?.status} run={r} />}
+        <h2 id="flow-title" className="mb-3 text-20 font-semibold">What the agent did, step by step</h2>
+        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} />
+          : !r || steps.isPending ? <div className="space-y-3 rounded-lg border border-rule bg-surface p-5" aria-hidden="true">{[0, 1, 2].map((i) => <Skeleton key={i} height={76} width="100%" />)}</div>
+          : <RunSteps run={r} steps={items} />}
       </section>
       <section aria-labelledby="usage-title" className="mt-8">
         <h2 id="usage-title" className="mb-3 text-18 font-semibold">Run usage</h2>
@@ -83,6 +90,25 @@ export function RunDetailPage() {
         </section>
       </div>
     </>
+  );
+}
+
+/** Makes the link between this run and the case it investigated impossible to miss. */
+function CaseBanner({ c }: { c: CaseDetail }) {
+  return (
+    <section aria-label="Case investigated by this run" className="mb-6 rounded-lg border border-rule bg-surface px-5 py-4">
+      <p className="text-12 text-ink-2">This run investigated</p>
+      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Link to={`/cases/${c.id}`} className="link font-mono text-18 font-semibold">{c.displayId}</Link>
+        <span className="text-15">{CASE_TYPE_LABEL[c.type]}</span>
+        <span className="tabular font-mono text-15">{formatMoney(c.amountMinor)}</span>
+        <Tag tone={tone.caseStatus(c.status)}>{statusLabel(c.status)}</Tag>
+      </div>
+      <p className="mt-1 text-13 text-ink-2">
+        Flagged by: {c.ruleIds.map((r) => DETECTION_RULE_LABEL[r]).join('; ')}.{' '}
+        <Link to={`/cases/${c.id}`} className="link">Open the case</Link>
+      </p>
+    </section>
   );
 }
 
