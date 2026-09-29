@@ -19,7 +19,9 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope).** Follow-ups for Shivam: run Lighthouse a11y on `/`; record
+**Phase 6 is complete (parts A-D, D051 scope). UI revamp planning is now complete.** Next: implement the foundation and Case-page pass from `docs/UI-REVAMP-PLAN.md`, incorporating the proposed spec changes in `docs/05-ui-design.md` first. The local interactive design study is `docs/UI-REVAMP-PREVIEW.html`; production UI has not changed.
+
+Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
 page scored 97 accessibility; fixed the live-region role, duplicate step keys and table group headers.
 Parked (D051): Dockerfile, hosted deploy, nightly reset, Razorpay adapter.
@@ -101,6 +103,11 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · UI revamp plan and interactive design study
+- Reviewed current buttons, Case/investigation/resolution hierarchy, approval controls, Simulator flow, the saved Case screenshot, and the UI spec. Researched Carbon, NN/g, and W3C guidance.
+- Added `UI-REVAMP-PLAN.md`: proposed action hierarchy, state/role presentation, colors, spacing, sizing, borders, page flows, implementation sequence, and acceptance criteria. Existing policy and permissions remain authoritative.
+- Added `UI-REVAMP-PREVIEW.html`: independent sample-data study with case-state/access selectors and button examples. Proposed color pairs were contrast-checked; Chrome verified state interactions and narrow-screen overflow. Production UI changes are the next task.
 
 ### 2026-09-29 · Publish plain-English project guide
 - Added the eight-file `docs/guide/` reading path for product flow, architecture, agents, safety, replay/deployment, file map, and interview prep.
