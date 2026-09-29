@@ -1237,3 +1237,53 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 **Not covered.** Signature checking (P3 task 4), a "retry now" button distinct from replay (replay does the same), and a filter by case.
 
 **Consequences.** New `WebhookRetryScheduler` option on `createCore`; `Core.webhookEvents`; routes `GET /api/webhooks`, `/counts`, `/:id`, `POST /:id/replay`; web page `/webhooks` and `replay` capability. No change to detection or the agent.
+
+## D073 · Volume test as a script, not a unit test (P3 task 3)
+
+**Decision.** The 10,000-payment volume test is a script (`pnpm volume`) that writes `docs/VOLUME-TEST.md`, not a Vitest test.
+
+**Why.** It takes about 25 s and its numbers vary by machine, so it does not belong in the fast `pnpm test` loop. It still asserts correctness (faults found, no false cases, a second sweep changes nothing) and exits non-zero if one fails.
+
+**Notes.** Runs on PGlite, so times are a relative reference, not a Supabase benchmark. `ReconciliationSummary.updated` counts open cases re-evaluated; only `cases` lists ones that changed, so the "quiet second sweep" check uses `cases`.
+
+## D074 · Gateway contract suite and webhook signature helper (P3 task 4)
+
+**Decision.** `PaymentGatewayPort` now has one reusable contract suite, `describeGatewayContract` (`packages/core/src/testing/gateway-contract.ts`, exported from `@payops/core/testing`). Any adapter runs it by supplying a `setup` that returns a gateway and one captured payment id. The simulator adapter runs it in `packages/simulator/src/gateway-contract.test.ts` (19 tests).
+
+**Signature helper.** `signWebhookBody` and `verifyWebhookSignature` (`packages/core/src/adapters/gateway/webhook-signature.ts`) implement HMAC-SHA256 over the raw body, hex encoded, which is the Razorpay scheme. Verification compares in constant time, rejects missing, malformed and wrong-length values without throwing, and refuses an empty secret. The signature covers the raw bytes, so an adapter must verify before parsing the JSON.
+
+**Why.** A Razorpay or PayPal adapter then only maps HTTP responses onto the port and passes the raw body and header to the helper; "behaves like a gateway" is defined once.
+
+**Not covered.** The webhook route does not call the helper yet: the simulator delivers in process and has no signature. Wiring it in belongs with the Razorpay stretch (parked, D051). The contract does not cover pagination or rate limits because the port has none.
+
+**Consequences.** New exports from `@payops/core` (signature helpers) and `@payops/core/testing` (contract suite). No schema or migration change.
+
+## D075 · MFA (TOTP), server-side sessions and database rate limits (P4 task 1)
+
+**Decision.** Shivam chose: TOTP written on Node's crypto (no new dependency), MFA opt-in for everyone with a notice for MANAGER and ADMIN, and a sessions table so a session can be revoked. This changes D016 in two places: a request now reads the `sessions` table (one small query), and the login limit is stored in the database.
+
+**TOTP.** `apps/server/src/auth/totp.ts` is RFC 6238 (HMAC-SHA1, 30 s steps, 6 digits, one step of drift each way) and is tested against the RFC's published vectors. A code is accepted once: the matched step is saved in `users.totp_last_step` with a conditional update, so two racing requests cannot both use it. The seed is encrypted with AES-256-GCM (`secret-box.ts`, key derived from the cookie-signing secret) before it is stored.
+
+**Sign-in flow.** With MFA on, a correct password (or demo sign-in) returns `{ mfaRequired, challenge }` and no cookie. The challenge is a 5 minute JWT with `purpose: 'mfa'` and no `sid`, so it cannot be used as a session, and a session token cannot be used as a challenge. `POST /api/auth/login/mfa` swaps challenge plus code for a session. Wrong codes are limited to 5 per user per 5 minutes, and that limit also covers the enrol and disable routes.
+
+**Sessions.** Migration 0011 adds `sessions` (id, user, expiry, revoked time, ip, user agent, whether a code was used) and `auth_rate_limits`. The cookie's JWT carries `sid`; `SessionStore.resolve` accepts it only while the row is live, and takes name and role from the users table, so a role change applies on the next request. Logout revokes the row. Users can list and sign out their own sessions; an ADMIN can sign out anyone's and reset a user's MFA (the lost phone case). Turning MFA on signs out the user's other sessions. Revoking a session also closes its Socket.IO connections. Someone else's session id answers 404 to a non-admin.
+
+**Rate limits.** `RateLimiter` does one atomic upsert per attempt on `auth_rate_limits`, so counts survive a restart and are shared by several server processes. Sign-in stays at 10 per minute per IP and email.
+
+**Audit.** `auth.mfa_enabled`, `auth.mfa_disabled`, `auth.mfa_reset`, `auth.session_revoked`, `auth.sessions_revoked`. Sign-ins themselves are not audited yet.
+
+**Not covered.** Recovery codes (an admin reset is the recovery path), a QR image (the key and otpauth link are shown as text), forcing MANAGER and ADMIN to enrol, expiring idle sessions, and clearing old `sessions` rows.
+
+**Consequences.** `req.sessionId` on the Express request; `SessionStore` and `RateLimiter` passed into `createApp`; web route `/security`, a code step on the sign-in page, new query key `security`. Shared types in `dto/security.ts`.
+
+## D076 · One role and permission table (P4 task 2)
+
+**Decision.** `packages/shared/src/permissions.ts` holds every permission as a key with its lowest role, a plain description and an optional extra rule (four-eyes, tier, own account only). Nothing else compares roles by name. `requireRole('OPS')` is replaced by `requirePermission('case.assign')`, services call `hasPermission(role, key)`, and the web `can()` maps its capabilities to the same keys.
+
+**Why.** Roles were spelled out in about 45 route calls, four services and a separate UI matrix, so "who can do what" could only be answered by reading all of them. Now it is one table, and the docs table in `docs/02-architecture.md` is checked against it.
+
+**Tests.** `apps/server/src/permissions.test.ts` walks the real Express router and fails if any route has no `requirePermission` (or explicit `publicRoute()` marker), if a table entry guards no route, or if the docs table differs from `permissionTableMarkdown()`. Checked by removing one guard: two tests fail. `shared/permissions.test.ts` checks that higher roles keep lower roles' permissions.
+
+**Behaviour.** Unchanged. The simulator keeps its DEMO_MODE rule through `roleOverride` (OPS in demo mode, ADMIN otherwise). MANAGER-tier approvals still need MANAGER or ADMIN on top of `approval.decide`, and four-eyes stays in `cannotDecideReason`.
+
+**Adding a route.** Add a key to `PERMISSIONS`, use `requirePermission(key)`, then regenerate the docs table (`tsx -e "import {permissionTableMarkdown} from './packages/shared/src/permissions'; console.log(permissionTableMarkdown())"`) and paste it between the markers.

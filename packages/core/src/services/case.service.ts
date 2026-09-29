@@ -6,7 +6,7 @@ import {
   OPEN_CASE_STATUSES,
   dueAtFor,
   isOverdue,
-  roleAtLeast,
+  hasPermission,
   SEVERITY_RANK,
   caseDisplayId,
   formatMoney,
@@ -316,7 +316,7 @@ export class CaseService {
       if (assigneeId !== null) {
         const [u] = await tx.select().from(users).where(eq(users.id, assigneeId)).limit(1);
         if (!u) throw notFound('User', assigneeId);
-        if (!roleAtLeast(u.role, 'OPS')) {
+        if (!hasPermission(u.role, 'case.assign')) {
           throw new AppError('VALIDATION_FAILED', `${u.name} cannot be assigned cases (needs the OPS role or above)`);
         }
         assignee = { id: u.id, name: u.name };

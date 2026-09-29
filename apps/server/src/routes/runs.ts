@@ -7,7 +7,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { tables, type Core } from '@payops/core';
 import { DiagnosisFeedbackBody, RunListQuery, type AgentRunItem, type AgentStepItem, type DiagnosisFeedbackItem, type Page } from '@payops/shared';
-import { requireRole, sessionUser } from '../auth/middleware';
+import { requirePermission, sessionUser } from '../auth/middleware';
 import { param, parseBody, parseQuery } from '../lib/validate';
 
 const { agentRuns, agentSteps } = tables;
@@ -57,7 +57,7 @@ function toStepItem(row: typeof agentSteps.$inferSelect): AgentStepItem {
 export function runRoutes(core: Core): Router {
   const router = Router();
 
-  router.get('/', requireRole('VIEWER'), async (req, res) => {
+  router.get('/', requirePermission('run.view'), async (req, res) => {
     const query = parseQuery(RunListQuery, req);
     const conditions = [query.caseId ? eq(agentRuns.caseId, query.caseId) : undefined, query.status ? eq(agentRuns.status, query.status) : undefined].filter(
       (c): c is NonNullable<typeof c> => c != null,
@@ -73,26 +73,26 @@ export function runRoutes(core: Core): Router {
     res.json(body);
   });
 
-  router.get('/:id', requireRole('VIEWER'), async (req, res) => {
+  router.get('/:id', requirePermission('run.view'), async (req, res) => {
     const [row] = await core.db.select().from(agentRuns).where(eq(agentRuns.id, param(req, 'id'))).limit(1);
     if (!row) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Run not found' } });
     res.json(await toRunItem(core, row));
   });
 
-  router.get('/:id/steps', requireRole('VIEWER'), async (req, res) => {
+  router.get('/:id/steps', requirePermission('run.view'), async (req, res) => {
     const rows = await core.db.select().from(agentSteps).where(eq(agentSteps.runId, param(req, 'id'))).orderBy(agentSteps.seq);
     const body: Page<AgentStepItem> = { items: rows.map(toStepItem), nextCursor: null, total: rows.length };
     res.json(body);
   });
 
   /** Operator feedback on the run's diagnosis (P1 task 3, D065). */
-  router.get('/:id/feedback', requireRole('VIEWER'), async (req, res) => {
+  router.get('/:id/feedback', requirePermission('run.view'), async (req, res) => {
     const items = await core.feedback.listForRun(param(req, 'id'));
     const body: Page<DiagnosisFeedbackItem> = { items, nextCursor: null, total: items.length };
     res.json(body);
   });
 
-  router.put('/:id/feedback', requireRole('OPS'), async (req, res) => {
+  router.put('/:id/feedback', requirePermission('run.feedback'), async (req, res) => {
     const body: DiagnosisFeedbackItem = await core.feedback.submit(param(req, 'id'), parseBody(DiagnosisFeedbackBody, req), sessionUser(req));
     res.json(body);
   });

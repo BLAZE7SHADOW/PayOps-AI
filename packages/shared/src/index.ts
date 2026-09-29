@@ -17,3 +17,5 @@ export * from './handoff-text';
 export * from './bulk-approve';
 export * from './webhook-retry';
 export * from './dto/webhooks';
+export * from './dto/security';
+export * from './permissions';

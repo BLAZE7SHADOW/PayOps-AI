@@ -1,5 +1,5 @@
 /** Operations tables: users, cases, audit. Resolution tables live in resolution.ts. */
-import { index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   ACTOR_TYPES,
@@ -27,8 +27,43 @@ export const users = pgTable('users', {
   name: text().notNull(),
   role: text({ enum: ROLES }).notNull(),
   passwordHash: text().notNull(),
+  /** TOTP seed, encrypted (server auth/secret-box). Set at setup, live once totpEnabledAt is set. */
+  totpSecretSealed: text(),
+  totpEnabledAt: tstz(),
+  /** Step number of the last accepted code, so one code cannot be used twice. */
+  totpLastStep: integer(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
+});
+
+/**
+ * One row per signed-in browser. The session cookie is a JWT whose `sid` points here, so a row
+ * can be revoked and the cookie stops working at once.
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    lastSeenAt: tstz().notNull().defaultNow(),
+    expiresAt: tstz().notNull(),
+    revokedAt: tstz(),
+    ip: text().notNull().default(''),
+    userAgent: text().notNull().default(''),
+    /** True when this sign-in passed a one-time code. */
+    mfaVerified: boolean().notNull().default(false),
+  },
+  (t) => [index().on(t.userId, t.revokedAt)],
+);
+
+/** Fixed-window counters for sign-in limits. Kept in the database so a restart does not reset them. */
+export const authRateLimits = pgTable('auth_rate_limits', {
+  key: text().primaryKey(),
+  count: integer().notNull(),
+  resetAt: tstz().notNull(),
 });
 
 export interface CaseEntityRefs {

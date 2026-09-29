@@ -11,6 +11,7 @@ import {
   bulkApproveBlockReason,
   OPS_EVENTS,
   ROOMS,
+  hasPermission,
   roleAtLeast,
   type ApprovalDetail,
   type ApprovalItem,
@@ -50,7 +51,7 @@ export function cannotDecideReason(approval: ApprovalRow, resolution: Resolution
   if (approval.status !== 'PENDING') return `Already ${approval.status.toLowerCase()}.`;
   if (!viewer) return 'Sign in to decide.';
   const needed = APPROVER_ROLE[approval.tier];
-  const allowed = needed === 'MANAGER' ? viewer.role === 'MANAGER' || viewer.role === 'ADMIN' : roleAtLeast(viewer.role, 'OPS');
+  const allowed = hasPermission(viewer.role, 'approval.decide') && (needed !== 'MANAGER' || roleAtLeast(viewer.role, 'MANAGER'));
   if (!allowed) return needed === 'MANAGER' ? 'Needs a manager.' : 'Needs an OPS user or above.';
   if (resolution.proposedBy.type === 'USER' && resolution.proposedBy.id === viewer.id) {
     return 'You proposed this resolution. Another person must approve it.';

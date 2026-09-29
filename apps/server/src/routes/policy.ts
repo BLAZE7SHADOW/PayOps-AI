@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { APPROVER_ROLE, POLICY_RULES, POLICY_THRESHOLDS, POLICY_VERSION, formatMoney, type PolicyDocument } from '@payops/shared';
-import { requireRole } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 
 export function policyDocument(): PolicyDocument {
   const t = POLICY_THRESHOLDS;
@@ -25,7 +25,7 @@ export function policyDocument(): PolicyDocument {
 
 export function policyRoutes(): Router {
   const router = Router();
-  router.get('/', requireRole('VIEWER'), (_req, res) => {
+  router.get('/', requirePermission('policy.view'), (_req, res) => {
     res.json(policyDocument());
   });
   return router;

@@ -78,6 +78,13 @@
       "when": 1790705573111,
       "tag": "0010_webhook_event_log",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790706748144,
+      "tag": "0011_auth_mfa_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ import {
 import { createApp } from './app';
 import { seedDemoUsers } from './auth/demo-users';
 import { sessionConfig } from './auth/session';
+import { SessionStore } from './auth/session-store';
 import { registerAgentJobs, type AgentResumeJobPayload } from './jobs/agents';
 import { startBoss, QUEUES } from './jobs/boss';
 import { registerReconcileSweep } from './jobs/reconcile';
@@ -69,9 +70,10 @@ boxedResumer.resume = async (runId, decision) => {
   await boss.send(QUEUES.agentResume, payload);
 };
 
-const app = createApp({ env, log, database, core, session, boss });
+const sessions = new SessionStore(core.db, core.clock);
+const app = createApp({ env, log, database, core, session, sessions, boss });
 const http = createServer(app);
-const { io, publisher } = createRealtime(http, { origin: env.WEB_ORIGIN, log, session });
+const { io, publisher } = createRealtime(http, { origin: env.WEB_ORIGIN, log, session, sessions });
 realtime.publisher = publisher;
 
 http.listen(env.PORT, () => log.info(`listening on http://localhost:${env.PORT}`));

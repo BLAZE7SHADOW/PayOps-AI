@@ -51,5 +51,6 @@ export const qk = {
     counts: () => ['webhooks', 'counts'] as const,
     detail: (id: string) => ['webhooks', 'detail', id] as const,
   },
+  security: () => ['security'] as const,
   scenarios: () => ['simulator', 'scenarios'] as const,
 };

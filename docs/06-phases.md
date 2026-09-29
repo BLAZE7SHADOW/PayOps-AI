@@ -182,13 +182,13 @@ Done when: an operator can run a shift from the Exceptions page without opening 
 **P3 · Realistic data and adapter test kit (3 days)**
 1. Grow scenarios from 9 to about 15 with messier variants (late webhooks, partial refunds, out-of-order events, duplicates). (done, D071: 15 existed by then; six messy variants added, 21 total)
 2. Raw event log with replay, and a retry queue for failed webhooks. (done, D072)
-3. A 10,000-payment volume test with detection timings.
-4. Adapter contract tests and a webhook signature-check helper, so Razorpay and PayPal only need an adapter.
+3. A 10,000-payment volume test with detection timings. (done, D073)
+4. Adapter contract tests and a webhook signature-check helper, so Razorpay and PayPal only need an adapter. (done, D074)
 Done when: contract tests run against the simulator adapter; volume test result written to docs.
 
 **P4 · Security and compliance (3 to 4 days)**
-1. MFA (TOTP), session revoke, persistent rate limiting.
-2. Role and permission table in code and docs.
+1. MFA (TOTP), session revoke, persistent rate limiting. (done, D075)
+2. Role and permission table in code and docs. (done, D076)
 3. Hash-chained tamper-evident audit, database rules blocking update and delete, CSV export.
 4. Threat model, and a data-flow table of what goes to Gemini and Jev, with PII masking tests.
 Done when: audit chain verification passes and fails on a tampered row (tested); data-flow doc reviewed.

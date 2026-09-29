@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import type { PgBoss } from 'pg-boss';
 import { pingDatabase, type Core, type Database, type ServerEnv } from '@payops/core';
+import type { RateLimiter } from '../auth/rate-limit';
 import type { SessionConfig } from '../auth/session';
+import type { SessionStore } from '../auth/session-store';
+import { publicRoute } from '../auth/middleware';
 import { agentControlRoutes } from './agent-control';
 import { approvalRoutes } from './approvals';
 import { authRoutes } from './auth';
@@ -24,17 +27,19 @@ export interface RouteDeps {
 interface RouterDeps extends RouteDeps {
   env: ServerEnv;
   session: SessionConfig;
+  sessions: SessionStore;
+  limiter: RateLimiter;
 }
 
 export function buildRouter(deps: RouterDeps): Router {
   const router = Router();
 
-  router.get('/health', async (_req, res) => {
+  router.get('/health', publicRoute(), async (_req, res) => {
     const db = await pingDatabase(deps.database.pool);
     res.status(db ? 200 : 503).json({ status: db ? 'ok' : 'degraded', checks: { database: db ? 'ok' : 'down' }, aiMode: deps.env.AI_MODE });
   });
 
-  router.use('/auth', authRoutes(deps.core, deps.env, deps.session));
+  router.use('/auth', authRoutes({ core: deps.core, env: deps.env, session: deps.session, sessions: deps.sessions, limiter: deps.limiter }));
   router.use('/overview', overviewRoutes(deps.core));
   router.use('/payments', paymentRoutes(deps.core));
   router.use('/cases', caseRoutes(deps.core, deps.boss));

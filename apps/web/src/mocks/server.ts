@@ -55,6 +55,18 @@ const emit = (e: MockEvent, delay = 0) => setTimeout(() => listeners.forEach((l)
 
 // ── Mock session: sessionStorage stands in for the httpOnly cookie, mock mode only ─
 const SESSION_KEY = 'payops.mock.session';
+const mockMfa = { enabled: false, revoked: new Set<string>() };
+
+function mockSessions(email: string) {
+  const now = Date.now();
+  const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+  const all = [
+    { id: 'ses_mock_here', createdAt: iso(3_600_000), lastSeenAt: iso(60_000), expiresAt: iso(-25_200_000), ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36', mfaVerified: false, current: true },
+    { id: 'ses_mock_phone', createdAt: iso(86_400_000 / 4), lastSeenAt: iso(1_800_000), expiresAt: iso(-20_000_000), ip: `203.0.113.${email.length}`, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', mfaVerified: false, current: false },
+  ];
+  return all.filter((s) => !mockMfa.revoked.has(s.id));
+}
+
 function currentUser(): SessionUser | null {
   let id: string | null = null;
   try {
@@ -211,6 +223,27 @@ async function handle(method: string, url: URL, body: unknown, isJson: boolean):
   if (method === 'GET' && path === '/api/auth/me') return json(user);
   // CSRF rule from the real server: state-changing requests must be JSON.
   if (method !== 'GET' && !isJson) return error(415, 'UNSUPPORTED_MEDIA_TYPE', 'State-changing requests must send application/json.');
+
+  // Security page: MFA and sessions, in memory only.
+  if (method === 'GET' && path === '/api/auth/security') {
+    return json({ mfaEnabled: mockMfa.enabled, mfaRecommended: user.role === 'MANAGER' || user.role === 'ADMIN', sessions: mockSessions(user.email) });
+  }
+  if (method === 'POST' && path === '/api/auth/mfa/setup') {
+    return json({ secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', otpauthUrl: `otpauth://totp/PayOps%20AI:${user.email}?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=PayOps%20AI` });
+  }
+  if (method === 'POST' && (path === '/api/auth/mfa/enable' || path === '/api/auth/mfa/disable')) {
+    if (!/^\d{6}$/.test(String((body as { code?: string }).code ?? '').replace(/\s/g, ''))) return error(422, 'VALIDATION_FAILED', 'Enter the 6-digit code');
+    mockMfa.enabled = path.endsWith('enable');
+    return json(path.endsWith('enable') ? { mfaEnabled: true, otherSessionsRevoked: 0 } : { mfaEnabled: false });
+  }
+  if (method === 'POST' && /^\/api\/auth\/sessions\/[^/]+\/revoke$/.test(path)) {
+    mockMfa.revoked.add(path.split('/')[4] ?? '');
+    return json({ revoked: true });
+  }
+  if (method === 'POST' && path === '/api/auth/sessions/revoke-others') {
+    mockSessions(user.email).filter((s) => !s.current).forEach((s) => mockMfa.revoked.add(s.id));
+    return json({ revoked: 1 });
+  }
 
   if (method === 'GET' && path === '/api/overview') return json(overview());
   if (method === 'GET' && path === '/api/policy') return json(policyDocument());

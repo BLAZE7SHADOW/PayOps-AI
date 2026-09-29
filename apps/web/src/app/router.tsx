@@ -55,6 +55,7 @@ export const router = createBrowserRouter([
       { path: 'runs/:runId', lazy: () => import('../features/runs/RunDetailPage').then((m) => ({ Component: m.RunDetailPage })) },
       { path: 'handoff', lazy: () => import('../features/handoff/HandoffPage').then((m) => ({ Component: m.HandoffPage })) },
       { path: 'webhooks', lazy: () => import('../features/webhooks/WebhooksPage').then((m) => ({ Component: m.WebhooksPage })) },
+      { path: 'security', lazy: () => import('../features/security/SecurityPage').then((m) => ({ Component: m.SecurityPage })) },
       { path: 'audit', lazy: () => import('../features/audit/AuditPage').then((m) => ({ Component: m.AuditPage })) },
       { path: '*', element: <NotFound /> },
     ],

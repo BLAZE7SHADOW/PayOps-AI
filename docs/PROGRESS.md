@@ -19,9 +19,9 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**P3 tasks 1 and 2 are done (D071, D072). Next: P3 task 3, a 10,000-payment volume test with detection timings** (`docs/06-phases.md`, "Polish track"). Open a fresh chat with "Read CLAUDE.md and docs/PROGRESS.md, then continue."
+**P4 task 2 is done (D076). Next: P4 task 3, hash-chained tamper-evident audit, database rules blocking update and delete, CSV export** (`docs/06-phases.md`, "P4 · Security and compliance"). Open a fresh chat with "Read CLAUDE.md and docs/PROGRESS.md, then continue."
 
-Still for Shivam: run the app and check what nothing here has viewed in a browser: the Webhook events page (`/webhooks`: filter, open an event, Replay a DEAD one as ops@payops.dev and check it turns Processed, viewer sees no Replay button), a case's notes panel, the Exceptions saved views, `/handoff`, Approvals bulk approve, and Undo. For Undo, resolve a `replay_fails_then_replan` case (replay, then mark paid + ledger post with ops2's approval), open the resolved case as ops@payops.dev, click "Undo ledger post", confirm, approve as ops2, and check the case ends Open with the ledger cell mismatched again. Apply migrations 0005 to 0010 (`npx pnpm@10.28.0 db:migrate`). Commit from the Mac, delete `docs/UI-CASE-WORKSPACE-PREVIEW.html` and the `_to_delete/` folder at the repo root (it holds one empty stub file I created by mistake and could not delete), remove `.git/index.lock` if git complains.
+Still for Shivam: run the app and check what nothing here has viewed in a browser: the Webhook events page (`/webhooks`: filter, open an event, Replay a DEAD one as ops@payops.dev and check it turns Processed, viewer sees no Replay button), a case's notes panel, the Exceptions saved views, `/handoff`, Approvals bulk approve, and Undo. For Undo, resolve a `replay_fails_then_replan` case (replay, then mark paid + ledger post with ops2's approval), open the resolved case as ops@payops.dev, click "Undo ledger post", confirm, approve as ops2, and check the case ends Open with the ledger cell mismatched again. Apply migration 0011 (`npx pnpm@10.28.0 db:migrate`; 0005 to 0010 are already applied). Also check in a browser: the code step on `/login` and the `/security` page (see the P4 task 1 log entry). Commit from the Mac, delete `docs/UI-CASE-WORKSPACE-PREVIEW.html` and the `_to_delete/` folder at the repo root (it holds an empty stub file and two scratch tsconfig files that I created and could not delete), remove `.git/index.lock` if git complains.
 
 Later ideas: dev:mock fixtures with a before-state (and a mock for the undo route); earlier attempts inline in the story; manual notes as a PERSON entry; Lighthouse on `/` and Case; demo video; inverse actions for MARK_ORDER_PAID and HOLD if undo should cover them.
 
@@ -73,7 +73,6 @@ Shivam's Mac directly, same as task 9 did.
 ## Known gaps (deliberate, later phases)
 
 - Detection closes a case by itself only when the order re-reads fully consistent and the case is still OPEN and of a payment, refund or duplicate type (D069). Risk and settlement cases, and any case someone is working, close only through a verified resolution.
-- Login rate limiting is in memory (single server process).
 - Signals column is now populated by `SignalIntakeService` (J1) when a case is created, but only
   when a `DecisionPort` is wired in (`apps/server` always wires one now); it silently stays empty
   when Jev errors, times out, or (REPLAY/no cassette) has nothing recorded for `J1_INTAKE` — this
@@ -106,6 +105,27 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-09-30 · P4 task 2: role and permission table (D076)
+- New `shared/permissions.ts` (25 permissions: lowest role, description, extra rule). Routes use `requirePermission(key)` and `publicRoute()` for the seven open routes; services use `hasPermission`; web `can()` reads the same table. `requireRole` is gone. Behaviour is unchanged.
+- Docs: generated table in `docs/02-architecture.md` (§6, "Roles and permissions"), between markers.
+- Tests: `apps/server/src/permissions.test.ts` walks the real router (no unguarded route, no unused permission, docs match code), `shared/permissions.test.ts`. Removed one guard by hand and confirmed the tests fail. tsc clean in shared, core, server, web; eslint clean on touched folders; full `vitest run` 820 tests pass.
+- For Shivam: nothing to run. Sign in as viewer@payops.dev and check the buttons still hide as before.
+### 2026-09-30 · P4 task 1: MFA (TOTP), session revoke, persistent rate limits (D075)
+- Scope confirmed with Shivam: own TOTP code (no dependency), MFA opt-in with a notice for MANAGER and ADMIN, sessions table with per-session revoke.
+- Tests first for the pure parts (`auth/totp.test.ts` with the RFC 6238 vectors, `auth/secret-box.test.ts`). The API tests (`auth-security.test.ts`, 28) were written right after the routes, not before.
+- Shared: `dto/security.ts`. Core: migration `0011_auth_mfa_sessions` (users.totp_*, `sessions`, `auth_rate_limits`). Server: `auth/totp.ts`, `secret-box.ts`, `session-store.ts`, `rate-limit.ts`; `session.ts` (sid claim, MFA challenge token), `middleware.ts` (session must be live), rewritten `routes/auth.ts` (login/mfa, mfa setup/enable/disable, security, session revoke, admin reset), realtime closes sockets of revoked sessions. Web: code step on the sign-in page, `/security` page (MFA panel, signed-in browsers), nav item, dev:mock handlers.
+- Checks: tsc clean in all 7 packages; eslint clean across the repo; full `vitest run` 811 tests pass (web run with `VITE_API_URL=` empty). Not done: any browser pass, a real authenticator app, and running migration 0011 on Supabase.
+- For Shivam: apply migration 0011, then as manager@payops.dev open Security, turn MFA on with an authenticator app (type the key in), sign out, sign in again and check it asks for a code. Open the same account in a second browser first and check it is signed out when MFA turns on. Try "Sign out" on another browser row. To undo a lost phone: sign in as admin@payops.dev and call `POST /api/auth/users/:id/mfa/reset` (no UI for it yet).
+- Not built: recovery codes, QR image, forced enrolment, admin UI for reset and session revoke, idle-session expiry and cleanup, audit of plain sign-ins.
+### 2026-09-29 · P3 task 4: gateway contract tests and webhook signature helper (D074)
+- Tests first: `webhook-signature.test.ts` (9) and the contract suite run against the simulator adapter (`simulator/src/gateway-contract.test.ts`, 19).
+- Core: `webhook-signature.ts` (`signWebhookBody`, `verifyWebhookSignature`: HMAC-SHA256 over the raw body, constant-time compare) and `testing/gateway-contract.ts` (`describeGatewayContract`). Both exported. No migration, no change to production code paths.
+- Checks: tsc clean in core and simulator; eslint clean on touched files; the 28 new tests pass. Not run: the full test suite and the other packages' typecheck (nothing outside these files changed). Nothing viewed in a browser.
+- Not built: calling the helper from a real webhook route (no signed source until a Razorpay adapter exists).
+### 2026-09-29 · P3 task 3: 10,000-payment volume test (D073)
+- Added `packages/simulator/scripts/volume-test.ts` and root script `pnpm volume` (`npx pnpm@10.28.0 volume --write` saves `docs/VOLUME-TEST.md`; `--payments=N` resizes). It seeds 10,000 healthy payments via `writeNoise`, writes 3 seeds of every fault scenario without running detection, then times two full `sweep()` runs, a 200-order chunk and a single-order check, and asserts correctness.
+- Result on PGlite in this VM (details in `docs/VOLUME-TEST.md`): 10,324 orders and batches swept in about 4.5 s (about 2,300 checks/s); a second sweep with no changes about 4.2 s; one order about 10 ms. All 60 injected faults opened exactly 60 cases, healthy payments opened none, and the second sweep changed no case.
+- No production code changed. Not run: on a real Supabase Postgres (round trips will make it slower), and the script is not part of `pnpm test` on purpose (about 25 s). The script typechecks and lints clean; `packages/simulator/tsconfig.json` only includes `src`, so `pnpm typecheck` does not cover it.
 ### 2026-09-29 · P3 task 2: webhook event log, replay, retry queue (D072)
 - Scope confirmed with Shivam: backend, API and a small UI; retries through pg-boss with backoff.
 - Tests first: `shared/webhook-retry.test.ts` (4), `core/services/webhook-event.service.test.ts` (15: logging, backoff to DEAD, early and stale jobs skipped, manual replay, gateway-missing fallback, queue outage, list and cursor), simulator `scenarios.test.ts` (2 new), server `app.test.ts` (1 new), web `webhook-log.test.ts` (5) and `WebhookDetailView.test.tsx` (4).

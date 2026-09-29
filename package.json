@@ -21,6 +21,7 @@
     "jev:ping": "tsx scripts/jev-ping.ts",
     "cassette:record": "tsx packages/agents/scripts/record-cassettes.ts",
     "eval": "tsx packages/evals/scripts/run-eval.ts",
+    "volume": "tsx packages/simulator/scripts/volume-test.ts",
     "eval:live": "tsx packages/evals/scripts/run-eval.ts --mode=live"
   },
   "devDependencies": {

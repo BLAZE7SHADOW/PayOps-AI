@@ -14,7 +14,7 @@ import {
   formatMoney,
   newId,
   isUndoProposal,
-  roleAtLeast,
+  hasPermission,
   type ActorRef,
   type AgentControlMode,
   type ApprovalItem,
@@ -252,7 +252,7 @@ export class ResolutionService {
    */
   async propose(caseId: string, body: ProposeActionsBody, viewer: SessionUser): Promise<ResolutionItem> {
     const input = ProposeActionsBody.parse(body);
-    if (!roleAtLeast(viewer.role, 'OPS')) throw new AppError('FORBIDDEN', 'Only OPS users and above can propose resolutions');
+    if (!hasPermission(viewer.role, 'resolution.propose')) throw new AppError('FORBIDDEN', 'Only OPS users and above can propose resolutions');
     const write = { ...userWriteContext(viewer), caseId };
     // Fresh state is read before the transaction: gateway reads use their own connection.
     const state = await loadCaseState(this.db, this.gateway, caseId, this.clock.now());
@@ -355,7 +355,7 @@ export class ResolutionService {
    * executor and validator as any fix. Only POST_LEDGER_ENTRY has a reversing action in the catalog.
    */
   async undo(resolutionId: string, viewer: SessionUser): Promise<ResolutionItem> {
-    if (!roleAtLeast(viewer.role, 'OPS')) throw new AppError('FORBIDDEN', 'Only OPS users and above can undo a resolution');
+    if (!hasPermission(viewer.role, 'resolution.undo')) throw new AppError('FORBIDDEN', 'Only OPS users and above can undo a resolution');
     const item = await this.queries.item(resolutionId);
     const caseId = item.caseId;
     const [caseRow] = await this.db.select().from(cases).where(eq(cases.id, caseId)).limit(1);

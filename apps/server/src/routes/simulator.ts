@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { GenerateScenarioBody, SCENARIOS, type GenerateScenarioResult, type ScenarioInfo } from '@payops/shared';
 import type { Core, ServerEnv } from '@payops/core';
-import { requireRole } from '../auth/middleware';
+import { requirePermission } from '../auth/middleware';
 import { generateScenario, resetDemoData, snapshotDemoData, undoLastReset, undoStatus } from '@payops/simulator';
 import { AppError, DEFAULT_CASSETTE_DIR } from '@payops/core';
 import { existsSync, readFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ const COOLDOWN_MS = process.env.NODE_ENV === 'test' ? 0 : 10_000;
 export function simulatorRoutes(core: Core, env: Pick<ServerEnv, 'DEMO_MODE'>): Router {
   const router = Router();
   // ADMIN only, or OPS in demo mode so visitors can generate scenarios.
-  router.use(requireRole(env.DEMO_MODE ? 'OPS' : 'ADMIN'));
+  router.use(requirePermission('simulator.use', { roleOverride: env.DEMO_MODE ? 'OPS' : undefined }));
 
   router.get('/scenarios', (_req, res) => {
     const body: readonly ScenarioInfo[] = SCENARIOS;

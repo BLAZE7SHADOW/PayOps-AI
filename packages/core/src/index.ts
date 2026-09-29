@@ -11,6 +11,7 @@ export * from './ports/gateway';
 export * from './ports/llm';
 export * from './ports/decision';
 export * from './adapters/gateway/simulator-gateway';
+export * from './adapters/gateway/webhook-signature';
 export * from './adapters/llm';
 export * from './adapters/decision';
 export * from './adapters/cassette';

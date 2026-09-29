@@ -1,32 +1,27 @@
-import type { Role } from '@payops/shared';
+import { hasPermission, type Permission, type Role } from '@payops/shared';
 
 /**
- * What the UI offers to each role. The server enforces the same rules (requireRole, four-eyes);
- * this only decides which controls to show so a viewer is never handed a button that will 403.
+ * What the UI offers to each role. It reads the shared permission table, the same one the server
+ * enforces, so a viewer is never handed a button that will 403.
  */
 export type Capability = 'resolve' | 'decide' | 'simulate' | 'judge' | 'control' | 'assign' | 'note' | 'undo' | 'replay';
 
-const MATRIX: Record<Capability, readonly Role[]> = {
-  resolve: ['OPS', 'MANAGER', 'ADMIN'],
-  decide: ['OPS', 'MANAGER', 'ADMIN'],
-  // In demo mode the server lets OPS and above use the simulator.
-  simulate: ['OPS', 'MANAGER', 'ADMIN'],
-  // Judging a diagnosis (right or wrong); the server checks OPS as well.
-  judge: ['OPS', 'MANAGER', 'ADMIN'],
-  // Pausing or limiting the agent is a manager decision (D066).
-  control: ['MANAGER', 'ADMIN'],
-  // Taking a case or handing it back; the server checks OPS as well (D067).
-  assign: ['OPS', 'MANAGER', 'ADMIN'],
-  // Writing a case note; the server checks OPS as well (D068).
-  note: ['OPS', 'MANAGER', 'ADMIN'],
-  // Undoing a ledger post goes through a normal proposal; the server checks OPS as well (D070).
-  undo: ['OPS', 'MANAGER', 'ADMIN'],
-  // Replaying a webhook from the event log; the server checks OPS as well (D072).
-  replay: ['OPS', 'MANAGER', 'ADMIN'],
+const CAPABILITY_PERMISSION: Record<Capability, Permission> = {
+  resolve: 'resolution.propose',
+  decide: 'approval.decide',
+  // The server lowers this to OPS in demo mode; the UI follows the demo behaviour.
+  simulate: 'simulator.use',
+  judge: 'run.feedback',
+  control: 'agent.control',
+  assign: 'case.assign',
+  note: 'case.note',
+  undo: 'resolution.undo',
+  replay: 'webhook.replay',
 };
 
 export function can(role: Role | null | undefined, capability: Capability): boolean {
-  return role != null && MATRIX[capability].includes(role);
+  if (capability === 'simulate') return hasPermission(role, 'resolution.propose');
+  return hasPermission(role, CAPABILITY_PERMISSION[capability]);
 }
 
 export const ROLE_LABEL: Record<Role, string> = {

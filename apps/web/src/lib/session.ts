@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { DemoAccount, LoginBody, SessionUser } from '@payops/shared';
+import { isMfaChallenge, type DemoAccount, type LoginBody, type LoginResponse, type MfaLoginBody, type SessionUser } from '@payops/shared';
 import { ApiError, api } from './api';
 import { qk } from './query-keys';
 
@@ -45,20 +45,37 @@ export function useDemoAccounts() {
   });
 }
 
-function useSignIn<TBody>(path: string) {
+/** Keeps the cache in step with a sign-in that produced a session (not a code challenge). */
+function useSignedIn() {
   const qc = useQueryClient();
+  return (user: SessionUser) => {
+    // Drop anything cached for a previous user before the app renders for this one.
+    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
+    qc.setQueryData(qk.session(), user);
+  };
+}
+
+/** A password step can end in a session or in "now enter your code"; only a session is cached. */
+function usePasswordStep<TBody>(path: string) {
+  const signedIn = useSignedIn();
   return useMutation({
-    mutationFn: (body: TBody) => api<SessionUser>(path, { method: 'POST', body }),
-    onSuccess: (user) => {
-      // Drop anything cached for a previous user before the app renders for this one.
-      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'session' });
-      qc.setQueryData(qk.session(), user);
+    mutationFn: (body: TBody) => api<LoginResponse>(path, { method: 'POST', body }),
+    onSuccess: (res) => {
+      if (!isMfaChallenge(res)) signedIn(res);
     },
   });
 }
 
-export const useLogin = () => useSignIn<LoginBody>('/api/auth/login');
-export const useDemoLogin = () => useSignIn<{ email: string }>('/api/auth/demo-login');
+export const useLogin = () => usePasswordStep<LoginBody>('/api/auth/login');
+export const useDemoLogin = () => usePasswordStep<{ email: string }>('/api/auth/demo-login');
+
+export function useMfaLogin() {
+  const signedIn = useSignedIn();
+  return useMutation({
+    mutationFn: (body: MfaLoginBody) => api<SessionUser>('/api/auth/login/mfa', { method: 'POST', body }),
+    onSuccess: signedIn,
+  });
+}
 
 export function useLogout() {
   const qc = useQueryClient();

@@ -5,7 +5,7 @@
  */
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
-  roleAtLeast,
+  hasPermission,
   type ApprovalSummary,
   type CaseResolutionView,
   type ExecutionStep,
@@ -154,7 +154,7 @@ export class ResolutionQueryService {
     viewer: SessionUser | null,
   ): string | null {
     if (!viewer) return 'Sign in to propose a resolution.';
-    if (!roleAtLeast(viewer.role, 'OPS')) return `Your role (${viewer.role}) can view cases but not propose resolutions.`;
+    if (!hasPermission(viewer.role, 'resolution.propose')) return `Your role (${viewer.role}) can view cases but not propose resolutions.`;
     if (CLOSED_CASE_STATUSES.includes(row.status)) return `This case is ${row.status}.`;
     if (pending) return 'A proposed resolution is waiting for approval.';
     if (items.some((i) => i.status === 'EXECUTING')) return 'A resolution is executing.';

@@ -151,6 +151,40 @@ Conventions: Zod-validated input (schemas from `shared`), keyset cursor paginati
 - **Logging:** pino JSON with `requestId, caseId, runId, node`.
 - **Config:** Zod-parsed env in `core/config/env.ts`; the server fails fast on bad config.
 
+### Roles and permissions
+
+Roles rank `VIEWER < OPS < MANAGER < ADMIN`; a permission names the lowest role that has it. The table lives in `packages/shared/src/permissions.ts` and is the only place a role is compared. Routes use `requirePermission(key)`, services and the UI use `hasPermission(role, key)`. A test fails if a route has no guard (or an explicit `publicRoute()` marker) and if this table drifts from the code. Routes with no sign-in: health, login, MFA code step, demo login, logout, `me`, demo accounts.
+
+<!-- permissions:start -->
+| Permission | Lowest role | What it allows | Extra rule |
+|---|---|---|---|
+| `overview.view` | VIEWER | See the Overview metrics | - |
+| `payment.view` | VIEWER | List payments and open a payment | - |
+| `case.view` | VIEWER | List cases, open a case, its notes and source records | - |
+| `run.view` | VIEWER | See agent runs, steps and feedback | - |
+| `approval.view` | VIEWER | See the approval queue and one approval | - |
+| `audit.view` | VIEWER | Read the audit log | - |
+| `policy.view` | VIEWER | Read the policy rules | - |
+| `webhook.view` | VIEWER | Read the webhook event log | - |
+| `agent.view` | VIEWER | See agent controls | - |
+| `handoff.view` | VIEWER | Read the shift handoff summary | - |
+| `view.manage` | VIEWER | Save and delete your own saved views | Own views only |
+| `account.security` | VIEWER | Manage your own MFA and signed-in browsers | Own account only |
+| `case.assign` | OPS | Take a case or hand it back | The assignee must be OPS or above |
+| `case.note` | OPS | Write a case note | - |
+| `run.start` | OPS | Start an agent investigation on a case | - |
+| `run.feedback` | OPS | Mark a diagnosis right or wrong | - |
+| `resolution.propose` | OPS | Preview and propose a resolution | Policy decides the tier |
+| `resolution.undo` | OPS | Propose an undo of a ledger post | Goes through the normal approval |
+| `webhook.replay` | OPS | Replay a webhook event | - |
+| `approval.decide` | OPS | Approve or reject a resolution | MANAGER-tier approvals need MANAGER or ADMIN. Four-eyes: never your own proposal |
+| `approval.bulk` | OPS | Bulk approve low-risk approvals | Same tier and four-eyes rules per item |
+| `agent.control` | MANAGER | Pause or limit the agent | - |
+| `simulator.use` | ADMIN | Use the simulator: scenarios, reset, undo reset | OPS when DEMO_MODE is on |
+| `user.mfaReset` | ADMIN | Reset another user's MFA | - |
+| `user.sessionsRevoke` | ADMIN | Sign a user out of every browser | - |
+<!-- permissions:end -->
+
 ## 7. Environment variables
 
 | Var | Notes |

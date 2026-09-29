@@ -47,6 +47,9 @@ export function Nav() {
         <li>
           <Item to="/policy" label="Policy" />
         </li>
+        <li>
+          <Item to="/security" label="Security" />
+        </li>
       </ul>
       <UserMenu />
     </nav>
@@ -79,7 +82,7 @@ export function MobileNav() {
   const user = useUser();
   const logout = useLogout();
   const navigate = useNavigate();
-  const items = [...MAIN, ...(can(user?.role, 'simulate') ? [{ to: '/simulator', label: 'Simulator' }] : []), { to: '/policy', label: 'Policy' }];
+  const items = [...MAIN, ...(can(user?.role, 'simulate') ? [{ to: '/simulator', label: 'Simulator' }] : []), { to: '/policy', label: 'Policy' }, { to: '/security', label: 'Security' }];
   return (
     <nav aria-label="Mobile primary" className="shrink-0 overflow-x-auto border-b border-rule bg-surface-sunk md:hidden">
       <ul className="flex w-max items-center gap-1 px-3 py-2">

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router';
-import type { DemoAccount } from '@payops/shared';
+import { isMfaChallenge, type DemoAccount, type LoginResponse } from '@payops/shared';
 import { ApiError } from '../../lib/api';
-import { safeNext, useDemoAccounts, useDemoLogin, useLogin, useSession } from '../../lib/session';
+import { safeNext, useDemoAccounts, useDemoLogin, useLogin, useMfaLogin, useSession } from '../../lib/session';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { Button } from '../../ui/Button';
 import { Field } from '../../ui/Field';
@@ -29,6 +29,14 @@ function signInError(err: unknown): string {
   return 'Sign in failed.';
 }
 
+function codeError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return err.message; // "not correct or already used", or "sign in again"
+    if (err.status === 429) return 'Too many incorrect codes. Wait a few minutes and try again.';
+  }
+  return signInError(err);
+}
+
 /** Two fields and a button on paper; demo accounts as text buttons below (docs/05 §11 Sign in). */
 export function LoginPage() {
   useDocumentTitle('Sign in');
@@ -38,6 +46,10 @@ export function LoginPage() {
   const navigate = useNavigate();
   const login = useLogin();
   const demo = useDemoLogin();
+  const mfa = useMfaLogin();
+  // Set when the password was right but the account also needs a one-time code.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState('');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,14 +60,35 @@ export function LoginPage() {
 
   const errors = { email: emailError(email), password: passwordError(password) };
   const show = (k: 'email' | 'password') => ((touched[k] || submitted) && errors[k]) || null;
-  const busy = login.isPending || demo.isPending;
+  const busy = login.isPending || demo.isPending || mfa.isPending;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     demo.reset();
     if (errors.email || errors.password) return;
-    login.mutate({ email: email.trim(), password }, { onSuccess: () => navigate(next, { replace: true }) });
+    login.mutate({ email: email.trim(), password }, { onSuccess: onPasswordStep });
+  };
+
+  const onPasswordStep = (res: LoginResponse) => {
+    if (isMfaChallenge(res)) {
+      setChallenge(res.challenge);
+      setCode('');
+    } else navigate(next, { replace: true });
+  };
+
+  const submitCode = (e: FormEvent) => {
+    e.preventDefault();
+    if (!challenge || !code.trim()) return;
+    mfa.mutate({ challenge, code: code.trim() }, { onSuccess: () => navigate(next, { replace: true }) });
+  };
+
+  const backToPassword = () => {
+    setChallenge(null);
+    setCode('');
+    mfa.reset();
+    login.reset();
+    demo.reset();
   };
 
   return (
@@ -66,6 +99,17 @@ export function LoginPage() {
         </h1>
         <p className="mt-2 text-15 text-ink-2">Sign in to the payment operations console.</p>
 
+        {challenge ? (
+          <CodeStep
+            code={code}
+            onCode={setCode}
+            onSubmit={submitCode}
+            onBack={backToPassword}
+            pending={mfa.isPending}
+            error={mfa.isError ? codeError(mfa.error) : null}
+          />
+        ) : (
+        <>
         <form noValidate onSubmit={submit} className="mt-6 flex flex-col gap-1" aria-describedby="signin-error">
           <Field label="Email" error={show('email')}>
             {(a) => (
@@ -109,9 +153,11 @@ export function LoginPage() {
           error={demo.isError ? signInError(demo.error) : null}
           onPick={(a) => {
             login.reset();
-            demo.mutate({ email: a.email }, { onSuccess: () => navigate(next, { replace: true }) });
+            demo.mutate({ email: a.email }, { onSuccess: onPasswordStep });
           }}
         />
+        </>
+        )}
 
         <p className="mt-10 flex items-center gap-2 text-12 text-ink-2">
           <Tag tone="warn">SIMULATED DATA</Tag>
@@ -169,5 +215,45 @@ function DemoAccounts({ busy, pendingEmail, error, onPick }: DemoAccountsProps) 
         </p>
       ) : null}
     </section>
+  );
+}
+
+interface CodeStepProps {
+  code: string;
+  onCode: (v: string) => void;
+  onSubmit: (e: FormEvent) => void;
+  onBack: () => void;
+  pending: boolean;
+  error: string | null;
+}
+
+/** Second step for accounts with MFA on: the 6-digit code from the authenticator app. */
+export function CodeStep({ code, onCode, onSubmit, onBack, pending, error }: CodeStepProps) {
+  return (
+    <form noValidate onSubmit={onSubmit} className="mt-6 flex flex-col gap-1">
+      <h2 className="text-18 font-semibold">Enter your code</h2>
+      <p className="mb-3 text-13 text-ink-2">Open your authenticator app and type the 6-digit code for PayOps AI.</p>
+      <Field label="6-digit code" error={error}>
+        {(a) => (
+          <Input
+            {...a}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            autoFocus
+            maxLength={7}
+            value={code}
+            onChange={(e) => onCode(e.target.value)}
+            mono
+            className="w-full"
+          />
+        )}
+      </Field>
+      <Button type="submit" variant="primary" disabled={pending || code.replace(/\s/g, '').length < 6} className="mt-2 w-full">
+        {pending ? 'Checking' : 'Verify and sign in'}
+      </Button>
+      <Button variant="quiet" disabled={pending} onClick={onBack} className="mt-1 w-full">
+        Use a different account
+      </Button>
+    </form>
   );
 }

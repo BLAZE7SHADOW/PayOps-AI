@@ -8,6 +8,8 @@ declare global {
     interface Request {
       requestId: string;
       user?: { id: string; email: string; name: string; role: Role };
+      /** Id of the live session behind req.user. */
+      sessionId?: string;
     }
   }
 }

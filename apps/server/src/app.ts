@@ -5,7 +5,9 @@ import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import type { Logger, ServerEnv } from '@payops/core';
 import { readSession, requireJson } from './auth/middleware';
+import { RateLimiter } from './auth/rate-limit';
 import { sessionConfig, type SessionConfig } from './auth/session';
+import { SessionStore } from './auth/session-store';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { requestId } from './middleware/request-id';
 import { buildRouter, type RouteDeps } from './routes';
@@ -15,6 +17,8 @@ export interface AppDeps extends RouteDeps {
   log: Logger;
   /** Built from env when omitted. */
   session?: SessionConfig;
+  /** Built over the core database when omitted. main.ts passes one so realtime can share it. */
+  sessions?: SessionStore;
 }
 
 /** Express app factory. Kept free of listen() so tests can mount it with supertest. */
@@ -38,9 +42,11 @@ export function createApp(deps: AppDeps): Express {
   app.use(cookieParser());
   app.use(requireJson());
   const session = deps.session ?? sessionConfig(deps.env, deps.log);
-  app.use(readSession(session));
+  const sessions = deps.sessions ?? new SessionStore(deps.core.db, deps.core.clock);
+  const limiter = new RateLimiter(deps.core.db, deps.core.clock);
+  app.use(readSession(session, sessions));
 
-  app.use('/api', buildRouter({ ...deps, session }));
+  app.use('/api', buildRouter({ ...deps, session, sessions, limiter }));
 
   app.use(notFoundHandler);
   app.use(errorHandler(deps.log));
