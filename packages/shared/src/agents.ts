@@ -5,7 +5,7 @@
  */
 import { z } from 'zod';
 import type { CatalogAction } from './actions';
-import type { PolicyDecision } from './policy';
+import { AGENT_CONTROL_MODES, type AgentControlMode, type PolicyDecision } from './policy';
 import type { ActorRef, ExecutionStep, ValidationCheck, ValidationVerdict } from './dto/resolution';
 import type { AmountBand } from './money';
 import { SCENARIO_KEYS } from './scenarios';
@@ -317,6 +317,8 @@ export interface AgentRunItem {
   proposal: ResolutionProposal | null;
   policy: PolicyDecision | null;
   approvalId: string | null;
+  /** Why the run ended early (provider failure, budget), for the handoff message. Null otherwise. */
+  error: string | null;
   executions: ExecutionStep[];
   validation: { verdict: ValidationVerdict; checks: ValidationCheck[] } | null;
   findings: Finding[];
@@ -327,6 +329,62 @@ export interface AgentRunItem {
   createdAt: string;
   updatedAt: string;
   finishedAt: string | null;
+}
+
+// ── Agent controls: pause and propose-only (P1 task 4, D066) ────────────────
+export const AgentControlBody = z
+  .object({
+    mode: z.enum(AGENT_CONTROL_MODES),
+    /** Why the switch changed. Required for anything other than NORMAL so the banner can say why. */
+    reason: z.string().trim().max(300).default(''),
+  })
+  .strict()
+  .refine((b) => b.mode === 'NORMAL' || b.reason.length >= 3, {
+    message: 'Say briefly why the agent is being limited.',
+    path: ['reason'],
+  });
+export type AgentControlBody = z.infer<typeof AgentControlBody>;
+
+export interface AgentControlItem {
+  mode: AgentControlMode;
+  reason: string;
+  /** Null until someone has changed it from the default. */
+  changedByName: string | null;
+  changedAt: string | null;
+}
+
+// ── Operator feedback on a diagnosis (P1 task 3, D065) ──────────────────────
+export const FEEDBACK_VERDICTS = ['RIGHT', 'WRONG'] as const;
+export type FeedbackVerdict = (typeof FEEDBACK_VERDICTS)[number];
+
+/** A "wrong" verdict needs a reason, so the feedback is usable later (metrics, new checks). */
+export const DiagnosisFeedbackBody = z
+  .object({
+    verdict: z.enum(FEEDBACK_VERDICTS),
+    reason: z.string().trim().max(500).default(''),
+    /** What the operator believes the cause was; only meaningful for a WRONG verdict. */
+    correctRootCause: z.enum(ROOT_CAUSES).optional(),
+  })
+  .strict()
+  .refine((b) => b.verdict === 'RIGHT' || b.reason.length >= 3, {
+    message: 'Say briefly why the diagnosis is wrong.',
+    path: ['reason'],
+  });
+export type DiagnosisFeedbackBody = z.infer<typeof DiagnosisFeedbackBody>;
+
+export interface DiagnosisFeedbackItem {
+  id: string;
+  runId: string;
+  caseId: string;
+  /** The label the agent gave when the operator judged it. Kept so later edits cannot rewrite history. */
+  diagnosedRootCause: RootCause;
+  verdict: FeedbackVerdict;
+  reason: string;
+  correctRootCause: RootCause | null;
+  givenById: string;
+  givenByName: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const AGENT_STEP_KINDS = [

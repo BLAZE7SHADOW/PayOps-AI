@@ -6,11 +6,14 @@
  */
 import { boolean, index, integer, jsonb, pgTable, real, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import {
+  AGENT_CONTROL_MODES,
   AGENT_STEP_KINDS,
   EVIDENCE_SYSTEMS,
+  FEEDBACK_VERDICTS,
   FINDING_CODES,
   AGENT_NAMES,
   RUN_PATHS,
+  ROOT_CAUSES,
   RUN_STATUS,
   type Diagnosis,
   type EvidenceItem,
@@ -61,6 +64,42 @@ export const agentRuns = pgTable(
     finishedAt: tstz(),
   },
   (t) => [index().on(t.caseId, t.createdAt), index().on(t.status)],
+);
+
+/** The single row that holds the operator's agent switch (P1 task 4, D066). Id is always 'global'. */
+export const agentControls = pgTable('agent_controls', {
+  id: text().primaryKey(),
+  mode: text({ enum: AGENT_CONTROL_MODES }).notNull(),
+  reason: text().notNull().default(''),
+  changedById: text().notNull(),
+  changedByName: text().notNull(),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * An operator's judgment of a run's diagnosis (P1 task 3, D065). One row per operator per run;
+ * submitting again replaces it. `diagnosedRootCause` is copied from the run when judged.
+ */
+export const diagnosisFeedback = pgTable(
+  'diagnosis_feedback',
+  {
+    id: text().primaryKey(),
+    runId: text()
+      .notNull()
+      .references(() => agentRuns.id),
+    caseId: text()
+      .notNull()
+      .references(() => cases.id),
+    diagnosedRootCause: text({ enum: ROOT_CAUSES }).notNull(),
+    verdict: text({ enum: FEEDBACK_VERDICTS }).notNull(),
+    reason: text().notNull().default(''),
+    correctRootCause: text({ enum: ROOT_CAUSES }),
+    givenById: text().notNull(),
+    givenByName: text().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex().on(t.runId, t.givenById), index().on(t.caseId)],
 );
 
 /** One row per realtime event (docs/03 §16), append-only, ordered by `seq` within a run. */

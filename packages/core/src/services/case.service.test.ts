@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createCore, type Core } from '../container';
-import { cases } from '../db/schema';
+import { cases, users } from '../db/schema';
 import { buildMatrix } from '../reconciliation/matrix';
 import { priorityOf, type CaseCandidate } from '../reconciliation/candidates';
 import { healthySnapshot } from '../reconciliation/test-factory';
@@ -114,5 +114,96 @@ describe('CaseService.list', () => {
 
   it('404s an unknown case', async () => {
     await expect(core.cases.get('case_missing')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('case due time and overdue (D067)', () => {
+  beforeEach(() => clock.set('2026-09-28T12:00:00.000Z'));
+
+  it('sets dueAt from severity when the case opens', async () => {
+    const high = await open(candidate());
+    const low = await open(candidate({ fingerprint: 'PAYMENT_MISMATCH:pay_2', severity: 'LOW' }));
+    expect(high.case.dueAt?.toISOString()).toBe('2026-09-28T20:00:00.000Z');
+    expect(low.case.dueAt?.toISOString()).toBe('2026-10-01T12:00:00.000Z');
+  });
+
+  it('does not move dueAt when a repeat detection raises severity', async () => {
+    const first = await open(candidate({ severity: 'MEDIUM' }));
+    const merged = await open(candidate({ severity: 'CRITICAL', ruleIds: ['D3_LEDGER_MISSING'] }));
+    expect(merged.case.dueAt?.toISOString()).toBe(first.case.dueAt?.toISOString());
+  });
+
+  it('marks list items overdue only after dueAt, and lets the queue filter on it', async () => {
+    const a = await open(candidate({ severity: 'CRITICAL' })); // due 16:00
+    await open(candidate({ fingerprint: 'PAYMENT_MISMATCH:pay_2', severity: 'LOW' }));
+    const later = createCore({ db: t.db, clock: fixedClock('2026-09-28T16:00:01.000Z') });
+    const all = await later.cases.list({ limit: 10, scope: 'open' });
+    expect(all.items.map((i) => [i.id, i.overdue])).toContainEqual([a.case.id, true]);
+    expect(all.items.filter((i) => i.overdue)).toHaveLength(1);
+    const overdue = await later.cases.list({ limit: 10, scope: 'open', overdue: true });
+    expect(overdue.items.map((i) => i.id)).toEqual([a.case.id]);
+    const early = await core.cases.list({ limit: 10, scope: 'open', overdue: true });
+    expect(early.items).toEqual([]);
+  });
+});
+
+describe('CaseService.assign', () => {
+  const alice = { id: 'usr_alice', name: 'Ananya Rao', role: 'OPS' as const };
+  const bob = { id: 'usr_bob', name: 'Rahul Menon', role: 'OPS' as const };
+  const viewer = { id: 'usr_view', name: 'Kabir Shah', role: 'VIEWER' as const };
+
+  beforeEach(async () => {
+    await t.db.insert(users).values(
+      [alice, bob, viewer].map((u) => ({ ...u, email: `${u.id}@payops.dev`, passwordHash: 'x' })),
+    );
+  });
+
+  it('assigns, audits, and shows the assignee on the list and detail', async () => {
+    const c = (await open(candidate())).case;
+    const item = await core.cases.assign(c.id, bob.id, alice);
+    expect(item.assignee).toEqual({ id: bob.id, name: bob.name });
+    const audit = await core.audit.list({ limit: 10, caseId: c.id });
+    // Same fixed-clock timestamp as case.opened, so find by action rather than by position.
+    const event = audit.items.find((i) => i.action === 'case.assigned');
+    expect(event).toMatchObject({ actor: { id: alice.id, name: alice.name } });
+    expect(event?.summary).toBe('Assigned PAY-0001 to Rahul Menon');
+  });
+
+  it('reassigns and unassigns, auditing each change', async () => {
+    const c = (await open(candidate())).case;
+    await core.cases.assign(c.id, alice.id, alice);
+    await core.cases.assign(c.id, bob.id, alice);
+    const cleared = await core.cases.assign(c.id, null, alice);
+    expect(cleared.assignee).toBeNull();
+    const actions = (await core.audit.list({ limit: 10, caseId: c.id })).items.map((i) => i.action);
+    expect(actions.filter((a) => a === 'case.assigned')).toHaveLength(2);
+    expect(actions).toContain('case.unassigned');
+  });
+
+  it('does nothing and writes no audit row when the assignee is unchanged', async () => {
+    const c = (await open(candidate())).case;
+    await core.cases.assign(c.id, alice.id, alice);
+    await core.cases.assign(c.id, alice.id, alice);
+    const audit = await core.audit.list({ limit: 10, caseId: c.id });
+    expect(audit.items.filter((i) => i.action === 'case.assigned')).toHaveLength(1);
+  });
+
+  it('rejects a viewer, an unknown user, an unknown case and a closed case', async () => {
+    const c = (await open(candidate())).case;
+    await expect(core.cases.assign(c.id, viewer.id, alice)).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    await expect(core.cases.assign(c.id, 'usr_nope', alice)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(core.cases.assign('case_nope', alice.id, alice)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await core.db.update(cases).set({ status: 'RESOLVED' }).where(eq(cases.id, c.id));
+    await expect(core.cases.assign(c.id, alice.id, alice)).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('filters the queue by assignee, including unassigned', async () => {
+    const a = (await open(candidate())).case;
+    const b = (await open(candidate({ fingerprint: 'PAYMENT_MISMATCH:pay_2' }))).case;
+    await core.cases.assign(a.id, alice.id, alice);
+    const mine = await core.cases.list({ limit: 10, scope: 'open', assigneeId: alice.id });
+    expect(mine.items.map((i) => i.id)).toEqual([a.id]);
+    const none = await core.cases.list({ limit: 10, scope: 'open', assigneeId: 'unassigned' });
+    expect(none.items.map((i) => i.id)).toEqual([b.id]);
   });
 });

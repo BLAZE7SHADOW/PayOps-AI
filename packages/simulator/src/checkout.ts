@@ -32,6 +32,8 @@ export interface RefundOptions {
   gateway?: { status: GwRefundStatus; processedAt?: Date };
   /** Delivery of refund.processed to us. */
   webhook?: 'delivered' | 'fails';
+  /** The gateway refunded but we never created our own refund record (no ledger posting either). */
+  skipInternal?: boolean;
 }
 
 export interface CheckoutOptions {
@@ -42,8 +44,15 @@ export interface CheckoutOptions {
   merchant: WorldMerchant;
   method?: PaymentMethod;
   card?: CardDetails;
-  /** payment.captured delivery. 'fails' = 3 attempts, HTTP 500, and the order times out. */
-  webhook?: 'delivered' | 'fails';
+  /**
+   * payment.captured delivery. 'fails' = 3 attempts, HTTP 500, and the order times out.
+   * 'pending' = two HTTP 503 attempts and a retry still scheduled, so the order is still PENDING.
+   */
+  webhook?: 'delivered' | 'fails' | 'pending';
+  /** Out-of-order events: a stale payment.failed is applied after the capture and flips the order to FAILED. */
+  staleFailureAt?: Date;
+  /** The customer cancelled before the capture landed; the consumer still posted the ledger credit. */
+  cancelledBeforeCaptureAt?: Date;
   /** Order service rejects webhook-driven transitions (fault for replay_fails_then_replan). */
   orderLocked?: boolean;
   /** Webhook processed but the ledger posting was lost. */
@@ -99,8 +108,12 @@ export async function checkout(ctx: ScenarioContext, o: CheckoutOptions): Promis
     status = to;
   };
   const delivered = webhook === 'delivered';
-  if (delivered) move(plus(capturedAt, 2 * SECOND_MS), 'PAID', 'webhook-consumer');
-  else move(plus(o.at, 15 * MINUTE_MS), 'FAILED', 'checkout-timeout', 'No payment confirmation within 15 min');
+  if (o.cancelledBeforeCaptureAt) move(o.cancelledBeforeCaptureAt, 'CANCELLED', 'customer', 'Customer cancelled while the payment was in flight');
+  else if (delivered) move(plus(capturedAt, 2 * SECOND_MS), 'PAID', 'webhook-consumer');
+  else if (webhook === 'pending') {
+    // Order stays PENDING while the gateway keeps retrying the webhook.
+  } else move(plus(o.at, 15 * MINUTE_MS), 'FAILED', 'checkout-timeout', 'No payment confirmation within 15 min');
+  if (o.staleFailureAt) move(o.staleFailureAt, 'FAILED', 'webhook-consumer', 'payment.failed from an earlier attempt applied after the capture');
   if (o.cancelAt) move(o.cancelAt, 'CANCELLED', 'merchant', o.cancelReason ?? 'Cancelled by merchant');
 
   await tx.insert(tables.orders).values({
@@ -290,6 +303,7 @@ async function writeRefund(
       });
     }
   }
+  if (r.refund.skipInternal) return;
   const updatedAt = r.refund.internalStatus === 'PROCESSED' && gw?.processedAt ? plus(gw.processedAt, 2 * SECOND_MS) : r.refund.requestedAt;
   await tx.insert(tables.refunds).values({
     id: refundId,
@@ -358,27 +372,53 @@ async function insertDelivery(
     gwPaymentId: string;
     gwRefundId: string | null;
     firstAt: Date;
-    outcome: 'delivered' | 'fails';
+    outcome: 'delivered' | 'fails' | 'pending';
   },
 ): Promise<void> {
   const attempts: DeliveryAttempt[] =
     d.outcome === 'delivered'
       ? [{ at: d.firstAt.toISOString(), httpStatus: 200, latencyMs: ctx.ids.int(90, 420), error: null }]
-      : RETRY_OFFSETS_MS.map((offset) => ({
+      : (d.outcome === 'pending' ? RETRY_OFFSETS_MS.slice(0, 2) : RETRY_OFFSETS_MS).map((offset) => ({
           at: plus(d.firstAt, offset).toISOString(),
-          httpStatus: 500,
+          httpStatus: d.outcome === 'pending' ? 503 : 500,
           latencyMs: ctx.ids.int(850, 1_600),
-          error: 'Internal Server Error',
+          error: d.outcome === 'pending' ? 'Service Unavailable' : 'Internal Server Error',
         }));
   const lastAt = new Date(attempts[attempts.length - 1]?.at ?? d.firstAt);
+  const id = ctx.ids.next('webhookEvent');
+  const finalStatus = d.outcome === 'delivered' ? 'DELIVERED' : d.outcome === 'pending' ? 'PENDING' : 'FAILED';
   await ctx.tx.insert(tables.gwWebhookDeliveries).values({
-    id: ctx.ids.next('webhookEvent'),
+    id,
     event: d.event,
     gwPaymentId: d.gwPaymentId,
     gwRefundId: d.gwRefundId,
     attempts,
-    finalStatus: d.outcome === 'delivered' ? 'DELIVERED' : 'FAILED',
+    finalStatus,
     createdAt: d.firstAt,
+    updatedAt: lastAt,
+  });
+  // Our event log holds the same story as our consumer saw it. Retries here belong to the gateway
+  // (it was still retrying, or gave up), so no retry of ours is queued: exhausted deliveries are
+  // DEAD and wait for a person to replay them.
+  await ctx.tx.insert(tables.webhookEvents).values({
+    id,
+    event: d.event,
+    gwPaymentId: d.gwPaymentId,
+    gwRefundId: d.gwRefundId,
+    payload: { id, event: d.event, gwPaymentId: d.gwPaymentId, gwRefundId: d.gwRefundId, createdAt: d.firstAt.toISOString() },
+    status: d.outcome === 'delivered' ? 'PROCESSED' : d.outcome === 'pending' ? 'FAILED' : 'DEAD',
+    attempts: attempts.map((a) => ({
+      at: a.at,
+      source: 'GATEWAY' as const,
+      httpStatus: a.httpStatus,
+      outcome: a.httpStatus !== null && a.httpStatus < 300 ? 'PROCESSED' : 'ERROR',
+      message: a.error ?? (d.event === 'payment.captured' ? 'Processed payment.captured' : 'Processed refund.processed'),
+    })),
+    attemptCount: attempts.length,
+    lastHttpStatus: attempts[attempts.length - 1]?.httpStatus ?? null,
+    lastMessage: attempts[attempts.length - 1]?.error ?? 'Processed',
+    nextRetryAt: null,
+    firstReceivedAt: d.firstAt,
     updatedAt: lastAt,
   });
 }

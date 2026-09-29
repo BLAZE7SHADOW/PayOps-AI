@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CatalogAction } from '@payops/shared';
+import { CatalogAction } from '@payops/shared';
 import type { CaseRow } from '../db/rows';
 import {
   DAY_MS,
@@ -44,6 +44,7 @@ function caseRow(o: Partial<CaseRow> = {}): CaseRow {
     entityRefs: { orderId: 'ord_1', paymentId: 'pay_1', gwPaymentId: 'gwp_1' },
     signals: {},
     assigneeId: null,
+    dueAt: null,
     activeRunId: null,
     resolution: null,
     lastDetectedAt: NOW,
@@ -121,6 +122,39 @@ describe('REVERSE_LEDGER_ENTRY', () => {
     });
     expect(pre(a, state(reversed))).toEqual(['Journal jrn_1 was already reversed by jrn_r.']);
     expect(pre({ type: 'REVERSE_LEDGER_ENTRY', params: { journalId: 'jrn_zzz' } }, state(healthySnapshot()))[0]).toMatch(/not on this case/);
+  });
+});
+
+describe('REVERSE_LEDGER_ENTRY as an undo (undoOf)', () => {
+  const reversedLedger = () => [
+    ...captureJournal(1_249_900),
+    ...captureJournal(1_249_900, { journalId: 'jrn_r' }).map((l, i) => ({
+      ...l,
+      id: `led_r${i}`,
+      reversalOf: i === 0 ? 'led_c1' : 'led_c2',
+      direction: l.direction === 'DEBIT' ? ('CREDIT' as const) : ('DEBIT' as const),
+    })),
+  ];
+  const plain: CatalogAction = { type: 'REVERSE_LEDGER_ENTRY', params: { journalId: 'jrn_1' } };
+  const undo: CatalogAction = { type: 'REVERSE_LEDGER_ENTRY', params: { journalId: 'jrn_1', undoOf: 'res_abc123' } };
+
+  it('accepts undoOf in the catalog schema', () => {
+    expect(CatalogAction.safeParse(undo).success).toBe(true);
+    expect(CatalogAction.safeParse(plain).success).toBe(true);
+  });
+  it('expects zero net capture credit after an undo', () => {
+    const after = withSnapshot(healthySnapshot(), { ledger: reversedLedger() });
+    expect(post(undo, state(after))).toEqual([
+      ['a0.ledger.reversed', true],
+      ['a0.ledger.netCapture', true],
+    ]);
+  });
+  it('keeps the duplicate-journal expectation when undoOf is absent', () => {
+    const after = withSnapshot(healthySnapshot(), { ledger: reversedLedger() });
+    expect(post(plain, state(after))).toEqual([
+      ['a0.ledger.reversed', true],
+      ['a0.ledger.netCapture', false],
+    ]);
   });
 });
 

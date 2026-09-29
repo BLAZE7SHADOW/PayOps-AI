@@ -112,6 +112,90 @@ describe('scenarios', () => {
     if (scenario === 'showcase_settlement_dispute') expect(detail.amountMinor).toBe(7_080_000);
   });
 
+  it('adversarial variants keep the same record faults as their plain scenarios, with a misleading note', async () => {
+    const mis = await generateScenario(core, { scenario: 'misleading_note', seed: 7 });
+    const misDetail = await core.cases.get(mis.casesOpened[0]!.id);
+    expect(misDetail.matrix.mismatched).toEqual(['ORDER', 'LEDGER', 'WEBHOOK']);
+    expect(misDetail.notes.map((n) => n.text)[0]).toContain('charged twice');
+
+    await resetDemoData(core);
+    const conf = await generateScenario(core, { scenario: 'conflicting_evidence', seed: 7 });
+    const confDetail = await core.cases.get(conf.casesOpened[0]!.id);
+    expect(confDetail.notes.map((n) => n.text)[0]).toContain('refund');
+    expect(confDetail.matrix.mismatched).toContain('ORDER');
+  });
+
+  describe('webhook event log (P3 task 2)', () => {
+    it('every seeded gateway delivery also appears in our event log, with the same attempts', async () => {
+      await generateScenario(core, { scenario: 'captured_order_failed', seed: 7 });
+      const deliveries = await t.db.select().from(tables.gwWebhookDeliveries);
+      const log = await t.db.select().from(tables.webhookEvents);
+      expect(deliveries.length).toBeGreaterThan(0);
+      expect(log.map((e) => e.id).sort()).toEqual(deliveries.map((d) => d.id).sort());
+      const failed = log.find((e) => e.status !== 'PROCESSED');
+      expect(failed).toMatchObject({ status: 'DEAD', attemptCount: 3, nextRetryAt: null });
+      expect(failed?.attempts.every((a) => a.source === 'GATEWAY' && a.httpStatus === 500)).toBe(true);
+    });
+
+    it('a still-retrying delivery is FAILED in the log with the gateway attempts', async () => {
+      await generateScenario(core, { scenario: 'late_webhook_retrying', seed: 7 });
+      const [pending] = (await core.webhookEvents.list({ limit: 25 })).items.filter((e) => e.lastHttpStatus === 503);
+      expect(pending).toMatchObject({ status: 'FAILED', attemptCount: 2 });
+    });
+  });
+
+  describe('messy variants (P3)', () => {
+    const detailOf = async (scenario: (typeof SCENARIOS)[number]['key']) => {
+      const { casesOpened } = await generateScenario(core, { scenario, seed: 33 });
+      expect(casesOpened).toHaveLength(1);
+      return core.cases.get(casesOpened[0]!.id);
+    };
+
+    it('late_webhook_retrying shows a pending delivery, not a failed one', async () => {
+      const detail = await detailOf('late_webhook_retrying');
+      expect(detail.ruleIds).toEqual(['D1_CAPTURED_NOT_PAID', 'D3_LEDGER_MISSING']);
+      expect(detail.matrix.mismatched).toEqual(['ORDER', 'LEDGER']);
+      expect(detail.matrix.cells.WEBHOOK.status).toBe('PENDING');
+    });
+
+    it('stale_failure_after_capture leaves the order FAILED after it was PAID, with the ledger credited', async () => {
+      const detail = await detailOf('stale_failure_after_capture');
+      expect(detail.ruleIds).toEqual(['D1_CAPTURED_NOT_PAID']);
+      expect(detail.matrix.mismatched).toEqual(['ORDER']);
+      const [order] = await t.db.select().from(tables.orders);
+      expect(order!.status).toBe('FAILED');
+      expect(order!.timeline.map((e) => e.to)).toEqual(['PENDING', 'PAID', 'FAILED']);
+    });
+
+    it('partial_refund_stuck is a partial refund pending past the SLA', async () => {
+      const detail = await detailOf('partial_refund_stuck');
+      expect(detail.ruleIds).toEqual(['D5_REFUND_PENDING_SLA']);
+      expect(detail.amountMinor).toBe(120_000);
+      const [gw] = await t.db.select().from(tables.gwPayments);
+      expect(gw).toMatchObject({ status: 'PARTIALLY_REFUNDED', refundedMinor: 120_000 });
+    });
+
+    it('refund_never_reached_gateway has no gateway refund at all', async () => {
+      const detail = await detailOf('refund_never_reached_gateway');
+      expect(detail.ruleIds).toEqual(['D5_REFUND_PENDING_SLA']);
+      expect(await t.db.select().from(tables.gwRefunds)).toEqual([]);
+    });
+
+    it('partial_refund_shortfall owes only the unrefunded remainder', async () => {
+      const detail = await detailOf('partial_refund_shortfall');
+      expect(detail.ruleIds).toEqual(['D6_REFUND_MISSING']);
+      expect(detail.amountMinor).toBe(1_500_000 - 600_000);
+      expect(await t.db.select().from(tables.refunds)).toEqual([]);
+    });
+
+    it('cancel_raced_capture cancels the order before the capture lands', async () => {
+      const detail = await detailOf('cancel_raced_capture');
+      expect(detail.ruleIds).toEqual(['D6_REFUND_MISSING']);
+      const [order] = await t.db.select().from(tables.orders);
+      expect(order!.timeline.map((e) => e.to)).toEqual(['PENDING', 'CANCELLED']);
+    });
+  });
+
   it('rejects the same scenario and seed twice', async () => {
     await generateScenario(core, { scenario: 'captured_order_failed', seed: 5 });
     await expect(generateScenario(core, { scenario: 'captured_order_failed', seed: 5 })).rejects.toMatchObject({

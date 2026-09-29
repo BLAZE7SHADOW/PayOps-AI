@@ -134,6 +134,7 @@ const RESET_TABLES = [
   'disputes',
   'gw_settlement_lines',
   'gw_webhook_deliveries',
+  'webhook_events',
   'gw_refunds',
   'gw_payments',
   'ledger_entries',

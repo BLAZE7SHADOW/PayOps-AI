@@ -64,6 +64,12 @@ const table: Row[] = [
   { name: 'attempt 3 raises AUTO to OPS', input: { attempt: 3 }, tier: 'OPS', rules: ['P6', 'P7'] },
   // Agent-only parts.
   { name: 'agent correction with 0.9 confidence is AUTO', input: { proposer: 'AGENT', diagnosisConfidence: 0.9 }, tier: 'AUTO', rules: ['P6'] },
+  // Agent controls (P1 task 4, D066): a pause or propose-only setting keeps agent fixes for a person.
+  { name: 'agent correction, propose-only: OPS approves', input: { proposer: 'AGENT', diagnosisConfidence: 0.95, agentControl: 'PROPOSE_ONLY' }, tier: 'OPS', rules: ['P6', 'P12'] },
+  { name: 'agent correction, paused: OPS approves', input: { proposer: 'AGENT', diagnosisConfidence: 0.95, agentControl: 'PAUSED' }, tier: 'OPS', rules: ['P6', 'P12'] },
+  { name: 'agent correction, normal mode: still AUTO', input: { proposer: 'AGENT', diagnosisConfidence: 0.95, agentControl: 'NORMAL' }, tier: 'AUTO', rules: ['P6'] },
+  { name: 'agent hold and escalate stay AUTO while paused', input: { proposer: 'AGENT', diagnosisConfidence: 0.95, actions: [hold, escalate], agentControl: 'PAUSED' }, tier: 'AUTO', rules: ['P10'] },
+  { name: 'a person\'s correction is not held by the agent pause', input: { proposer: 'USER', agentControl: 'PAUSED' }, tier: 'AUTO', rules: ['P6'] },
   { name: 'agent correction with 0.8 confidence needs OPS', input: { proposer: 'AGENT', diagnosisConfidence: 0.8 }, tier: 'OPS', rules: ['P11'] },
   { name: 'agent with 0.5 confidence triggers P8', input: { proposer: 'AGENT', diagnosisConfidence: 0.5 }, tier: 'OPS', rules: ['P8'] },
   { name: 'agent small refund needs 0.9 for AUTO', input: { proposer: 'AGENT', actions: [refund(500_00)], diagnosisConfidence: 0.89 }, tier: 'OPS', rules: ['P11'] },

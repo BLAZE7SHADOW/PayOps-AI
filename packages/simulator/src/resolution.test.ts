@@ -275,3 +275,98 @@ describe('realtime contract', () => {
     expect(evt?.payload).toMatchObject({ id: expect.any(String), tier: 'MANAGER', status: 'PENDING', case: { id: caseId } });
   });
 });
+
+describe('bulk approve (D069)', () => {
+  async function proposeRecommended(caseId: string, who: SessionUser) {
+    return core.resolutions.propose(caseId, { actions: await recommended(caseId, who), rationale: 'Recommended fix' }, who);
+  }
+
+  it('approves eligible OPS-tier items, skips manager-tier and own proposals, and each ends VALIDATED', async () => {
+    const dupA = await openCase('duplicate_capture', 1);
+    const dupB = await openCase('duplicate_capture', 2);
+    const own = await openCase('duplicate_capture', 3);
+    const susp = await openCase('suspicious_payment', 1);
+    const a = await proposeRecommended(dupA, ops);
+    const b = await proposeRecommended(dupB, ops);
+    await proposeRecommended(own, ops2);
+    await proposeRecommended(susp, ops);
+    const pending = (await core.approvals.list({ scope: 'pending', limit: 20 }, ops2)).items;
+    expect(pending).toHaveLength(4);
+    const idFor = (resolutionId: string) => pending.find((p) => p.resolutionId === resolutionId)!.id;
+
+    const result = await core.approvals.bulkApprove({ ids: pending.map((p) => p.id), comment: '' }, ops2);
+    expect(result).toMatchObject({ approved: 2, skipped: 2, failed: 0 });
+    const byId = new Map(result.items.map((i) => [i.approvalId, i]));
+    expect(byId.get(idFor(a.id))?.outcome).toBe('APPROVED');
+    expect(byId.get(idFor(b.id))?.outcome).toBe('APPROVED');
+    expect(result.items.filter((i) => i.outcome === 'SKIPPED').map((i) => i.message).sort()).toEqual([
+      'Needs a manager.',
+      'You proposed this resolution. Another person must approve it.',
+    ]);
+    for (const r of [a, b]) {
+      expect((await core.resolutionQueries.item(r.id)).validation?.verdict).toBe('PASS');
+    }
+    expect((await core.cases.get(dupA, ops)).status).toBe('RESOLVED');
+    // The audit trail records who approved and the bulk comment, one row per item.
+    const audits = (await core.audit.list({ limit: 20, caseId: dupA })).items.filter((i) => i.action === 'approval.decided');
+    expect(audits[0]?.summary).toContain('Bulk approved as low risk');
+  });
+
+  it('reports an unknown id as FAILED and a repeat of a decided one as SKIPPED', async () => {
+    const c = await openCase('duplicate_capture', 1);
+    await proposeRecommended(c, ops);
+    const id = (await core.approvals.list({ scope: 'pending', limit: 5 }, ops2)).items[0]!.id;
+    await core.approvals.bulkApprove({ ids: [id], comment: 'ok' }, ops2);
+    const again = await core.approvals.bulkApprove({ ids: [id, 'apr_missing'], comment: 'ok' }, ops2);
+    expect(again.items.map((i) => i.outcome)).toEqual(['SKIPPED', 'FAILED']);
+  });
+});
+
+describe('undo through a reversing action (D070)', () => {
+  /** Resolves replay_fails_then_replan the way the test above does; returns the passing resolution. */
+  async function resolveWithLedgerPost() {
+    const caseId = await openCase('replay_fails_then_replan');
+    const detail0 = await core.cases.get(caseId, ops);
+    const replay = detail0.resolutionView.actionOptions.find((o) => o.type === 'REPLAY_WEBHOOK_EVENT')!;
+    await core.resolutions.propose(caseId, { actions: [replay.action], rationale: 'Replay the failed webhook' }, ops);
+    const actions = await recommended(caseId);
+    const second = await core.resolutions.propose(caseId, { actions, rationale: 'Correct records directly' }, ops);
+    const approval = (await core.approvals.list({ scope: 'pending', limit: 10 }, ops2)).items[0]!;
+    await core.approvals.decide(approval.id, { decision: 'APPROVE', comment: 'ok' }, ops2);
+    return { caseId, resolutionId: second.id };
+  }
+
+  it('reopens the case and proposes a reversal that passes validation', async () => {
+    const { caseId, resolutionId } = await resolveWithLedgerPost();
+    expect((await core.cases.get(caseId, ops)).status).toBe('RESOLVED');
+
+    const undo = await core.resolutions.undo(resolutionId, ops);
+    expect(undo.actions).toHaveLength(1);
+    expect(undo.actions[0]).toMatchObject({ type: 'REVERSE_LEDGER_ENTRY', params: { undoOf: resolutionId } });
+
+    let finished = undo;
+    if (undo.status === 'AWAITING_APPROVAL') {
+      const approval = (await core.approvals.list({ scope: 'pending', limit: 10 }, ops2)).items[0]!;
+      await core.approvals.decide(approval.id, { decision: 'APPROVE', comment: 'undo ok' }, ops2);
+      finished = await core.resolutionQueries.item(undo.id);
+    }
+    expect(finished.validation?.verdict).toBe('PASS');
+    const trail = await core.audit.list({ caseId, limit: 100 }).then((r) => r.items.map((a) => a.action));
+    expect(trail).toContain('case.reopened');
+    // The reversal worked, but the original problem is back, so the case stays open.
+    expect((await core.cases.get(caseId, ops)).status).toBe('OPEN');
+  });
+
+  it('refuses a resolution that posted nothing, and a second undo of the same one', async () => {
+    const caseId = await openCase('captured_order_failed');
+    const actions = await recommended(caseId);
+    const done = await core.resolutions.propose(caseId, { actions, rationale: 'Replay the failed webhook' }, ops);
+    await expect(core.resolutions.undo(done.id, ops)).rejects.toBeInstanceOf(AppError);
+    expect((await core.cases.get(caseId, ops)).status).toBe('RESOLVED');
+  });
+
+  it('is not open to viewers', async () => {
+    const { resolutionId } = await resolveWithLedgerPost();
+    await expect(core.resolutions.undo(resolutionId, viewer)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});

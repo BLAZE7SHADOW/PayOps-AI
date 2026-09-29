@@ -10,3 +10,15 @@ export function ageLabel(fromIso: string | Date, now: Date = new Date()): string
   if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)}h`;
   return `${Math.floor(ms / DAY_MS)}d`;
 }
+
+/**
+ * Due label for dense UIs: "in 3h" while time remains, "2h late" once past, "due now" inside a
+ * minute either way. Uses the same coarse units as `ageLabel`.
+ */
+export function dueLabel(dueIso: string | Date, now: Date = new Date()): string {
+  const ms = new Date(dueIso).getTime() - now.getTime();
+  const abs = Math.abs(ms);
+  if (abs < MINUTE_MS) return 'due now';
+  const span = ageLabel(new Date(now.getTime() - abs), now);
+  return ms > 0 ? `in ${span}` : `${span} late`;
+}

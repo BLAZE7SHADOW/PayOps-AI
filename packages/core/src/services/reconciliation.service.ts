@@ -72,8 +72,10 @@ export class ReconciliationService {
     const snapshots = await loadOrderSnapshots(this.db, this.gateway, orderIds, now);
     const reconRows: Array<{ paymentId: string; recon: ReconState; mismatch: boolean }> = [];
     const candidates: CaseCandidate[] = [];
+    const evaluations = new Map<(typeof snapshots)[number], ReturnType<typeof evaluateOrder>>();
     for (const s of snapshots) {
       const evaluation = evaluateOrder(s);
+      evaluations.set(s, evaluation);
       if (s.payment) {
         reconRows.push({
           paymentId: s.payment.id,
@@ -85,8 +87,19 @@ export class ReconciliationService {
     }
     await this.saveRecon(reconRows);
     const result = await this.applyCandidates(candidates);
+    // D069: an order that now has no rule hit and no mismatched system closes its OPEN cases.
+    const clean = snapshots.filter((s) => {
+      const e = evaluations.get(s);
+      return e !== undefined && e.hits.length === 0 && e.matrix.mismatched.length === 0;
+    });
+    await this.autoClose(clean.map((s) => s.order.id));
     result.checked = snapshots.length;
     return result;
+  }
+
+  private async autoClose(orderIds: string[]): Promise<void> {
+    const closedIds = await this.cases.autoCloseReconciled(orderIds);
+    for (const item of await this.cases.listItems(closedIds)) this.events.publish(ROOMS.ops, OPS_EVENTS.caseUpdated, item);
   }
 
   /** One UPDATE … FROM (VALUES …) for the whole chunk. */

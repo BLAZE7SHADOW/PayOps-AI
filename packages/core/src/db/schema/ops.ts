@@ -11,6 +11,12 @@ import {
   type ComplaintType,
   type DetectionRuleId,
   type MatrixCell,
+  type SavedViewFilters,
+  type WebhookEventType,
+  type WebhookLogAttempt,
+  type WebhookLogStatus,
+  WEBHOOK_EVENT_TYPES,
+  WEBHOOK_LOG_STATUS,
   type SystemKey,
 } from '@payops/shared';
 import { createdAt, money, tstz, updatedAt } from './_columns';
@@ -68,6 +74,8 @@ export const cases = pgTable(
     entityRefs: jsonb().$type<CaseEntityRefs>().notNull(),
     signals: jsonb().$type<CaseSignalsRow>().notNull().default({}),
     assigneeId: text().references(() => users.id),
+    /** Set once when the case opens: openedAt plus the severity window (shared/sla.ts, D067). */
+    dueAt: tstz(),
     activeRunId: text(),
     resolution: jsonb().$type<CaseResolutionRow | null>(),
     lastDetectedAt: tstz().notNull(),
@@ -112,3 +120,59 @@ export const auditEvents = pgTable(
   (t) => [index().on(t.at), index().on(t.entityId), index().on(t.caseId)],
 );
 
+
+/** Notes operators write on a case (P2 task 2, D068). Append-only: no edit, no delete. */
+export const caseNotes = pgTable(
+  'case_notes',
+  {
+    id: text().primaryKey(),
+    caseId: text()
+      .notNull()
+      .references(() => cases.id),
+    text: text().notNull(),
+    authorId: text().notNull(),
+    authorName: text().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.caseId, t.createdAt), index().on(t.createdAt)],
+);
+
+/** A user's named queue filters (P2 task 2, D068). Private to the owner. */
+export const savedViews = pgTable(
+  'saved_views',
+  {
+    id: text().primaryKey(),
+    ownerId: text()
+      .notNull()
+      .references(() => users.id),
+    name: text().notNull(),
+    filters: jsonb().$type<SavedViewFilters>().notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex().on(t.ownerId, t.name)],
+);
+
+/**
+ * Our own record of every webhook event the consumer received (P3 task 2, D072). One row per
+ * gateway event id; each delivery, retry or replay appends to `attempts`. `payload` is the event
+ * as received, so a replay still works if the gateway cannot resend it.
+ */
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: text().primaryKey(), // gateway event id
+    event: text({ enum: WEBHOOK_EVENT_TYPES }).notNull(),
+    gwPaymentId: text().notNull(),
+    gwRefundId: text(),
+    payload: jsonb().$type<{ id: string; event: WebhookEventType; gwPaymentId: string; gwRefundId: string | null; createdAt: string }>().notNull(),
+    status: text({ enum: WEBHOOK_LOG_STATUS }).notNull().$type<WebhookLogStatus>(),
+    attempts: jsonb().$type<WebhookLogAttempt[]>().notNull().default([]),
+    attemptCount: integer().notNull().default(0),
+    lastHttpStatus: integer(),
+    lastMessage: text().notNull().default(''),
+    nextRetryAt: tstz(),
+    firstReceivedAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index().on(t.status, t.updatedAt), index().on(t.gwPaymentId), index().on(t.updatedAt)],
+);

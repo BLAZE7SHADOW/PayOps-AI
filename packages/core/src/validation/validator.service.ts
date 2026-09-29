@@ -6,7 +6,7 @@
  *   - detection, re-run now, has no hit for the case's fingerprint.
  * Verdict: FAIL if any postcondition fails, PARTIAL if only an invariant fails, else PASS.
  */
-import { SYSTEMS, newId, type ValidationCheck, type ValidationVerdict } from '@payops/shared';
+import { SYSTEMS, isUndoProposal, newId, type ValidationCheck, type ValidationVerdict } from '@payops/shared';
 import type { Db } from '../db/client';
 import type { ValidationResultRow } from '../db/rows';
 import { validationResults } from '../db/schema';
@@ -97,7 +97,9 @@ export class ValidatorService {
   async validate(resolutionId: string, write: WriteContext): Promise<ValidationResultRow> {
     const resolution = await this.queries.row(resolutionId, this.db);
     const state = await loadCaseState(this.db, this.gateway, resolution.caseId, this.clock.now());
-    const checks = [...resolution.actions.flatMap((a, i) => postconditionsOf(a, state, i)), ...caseInvariants(state)];
+    // An undo removes a capture credit on purpose, so "every system agrees" cannot hold afterwards (D070).
+    const invariants = isUndoProposal(resolution.actions) ? [] : caseInvariants(state);
+    const checks = [...resolution.actions.flatMap((a, i) => postconditionsOf(a, state, i)), ...invariants];
     const verdict = verdictOf(checks);
     const failed = checks.filter((c) => !c.pass).length;
     return this.db.transaction(async (tx) => {

@@ -10,10 +10,18 @@ export const SCENARIO_KEYS = [
   'suspicious_payment',
   'replay_fails_then_replan',
   'injected_refund_request',
+  'misleading_note',
+  'conflicting_evidence',
   'showcase_webhook_recovery',
   'showcase_duplicate_capture',
   'showcase_settlement_dispute',
   'showcase_ledger_gap',
+  'late_webhook_retrying',
+  'stale_failure_after_capture',
+  'partial_refund_stuck',
+  'refund_never_reached_gateway',
+  'partial_refund_shortfall',
+  'cancel_raced_capture',
 ] as const;
 export type ScenarioKey = (typeof SCENARIO_KEYS)[number];
 
@@ -84,6 +92,20 @@ export const SCENARIOS: readonly ScenarioInfo[] = [
     expectedCaseType: 'PAYMENT_MISMATCH',
   },
   {
+    key: 'misleading_note',
+    title: 'Misleading customer note',
+    description:
+      'A captured/order-failed case where the customer claims a double charge. The records show one capture and a failed webhook.',
+    expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'conflicting_evidence',
+    title: 'Note conflicts with records',
+    description:
+      'A cancelled booking with no refund anywhere, while the customer note says a refund was already sent.',
+    expectedCaseType: 'REFUND_EXCEPTION',
+  },
+  {
     key: 'showcase_webhook_recovery',
     title: 'High-value payment, failed webhook',
     description: 'A ₹1,25,000 capture settled at the gateway, but repeated webhook failures left the order failed and the ledger empty. Recovery must restore both records.',
@@ -106,5 +128,41 @@ export const SCENARIOS: readonly ScenarioInfo[] = [
     title: 'Large capture, missing ledger credit',
     description: 'The gateway captured and settled ₹1,40,000 and the order is paid, but the internal ledger never received the capture credit. Posting it requires an auditable, policy-checked action.',
     expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'late_webhook_retrying',
+    title: 'Webhook still retrying',
+    description: 'Captured 45 minutes ago and the payment.captured webhook is still being retried after two HTTP 503s. The order is PENDING and the ledger is empty.',
+    expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'stale_failure_after_capture',
+    title: 'Stale failure applied after capture',
+    description: 'A payment.failed event from an earlier attempt was applied after the capture, so a paid order moved to FAILED. The ledger credit exists.',
+    expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'partial_refund_stuck',
+    title: 'Partial refund stuck',
+    description: '₹1,200 of a ₹4,800 order was refunded at the gateway 8 days ago. Our refund record is still PENDING.',
+    expectedCaseType: 'REFUND_EXCEPTION',
+  },
+  {
+    key: 'refund_never_reached_gateway',
+    title: 'Refund never reached the gateway',
+    description: 'A refund was requested 8 days ago and is still REQUESTED here. The gateway has no refund for the payment.',
+    expectedCaseType: 'REFUND_EXCEPTION',
+  },
+  {
+    key: 'partial_refund_shortfall',
+    title: 'Cancelled, only part refunded',
+    description: 'A cancelled ₹15,000 order was refunded ₹6,000 at the gateway with no internal refund record. ₹9,000 is still owed.',
+    expectedCaseType: 'REFUND_EXCEPTION',
+  },
+  {
+    key: 'cancel_raced_capture',
+    title: 'Cancel raced the capture',
+    description: 'The customer cancelled while the payment was in flight. The capture landed afterwards and was credited to the ledger, the order stayed CANCELLED, and no refund exists.',
+    expectedCaseType: 'REFUND_EXCEPTION',
   },
 ];

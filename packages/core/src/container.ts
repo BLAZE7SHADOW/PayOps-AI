@@ -12,6 +12,11 @@ import { ApprovalService, type ApprovalContinuation } from './services/approval.
 import { AuditService } from './services/audit.service';
 import { CaseService } from './services/case.service';
 import { DisputeService } from './services/dispute.service';
+import { AgentControlService } from './services/agent-control.service';
+import { FeedbackService } from './services/feedback.service';
+import { CaseNoteService } from './services/case-note.service';
+import { SavedViewService } from './services/saved-view.service';
+import { HandoffService } from './services/handoff.service';
 import { LedgerService } from './services/ledger.service';
 import { OrderService } from './services/order.service';
 import { OverviewService } from './services/overview.service';
@@ -23,6 +28,7 @@ import { RefundService } from './services/refund.service';
 import { ResolutionQueryService } from './services/resolution-query.service';
 import { ResolutionService } from './services/resolution.service';
 import { WebhookConsumer } from './services/webhook-consumer';
+import { WebhookEventService, type WebhookRetryScheduler } from './services/webhook-event.service';
 import type { DecisionPort } from './ports/decision';
 import { ValidatorService } from './validation/validator.service';
 
@@ -37,6 +43,8 @@ export interface CoreOptions {
   events?: EventPublisherPort;
   /** Wired by apps/server once pg-boss is up; undefined in tests that never start an agent run. */
   agentResumer?: AgentResumer;
+  /** Queues delayed retries of failed webhooks; wired by apps/server with pg-boss. Without it failures are logged but not retried. */
+  webhookRetryScheduler?: WebhookRetryScheduler;
   gateway?: PaymentGatewayPort;
   /** Jev, for J1 signal intake on case creation. Defaults to a port that always falls back (no tags). */
   decision?: DecisionPort;
@@ -60,11 +68,17 @@ export interface Core {
   refunds: RefundService;
   disputes: DisputeService;
   webhookConsumer: WebhookConsumer;
+  webhookEvents: WebhookEventService;
   resolutionQueries: ResolutionQueryService;
   executor: ExecutorService;
   validator: ValidatorService;
   resolutions: ResolutionService;
   approvals: ApprovalService;
+  feedback: FeedbackService;
+  caseNotes: CaseNoteService;
+  savedViews: SavedViewService;
+  handoff: HandoffService;
+  agentControl: AgentControlService;
 }
 
 /** Default DecisionPort when the caller has no Jev adapter wired: always falls back (J1 → no tags). */
@@ -93,8 +107,10 @@ export function createCore(opts: CoreOptions): Core {
 
   // The simulated gateway delivers webhooks straight to our consumer.
   const webhookConsumer = new WebhookConsumer(db, gateway, audit, orders, paymentWrites, ledger, refunds);
+  // Every delivery goes through the event log, which records the attempt and queues retries.
+  const webhookEvents = new WebhookEventService(db, clock, audit, (event) => webhookConsumer.handle(event), gateway, opts.webhookRetryScheduler);
   if (gateway instanceof SimulatorGatewayAdapter) {
-    gateway.setWebhookSink((event) => webhookConsumer.handle(event));
+    gateway.setWebhookSink((event) => webhookEvents.receive(event));
   }
 
   const resolutionQueries = new ResolutionQueryService(db, clock, gateway);
@@ -126,6 +142,11 @@ export function createCore(opts: CoreOptions): Core {
   };
   const approvals = new ApprovalService(db, clock, audit, events, cases, resolutionQueries, continuation);
   resolutions.useApprovalItems((id) => approvals.item(id));
+  const feedback = new FeedbackService(db, clock, audit);
+  const agentControl = new AgentControlService(db, clock, audit);
+  const caseNotes = new CaseNoteService(db, clock, audit);
+  const savedViews = new SavedViewService(db, clock);
+  const handoff = new HandoffService(db, clock);
 
   return {
     db,
@@ -144,10 +165,16 @@ export function createCore(opts: CoreOptions): Core {
     refunds,
     disputes,
     webhookConsumer,
+    webhookEvents,
     resolutionQueries,
     executor,
     validator,
     resolutions,
     approvals,
+    feedback,
+    agentControl,
+    caseNotes,
+    savedViews,
+    handoff,
   };
 }

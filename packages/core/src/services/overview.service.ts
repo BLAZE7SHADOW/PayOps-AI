@@ -89,7 +89,7 @@ export class OverviewService {
       resolvedByAgent7d: agentResolved[0]?.n ?? 0,
       validatorOutcomes7d,
       exceptionsByType: [...byDay.entries()].map(([date, counts]) => ({ date, ...counts })),
-      oldestOpen: oldest.map((r) => toCaseListItem(r.row, r.assigneeName)),
+      oldestOpen: oldest.map((r) => toCaseListItem(r.row, r.assigneeName, now)),
     };
   }
 }

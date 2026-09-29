@@ -13,7 +13,15 @@ export type RiskTier = (typeof RISK_TIERS)[number];
 
 export type ProposerType = 'USER' | 'AGENT';
 
-export const POLICY_VERSION = '2026-09-28.1';
+/**
+ * Operator switch for the agent (P1 task 4, D066). NORMAL: policy decides as usual. PROPOSE_ONLY:
+ * the agent still investigates and proposes, but every fix waits for a person. PAUSED: no new
+ * investigations start, and any proposal from a run already in flight also waits for a person.
+ */
+export const AGENT_CONTROL_MODES = ['NORMAL', 'PROPOSE_ONLY', 'PAUSED'] as const;
+export type AgentControlMode = (typeof AGENT_CONTROL_MODES)[number];
+
+export const POLICY_VERSION = '2026-09-29.1';
 
 /** Money thresholds in paise (docs/03-agent-system.md §11). */
 export const POLICY_THRESHOLDS = {
@@ -24,7 +32,7 @@ export const POLICY_THRESHOLDS = {
   lowConfidence: 0.6,
 } as const;
 
-export const POLICY_RULE_IDS = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11'] as const;
+export const POLICY_RULE_IDS = ['P0', 'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11', 'P12'] as const;
 export type PolicyRuleId = (typeof POLICY_RULE_IDS)[number];
 
 export interface PolicyRuleInfo {
@@ -48,6 +56,7 @@ export const POLICY_RULES: readonly PolicyRuleInfo[] = [
   { id: 'P9', condition: 'Claims against a third party (settlement disputes)', tier: 'OPS', appliesTo: 'all' },
   { id: 'P10', condition: 'Hold or escalate only', tier: 'AUTO', appliesTo: 'all' },
   { id: 'P11', condition: 'No rule above allows automatic execution (default)', tier: 'OPS', appliesTo: 'all' },
+  { id: 'P12', condition: 'The agent is set to propose-only or paused, and the proposal does more than hold or escalate', tier: 'at least OPS', appliesTo: 'agent' },
 ];
 
 export interface PolicyReason {

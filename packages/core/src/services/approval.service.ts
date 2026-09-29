@@ -7,12 +7,16 @@ import { and, count, desc, eq, lt, ne, or, type SQL } from 'drizzle-orm';
 import {
   APPROVER_ROLE,
   ApprovalDecisionBody,
+  BulkApprovalBody,
+  bulkApproveBlockReason,
   OPS_EVENTS,
   ROOMS,
   roleAtLeast,
   type ApprovalDetail,
   type ApprovalItem,
   type ApprovalListQuery,
+  type BulkApprovalResult,
+  type BulkApprovalResultItem,
   type Page,
   type SessionUser,
 } from '@payops/shared';
@@ -146,12 +150,52 @@ export class ApprovalService {
   async get(id: string, viewer: SessionUser | null): Promise<ApprovalDetail> {
     const { a, c, r } = await this.load(id);
     const [[caseItem], resolution] = await Promise.all([this.cases.listItems([c.id]), this.queries.item(r.id)]);
-    return { ...this.toItem(a, c, r, viewer), resolution, caseItem: caseItem ?? toCaseListItem(c) };
+    return { ...this.toItem(a, c, r, viewer), resolution, caseItem: caseItem ?? toCaseListItem(c, null, this.clock.now()) };
   }
 
   async pendingCount(): Promise<number> {
     const [row] = await this.db.select({ n: count() }).from(approvals).where(eq(approvals.status, 'PENDING'));
     return row?.n ?? 0;
+  }
+
+  /**
+   * Approves several pending approvals in one call (D069). Each item is checked against
+   * `bulkApproveBlockReason` and the usual decide rules, then approved through `decide`, so the
+   * executor, validator and audit trail are the same as for a single click. One item failing
+   * does not stop the others; the result lists what happened to each.
+   */
+  async bulkApprove(body: BulkApprovalBody, viewer: SessionUser): Promise<BulkApprovalResult> {
+    const input = BulkApprovalBody.parse(body);
+    const comment = input.comment || 'Bulk approved as low risk';
+    const items: BulkApprovalResultItem[] = [];
+    for (const id of new Set(input.ids)) {
+      let displayId: string | null = null;
+      try {
+        const { a, c, r } = await this.load(id);
+        displayId = c.displayId;
+        const item = this.toItem(a, c, r, viewer);
+        const blocked =
+          item.cannotDecideReason ??
+          bulkApproveBlockReason({
+            tier: item.tier,
+            riskTier: item.riskTier,
+            moneyMovingMinor: item.moneyMovingMinor,
+            ruleIds: item.ruleIds,
+            actionTypes: item.actionTypes,
+            quarantined: c.signals.quarantined === true,
+          });
+        if (blocked) {
+          items.push({ approvalId: id, displayId, outcome: 'SKIPPED', message: blocked });
+          continue;
+        }
+        await this.decide(id, { decision: 'APPROVE', comment }, viewer);
+        items.push({ approvalId: id, displayId, outcome: 'APPROVED', message: 'Approved.' });
+      } catch (err) {
+        items.push({ approvalId: id, displayId, outcome: 'FAILED', message: err instanceof Error ? err.message : 'Failed.' });
+      }
+    }
+    const count = (o: BulkApprovalResultItem['outcome']) => items.filter((i) => i.outcome === o).length;
+    return { approved: count('APPROVED'), skipped: count('SKIPPED'), failed: count('FAILED'), items };
   }
 
   async decide(id: string, body: ApprovalDecisionBody, viewer: SessionUser): Promise<ApprovalItem> {

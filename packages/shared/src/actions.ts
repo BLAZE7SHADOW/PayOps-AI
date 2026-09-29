@@ -36,7 +36,9 @@ const minor = z.number().int().positive().max(1_00_00_000_00); // ≤ ₹1 crore
 export const ReplayWebhookParams = z.object({ eventId: id });
 export const MarkOrderPaidParams = z.object({ orderId: id, paymentId: id });
 export const PostLedgerEntryParams = z.object({ paymentId: id, amountMinor: minor });
-export const ReverseLedgerEntryParams = z.object({ journalId: id });
+// undoOf: id of the resolution this reversal undoes. Set only by the Undo flow (D070); it changes the
+// validator's expectation from "net capture equals the gateway capture" to "no capture credit remains".
+export const ReverseLedgerEntryParams = z.object({ journalId: id, undoOf: id.optional() });
 export const InitiateRefundParams = z.object({
   gwPaymentId: id,
   amountMinor: minor,
@@ -141,6 +143,11 @@ export const ACTION_META: Record<ActionType, ActionMeta> = {
     reversible: true,
   },
 };
+
+/** True when a proposal is the Undo flow's reversal (D070). Such a proposal is judged on its own postconditions. */
+export function isUndoProposal(actions: readonly CatalogAction[]): boolean {
+  return actions.some((a) => a.type === 'REVERSE_LEDGER_ENTRY' && a.params.undoOf !== undefined);
+}
 
 /** Total money moved by a proposal, in paise. */
 export function moneyMovingMinor(actions: readonly CatalogAction[]): number {

@@ -32,6 +32,8 @@ export const ID_PREFIX = {
   agentStep: 'ast',
   agentFinding: 'afd',
   evidenceRow: 'evr',
+  diagnosisFeedback: 'dfb',
+  savedView: 'viw',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIX;

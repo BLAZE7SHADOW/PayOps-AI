@@ -9,6 +9,7 @@ import {
   POLICY_THRESHOLDS,
   formatMoney,
   moneyMovingMinor,
+  type AgentControlMode,
   type CatalogAction,
   type PolicyReason,
   type PolicyRuleId,
@@ -30,6 +31,8 @@ export interface PolicyInput {
   preconditionFailures: number;
   /** The case's gateway payment is captured (people: checked by preconditions; agent: cited evidence). */
   gatewayCaptureVerified: boolean;
+  /** Operator switch for the agent (D066). Omitted means NORMAL. */
+  agentControl?: AgentControlMode;
 }
 
 /** Facts derived once from the input so every rule reads the same numbers. */
@@ -118,6 +121,13 @@ const P9: PolicyRule = (_input, f) =>
 const P10: PolicyRule = (_input, f) =>
   f.onlyControl ? fire('P10', 'AUTO', 'Only holds or escalates; no money or records change.') : null;
 
+const P12: PolicyRule = (input, f) => {
+  if (!f.isAgent || f.onlyControl) return null;
+  if (input.agentControl === undefined || input.agentControl === 'NORMAL') return null;
+  const why = input.agentControl === 'PAUSED' ? 'The agent is paused' : 'The agent is set to propose only';
+  return fire('P12', 'OPS', `${why}, so a person approves this fix.`);
+};
+
 /** Evaluation order is display order; the outcome does not depend on it (strictest tier wins). */
 export const POLICY_RULE_TABLE: ReadonlyArray<{ id: PolicyRuleId; rule: PolicyRule }> = [
   { id: 'P0', rule: P0 },
@@ -133,4 +143,5 @@ export const POLICY_RULE_TABLE: ReadonlyArray<{ id: PolicyRuleId; rule: PolicyRu
   { id: 'P10', rule: P10 },
   // P11 is the default: evaluatePolicy adds it when no other rule fired.
   { id: 'P11', rule: () => null },
+  { id: 'P12', rule: P12 },
 ];

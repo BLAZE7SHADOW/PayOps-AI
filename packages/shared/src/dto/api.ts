@@ -137,10 +137,17 @@ export const CaseListQuery = z.object({
   type: z.enum(CASE_TYPES).optional(),
   severity: z.enum(SEVERITIES).optional(),
   scope: z.enum(['open', 'closed', 'all']).default('open'),
+  /** A user id, or `unassigned`. */
+  assigneeId: z.string().min(1).max(64).optional(),
+  /** `true` keeps only open cases past their due time. */
+  overdue: z.enum(['true', 'false']).transform((v) => v === 'true').optional(),
   /** Display id (PAY-0042), case id, payment id or order id. Prefix match, case-insensitive. */
   q: z.string().trim().min(1).max(64).optional(),
 });
 export type CaseListQuery = z.infer<typeof CaseListQuery>;
+
+export const AssignCaseBody = z.object({ assigneeId: z.string().min(1).max(64).nullable() });
+export type AssignCaseBody = z.infer<typeof AssignCaseBody>;
 
 export interface CaseSignals {
   complaintType?: ComplaintType;
@@ -162,6 +169,10 @@ export interface CaseListItem {
   openedAt: string;
   updatedAt: string;
   assignee: { id: string; name: string } | null;
+  /** When the case must be acted on by (SLA by severity). Null only for cases opened before D067. */
+  dueAt: string | null;
+  /** Open and past `dueAt`, computed by the server. */
+  overdue: boolean;
   primaryRef: { paymentId?: string; orderId?: string; batchId?: string };
 }
 

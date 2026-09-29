@@ -30,7 +30,8 @@ export const reverseLedgerEntry: ActionHandler<'REVERSE_LEDGER_ENTRY'> = {
   postconditions({ params }, state, index) {
     const s = state.order;
     const journal = summarizeJournals(s?.ledger ?? []).find((j) => j.journalId === params.journalId);
-    const expected = s && isCaptured(s.primaryGw) ? (s.primaryGw?.amountMinor ?? 0) : 0;
+    // An undo removes the capture credit on purpose, so nothing should remain (D070).
+    const expected = params.undoOf ? 0 : s && isCaptured(s.primaryGw) ? (s.primaryGw?.amountMinor ?? 0) : 0;
     const actual = s ? captureCreditMinor(s) : 0;
     return [
       postcondition(index, 'ledger.reversed', {
@@ -42,7 +43,7 @@ export const reverseLedgerEntry: ActionHandler<'REVERSE_LEDGER_ENTRY'> = {
       }),
       postcondition(index, 'ledger.netCapture', {
         subject: 'ledger.captureCredit',
-        description: 'Net capture credit matches what the gateway captured',
+        description: params.undoOf ? 'No capture credit remains after the undo' : 'Net capture credit matches what the gateway captured',
         expected: formatMoney(expected),
         actual: formatMoney(actual),
         pass: actual === expected,

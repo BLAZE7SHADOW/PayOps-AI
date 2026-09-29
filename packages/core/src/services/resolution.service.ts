@@ -4,7 +4,7 @@
  * confidence and grounding inputs. Every step is a short transaction of its own, so nothing holds
  * a transaction while the gateway (and through it, our webhook consumer) runs.
  */
-import { count, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import {
   ACTION_META,
   OPS_EVENTS,
@@ -13,8 +13,10 @@ import {
   type PreconditionFailure,
   formatMoney,
   newId,
+  isUndoProposal,
   roleAtLeast,
   type ActorRef,
+  type AgentControlMode,
   type ApprovalItem,
   type CatalogAction,
   type PolicyPreview,
@@ -25,7 +27,7 @@ import {
 } from '@payops/shared';
 import type { Db } from '../db/client';
 import type { CaseRow, ResolutionRow, ValidationResultRow } from '../db/rows';
-import { approvals, cases, resolutions } from '../db/schema';
+import { approvals, cases, executions, resolutions } from '../db/schema';
 import { AppError, notFound } from '../errors';
 import type { ClockPort } from '../ports/clock';
 import type { EventPublisherPort } from '../ports/events';
@@ -38,6 +40,7 @@ import { approverHint, evaluatePolicy } from '../policy/evaluate';
 import { riskTierFromRules } from '../policy/risk';
 import { isCaptured } from '../reconciliation/facts';
 import type { ValidatorService } from '../validation/validator.service';
+import { readAgentControlMode } from './agent-control.service';
 import { auditFrom, type AuditService, type WriteContext } from './audit.service';
 import { CLOSED_CASE_STATUSES, type CaseService } from './case.service';
 import type { ReconciliationService } from './reconciliation.service';
@@ -125,6 +128,7 @@ export class ResolutionService {
     attempt: number,
     diagnosisConfidence: number,
     groundingViolations: number,
+    agentControl: AgentControlMode,
   ) {
     const preconditionFailures = checkPreconditions(actions, state);
     const decision = evaluatePolicy({
@@ -136,6 +140,7 @@ export class ResolutionService {
       groundingViolations,
       preconditionFailures: preconditionFailures.length,
       gatewayCaptureVerified: state.order ? isCaptured(state.order.primaryGw) : false,
+      agentControl,
     });
     return { decision, preconditionFailures };
   }
@@ -154,6 +159,8 @@ export class ResolutionService {
   ): Promise<{ resolution: ResolutionRow; approvalId: string | null; preconditionFailures: PreconditionFailure[] }> {
     const write = agentWriteContext(caseId, runId);
     const state = await loadCaseState(this.db, this.gateway, caseId, this.clock.now());
+    // Read the operator's agent switch once for this proposal (D066); policy rule P12 uses it.
+    const agentControl = await readAgentControlMode(this.db);
 
     const created = await this.db.transaction(async (tx) => {
       const [row] = await tx.select().from(cases).where(eq(cases.id, caseId)).for('update').limit(1);
@@ -167,6 +174,7 @@ export class ResolutionService {
         attempt,
         agentInputs.diagnosisConfidence,
         agentInputs.groundingViolations,
+        agentControl,
       );
       const status: ResolutionStatus =
         decision.tier === 'BLOCKED' ? 'BLOCKED' : decision.tier === 'AUTO' ? 'EXECUTING' : 'AWAITING_APPROVAL';
@@ -342,6 +350,51 @@ export class ResolutionService {
   }
 
   /**
+   * Undo a validated resolution that posted a capture to the ledger (D070). It is not a shortcut:
+   * the case reopens and a REVERSE_LEDGER_ENTRY proposal goes through the same policy, approval,
+   * executor and validator as any fix. Only POST_LEDGER_ENTRY has a reversing action in the catalog.
+   */
+  async undo(resolutionId: string, viewer: SessionUser): Promise<ResolutionItem> {
+    if (!roleAtLeast(viewer.role, 'OPS')) throw new AppError('FORBIDDEN', 'Only OPS users and above can undo a resolution');
+    const item = await this.queries.item(resolutionId);
+    const caseId = item.caseId;
+    const [caseRow] = await this.db.select().from(cases).where(eq(cases.id, caseId)).limit(1);
+    if (!caseRow) throw notFound('Case', caseId);
+    if (caseRow.status !== 'RESOLVED') throw new AppError('CONFLICT', `Case ${caseRow.displayId} is ${caseRow.status.toLowerCase()}; only a resolved case can be undone`);
+    if (item.status !== 'VALIDATED' || item.validation?.verdict !== 'PASS') throw new AppError('CONFLICT', 'Only a resolution that passed validation can be undone');
+    const [latest] = await this.db.select({ id: resolutions.id }).from(resolutions).where(eq(resolutions.caseId, caseId)).orderBy(desc(resolutions.attempt)).limit(1);
+    if (latest?.id !== resolutionId) throw new AppError('CONFLICT', 'Only the latest resolution on a case can be undone');
+
+    const postRows = (await this.db.select().from(executions).where(and(eq(executions.resolutionId, resolutionId), eq(executions.status, 'SUCCEEDED')))).filter(
+      (e) => e.action.type === 'POST_LEDGER_ENTRY',
+    );
+    const journalId = postRows.map((e) => e.result?.journalId).find((j): j is string => typeof j === 'string');
+    if (!journalId) throw new AppError('CONFLICT', 'Nothing to undo: this resolution did not post a ledger entry');
+
+    const write = { ...userWriteContext(viewer), caseId };
+    const previous = caseRow.resolution ?? null;
+    await this.db.transaction((tx) =>
+      this.cases.setStatus(tx, caseId, 'OPEN', `${caseRow.displayId}: reopened by ${viewer.name} to undo attempt ${item.attempt}`, write),
+    );
+    try {
+      return await this.propose(
+        caseId,
+        {
+          actions: [{ type: 'REVERSE_LEDGER_ENTRY', params: { journalId, undoOf: resolutionId } }],
+          rationale: `Undo attempt ${item.attempt}: reverse capture journal ${journalId}`,
+        },
+        viewer,
+      );
+    } catch (err) {
+      // Nothing was proposed (or it was blocked): put the case back as it was so it is not left open by a failed undo.
+      await this.db.transaction((tx) =>
+        this.cases.setStatus(tx, caseId, 'RESOLVED', `${caseRow.displayId}: undo was not possible, case restored`, write, { resolution: previous }),
+      );
+      throw err;
+    }
+  }
+
+  /**
    * Execute → validate → close. Called for AUTO proposals and after an approval.
    * PASS resolves the case (or leaves it ESCALATED when the resolution escalated); PARTIAL, FAIL
    * and execution failures send it back to OPEN with the outcome visible on the resolution.
@@ -413,7 +466,10 @@ export class ResolutionService {
     const onFailureStatus: 'OPEN' | 'ESCALATED' = opts.onFailure === 'ESCALATE' ? 'ESCALATED' : 'OPEN';
     const escalates = resolution.actions.some((a) => a.type === 'ESCALATE_TO_HUMAN');
     const summary = `${actionsSummary(resolution.actions)}. Validator ${verdict} on attempt ${resolution.attempt}`;
-    if (verdict === 'PASS') {
+    if (verdict === 'PASS' && isUndoProposal(resolution.actions)) {
+      // The reversal worked, but the case's original problem is back, so it stays open (D070).
+      await this.close(resolution, 'VALIDATED', 'OPEN', `${summary}. Undone, case reopened`, ctx, null);
+    } else if (verdict === 'PASS') {
       await this.close(resolution, 'VALIDATED', escalates ? 'ESCALATED' : 'RESOLVED', summary, ctx, escalates ? null : {
         by: resolution.proposedBy.type === 'AGENT' ? 'AGENT' : 'USER',
         summary,

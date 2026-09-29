@@ -43,6 +43,41 @@
       "when": 1790691301554,
       "tag": "0005_execution_before_state",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790700537573,
+      "tag": "0006_diagnosis_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790701020515,
+      "tag": "0007_agent_controls",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790702228782,
+      "tag": "0008_case_due_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790702838672,
+      "tag": "0009_operator_notes_saved_views",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790705573111,
+      "tag": "0010_webhook_event_log",
+      "breakpoints": true
     }
   ]
 }

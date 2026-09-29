@@ -1,9 +1,12 @@
-import { and, asc, count, desc, eq, gt, ilike, inArray, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, ilike, inArray, isNull, lt, notInArray, or, sql, type SQL } from 'drizzle-orm';
 import { escapeLike } from './like';
 import {
   CASE_DISPLAY_PREFIX,
   CASE_TYPE_LABEL,
   OPEN_CASE_STATUSES,
+  dueAtFor,
+  isOverdue,
+  roleAtLeast,
   SEVERITY_RANK,
   caseDisplayId,
   formatMoney,
@@ -15,12 +18,13 @@ import {
   type CaseListQuery,
   type CaseNote,
   type CaseStatus,
+  type CaseType,
   type Page,
 } from '@payops/shared';
 import type { Db, DbOrTx, Tx } from '../db/client';
 import type { CaseRow } from '../db/rows';
 import { cases, counters, customers, merchants, supportNotes, users, type CaseResolutionRow } from '../db/schema';
-import { notFound } from '../errors';
+import { AppError, notFound } from '../errors';
 import type { ClockPort } from '../ports/clock';
 import type { PaymentGatewayPort } from '../ports/gateway';
 import { priorityOf, type CaseCandidate } from '../reconciliation/candidates';
@@ -32,6 +36,8 @@ import { loadOrderSnapshots } from './snapshot.loader';
 
 /** Statuses that free the fingerprint (must match the partial unique index predicate). */
 export const CLOSED_CASE_STATUSES: readonly CaseStatus[] = ['RESOLVED', 'REJECTED'];
+/** Case types that may close themselves when the data reconciles (D069). */
+const AUTO_CLOSE_CASE_TYPES: readonly CaseType[] = ['PAYMENT_MISMATCH', 'REFUND_EXCEPTION', 'DUPLICATE'];
 const OPEN_FINGERPRINT_INDEX = 'cases_open_fingerprint_uq';
 
 export interface OpenOrUpdateResult {
@@ -156,6 +162,7 @@ export class CaseService {
         entityRefs: candidate.entityRefs,
         lastDetectedAt: now,
         openedAt: now,
+        dueAt: dueAtFor(candidate.severity, now),
         updatedAt: now,
       })
       .returning();
@@ -250,6 +257,102 @@ export class CaseService {
     return row;
   }
 
+  /**
+   * Closes OPEN cases whose order detection has just re-read and found fully consistent (D069).
+   * The caller passes only orders with no rule hits and no mismatched system. Only plain
+   * payment, refund and duplicate cases qualify: a case someone is investigating, approving,
+   * executing or has escalated is theirs to close, and risk and settlement cases stay open
+   * because "nothing flagged right now" does not prove a risk or a batch difference is gone.
+   * Closes as RESOLVED by SYSTEM with a stated reason; returns the closed case ids.
+   */
+  async autoCloseReconciled(cleanOrderIds: readonly string[]): Promise<string[]> {
+    if (cleanOrderIds.length === 0) return [];
+    const candidates = await this.db
+      .select()
+      .from(cases)
+      .where(
+        and(
+          eq(cases.status, 'OPEN'),
+          inArray(cases.type, [...AUTO_CLOSE_CASE_TYPES]),
+          inArray(sql<string>`(${cases.entityRefs} ->> 'orderId')`, [...cleanOrderIds]),
+        ),
+      );
+    const closed: string[] = [];
+    for (const c of candidates) {
+      const done = await this.db.transaction(async (tx) => {
+        // Re-check under the row lock: someone may have picked the case up since the query.
+        const [locked] = await tx.select({ status: cases.status }).from(cases).where(eq(cases.id, c.id)).for('update').limit(1);
+        if (locked?.status !== 'OPEN') return false;
+        await this.setStatus(
+          tx,
+          c.id,
+          'RESOLVED',
+          `${c.displayId}: closed automatically, all systems agree again`,
+          { actor: SYSTEM_ACTOR, caseId: c.id },
+          { resolution: { by: 'SYSTEM', summary: 'Reconciled without action: all systems agree again.', runId: null } },
+        );
+        return true;
+      });
+      if (done) {
+        await this.refreshStoredMatrix(c.id);
+        closed.push(c.id);
+      }
+    }
+    return closed;
+  }
+
+  /**
+   * Assigns an open case to an OPS-or-above user, or clears the assignee with `null`.
+   * Same assignee twice is a no-op with no audit row. Audited as case.assigned / case.unassigned.
+   */
+  async assign(caseId: string, assigneeId: string | null, actor: Pick<SessionUser, 'id' | 'name'>): Promise<CaseListItem> {
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(cases).where(eq(cases.id, caseId)).for('update').limit(1);
+      if (!existing) throw notFound('Case', caseId);
+      if (!OPEN_CASE_STATUSES.includes(existing.status)) {
+        throw new AppError('CONFLICT', `${existing.displayId} is ${existing.status.toLowerCase()} and cannot be reassigned`);
+      }
+      let assignee: { id: string; name: string } | null = null;
+      if (assigneeId !== null) {
+        const [u] = await tx.select().from(users).where(eq(users.id, assigneeId)).limit(1);
+        if (!u) throw notFound('User', assigneeId);
+        if (!roleAtLeast(u.role, 'OPS')) {
+          throw new AppError('VALIDATION_FAILED', `${u.name} cannot be assigned cases (needs the OPS role or above)`);
+        }
+        assignee = { id: u.id, name: u.name };
+      }
+      if ((existing.assigneeId ?? null) === assigneeId) return toCaseListItem(existing, assignee?.name ?? null, this.clock.now());
+
+      const [previous] = existing.assigneeId
+        ? await tx.select({ name: users.name }).from(users).where(eq(users.id, existing.assigneeId)).limit(1)
+        : [];
+      const [row] = await tx
+        .update(cases)
+        .set({ assigneeId, updatedAt: this.clock.now() })
+        .where(eq(cases.id, caseId))
+        .returning();
+      if (!row) throw notFound('Case', caseId);
+      await this.audit.record(
+        {
+          actorType: 'USER',
+          actorId: actor.id,
+          actorName: actor.name,
+          action: assignee ? 'case.assigned' : 'case.unassigned',
+          entityType: 'case',
+          entityId: caseId,
+          caseId,
+          summary: assignee
+            ? `Assigned ${row.displayId} to ${assignee.name}`
+            : `Unassigned ${row.displayId}${previous ? ` (was ${previous.name})` : ''}`,
+          before: { assigneeId: existing.assigneeId },
+          after: { assigneeId },
+        },
+        tx,
+      );
+      return toCaseListItem(row, assignee?.name ?? null, this.clock.now());
+    });
+  }
+
   /** Queue order: priority desc, then oldest first. Keyset pagination. */
   async list(query: CaseListQuery): Promise<Page<CaseListItem>> {
     const filters: SQL[] = [];
@@ -258,6 +361,12 @@ export class CaseService {
     if (query.status) filters.push(eq(cases.status, query.status));
     if (query.type) filters.push(eq(cases.type, query.type));
     if (query.severity) filters.push(eq(cases.severity, query.severity));
+    const now = this.clock.now();
+    if (query.assigneeId === 'unassigned') filters.push(isNull(cases.assigneeId));
+    else if (query.assigneeId) filters.push(eq(cases.assigneeId, query.assigneeId));
+    if (query.overdue) {
+      filters.push(inArray(cases.status, [...OPEN_CASE_STATUSES]), lt(cases.dueAt, now));
+    }
     if (query.q) {
       const prefix = `${escapeLike(query.q)}%`;
       filters.push(
@@ -298,7 +407,7 @@ export class CaseService {
     const page = rows.slice(0, query.limit);
     const last = page[page.length - 1]?.row;
     return {
-      items: page.map((r) => toCaseListItem(r.row, r.assigneeName)),
+      items: page.map((r) => toCaseListItem(r.row, r.assigneeName, now)),
       nextCursor:
         rows.length > query.limit && last
           ? encodeCursor({ p: last.priority, o: last.openedAt.toISOString(), i: last.id })
@@ -315,7 +424,7 @@ export class CaseService {
       .from(cases)
       .leftJoin(users, eq(users.id, cases.assigneeId))
       .where(inArray(cases.id, [...ids]));
-    const byId = new Map(rows.map((r) => [r.row.id, toCaseListItem(r.row, r.assigneeName)]));
+    const byId = new Map(rows.map((r) => [r.row.id, toCaseListItem(r.row, r.assigneeName, this.clock.now())]));
     return ids.map((id) => byId.get(id)).filter((c): c is CaseListItem => c !== undefined);
   }
 
@@ -390,7 +499,7 @@ export class CaseService {
     const merchant = merchantRows[0];
 
     return {
-      ...toCaseListItem(row, found.assigneeName),
+      ...toCaseListItem(row, found.assigneeName, this.clock.now()),
       mismatched: matrix.mismatched,
       matrix,
       entityRefs: {
@@ -425,7 +534,7 @@ function emptyResolutionView(): CaseResolutionView {
   return { actionOptions: [], resolutions: [], pendingApprovalId: null, canPropose: false, cannotProposeReason: 'Resolution is not available.' };
 }
 
-export function toCaseListItem(row: CaseRow, assigneeName: string | null = null): CaseListItem {
+export function toCaseListItem(row: CaseRow, assigneeName: string | null, now: Date): CaseListItem {
   const refs = row.entityRefs;
   const primaryRef: CaseListItem['primaryRef'] = {};
   if (refs.paymentId) primaryRef.paymentId = refs.paymentId;
@@ -449,6 +558,8 @@ export function toCaseListItem(row: CaseRow, assigneeName: string | null = null)
     openedAt: row.openedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     assignee: row.assigneeId && assigneeName ? { id: row.assigneeId, name: assigneeName } : null,
+    dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+    overdue: isOverdue(row.dueAt, OPEN_CASE_STATUSES.includes(row.status), now),
     primaryRef,
   };
 }
