@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import type { CatalogAction, PolicyTier, ScenarioKey, SessionUser } from '@payops/shared';
-import { AppError, createCore, tables, type Core } from '@payops/core';
+import { AppError, createCore, loadCaseState, projectCaseSourceRecords, tables, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
 import { generateScenario, resetDemoData } from './index';
 
@@ -236,6 +236,32 @@ describe('safety', () => {
     const actors = new Set(audit.items.map((a) => a.actor.name));
     expect(actors).toContain('Ananya Rao');
     expect(actors).toContain('Meera Iyer');
+  });
+});
+
+describe('execution before-state (D060)', () => {
+  it('records the source records as they were just before the action ran', async () => {
+    const caseId = await openCase('captured_order_failed');
+    const actions = await recommended(caseId);
+    const resolution = await core.resolutions.propose(caseId, { actions, rationale: 'Replay the missed webhook' }, ops);
+    const step = resolution.executions[0]!;
+    expect(step.status).toBe('SUCCEEDED');
+    expect(step.before).not.toBeNull();
+
+    const orderBefore = step.before!.find((r) => r.system === 'ORDER' && r.kind === 'Order');
+    expect(orderBefore?.status).toBe('FAILED');
+
+    // The same projection read now shows the fix, so before and after can be compared by record id.
+    const after = projectCaseSourceRecords(await loadCaseState(core.db, core.gateway, caseId, clock.now()));
+    const orderAfter = after.records.find((r) => r.id === orderBefore!.id);
+    expect(orderAfter?.status).not.toBe('FAILED');
+  });
+
+  it('keeps before-state null for a step that was skipped after an earlier failure', async () => {
+    const caseId = await openCase('captured_order_failed');
+    const actions = await recommended(caseId);
+    const resolution = await core.resolutions.propose(caseId, { actions, rationale: 'Replay the missed webhook' }, ops);
+    expect(resolution.executions.every((s) => s.status !== 'SKIPPED' || s.before === null)).toBe(true);
   });
 });
 

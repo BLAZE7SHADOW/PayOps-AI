@@ -10,3 +10,4 @@ export * from './actions';
 export * from './policy';
 export * from './dto/resolution';
 export * from './agents';
+export * from './fast-path';

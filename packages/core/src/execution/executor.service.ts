@@ -13,6 +13,7 @@ import {
   ROOMS,
   newId,
   type CatalogAction,
+  type ExecutionRecordFact,
   type ExecutionStep,
 } from '@payops/shared';
 import type { Db } from '../db/client';
@@ -26,6 +27,7 @@ import { idempotencyKey } from '../actions/idempotency';
 import { executeAction, preconditionsOf } from '../actions/registry';
 import { loadCaseState } from '../actions/state';
 import type { ExecDeps } from '../actions/types';
+import { projectCaseSourceRecords } from '../services/case-source-records';
 import { auditFrom, type AuditService, type WriteContext } from '../services/audit.service';
 import type { ResolutionQueryService } from '../services/resolution-query.service';
 import { toExecutionSteps } from '../services/resolution-query.service';
@@ -33,6 +35,17 @@ import { toExecutionSteps } from '../services/resolution-query.service';
 export interface ExecutionOutcome {
   ok: boolean;
   steps: ExecutionStep[];
+}
+
+/** Compact copy of the source records, kept so the case page can show before and after (D060). */
+function recordFacts(state: Parameters<typeof projectCaseSourceRecords>[0]): ExecutionRecordFact[] {
+  return projectCaseSourceRecords(state).records.map((r) => ({
+    system: r.system,
+    kind: r.kind,
+    id: r.id,
+    status: r.status,
+    amountMinor: r.amountMinor,
+  }));
 }
 
 function toError(err: unknown): ExecutionError {
@@ -102,8 +115,10 @@ export class ExecutorService {
     let summary: string;
     let result: Record<string, unknown> | null = null;
     let error: ExecutionError | null = null;
+    let before: ExecutionRecordFact[] | null = null;
     try {
       const state = await loadCaseState(this.db, this.deps.gateway, resolution.caseId, this.clock.now());
+      before = recordFacts(state);
       const failures = preconditionsOf(action, state);
       if (failures.length > 0) {
         status = 'FAILED';
@@ -133,7 +148,7 @@ export class ExecutorService {
       this.db.transaction(async (tx) => {
         const [updated] = await tx
           .update(executions)
-          .set({ status, summary, result, error, finishedAt: this.clock.now() })
+          .set({ status, summary, result, error, before, finishedAt: this.clock.now() })
           .where(and(eq(executions.id, claimed.id), eq(executions.status, 'STARTED')))
           .returning();
         await this.audit.record(

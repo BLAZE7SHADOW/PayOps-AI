@@ -9,6 +9,7 @@ import {
   RESOLUTION_STATUS,
   type ActorRef,
   type CatalogAction,
+  type ExecutionRecordFact,
   type PolicyDecision,
   type ValidationCheck,
 } from '@payops/shared';
@@ -89,6 +90,8 @@ export const executions = pgTable(
     summary: text().notNull().default(''),
     result: jsonb().$type<Record<string, unknown> | null>(),
     error: jsonb().$type<ExecutionError | null>(),
+    /** Source records just before the action ran (D060), so the case page can show before and after. */
+    before: jsonb().$type<ExecutionRecordFact[] | null>(),
     startedAt: tstz().notNull(),
     finishedAt: tstz(),
   },

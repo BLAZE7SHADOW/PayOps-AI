@@ -54,6 +54,7 @@ export function toExecutionSteps(resolution: ResolutionRow, rows: readonly Execu
         idempotencyKey: row.idempotencyKey,
         summary: row.summary,
         error: row.error ?? null,
+        before: row.before ?? null,
         startedAt: row.startedAt.toISOString(),
         finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
       });
@@ -66,6 +67,7 @@ export function toExecutionSteps(resolution: ResolutionRow, rows: readonly Execu
         idempotencyKey: idempotencyKey(resolution.id, index, action),
         summary: 'Skipped because an earlier step failed',
         error: null,
+        before: null,
         startedAt: failedAt,
         finishedAt: null,
       });

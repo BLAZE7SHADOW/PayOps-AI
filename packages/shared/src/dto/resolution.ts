@@ -72,6 +72,15 @@ export interface ActorRef {
 
 export type ExecutionStepStatus = 'STARTED' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED';
 
+/** One source record as it looked just before an action ran (D060). Compared by `id` against a fresh read. */
+export interface ExecutionRecordFact {
+  system: string;
+  kind: string;
+  id: string;
+  status: string;
+  amountMinor: number | null;
+}
+
 export interface ExecutionStep {
   index: number;
   type: ActionType;
@@ -80,6 +89,8 @@ export interface ExecutionStep {
   /** Plain-language outcome, e.g. "Gateway re-delivered payment.captured: consumer answered HTTP 409". */
   summary: string;
   error: { code: string; message: string } | null;
+  /** Source records just before this step acted. Null for skipped steps and steps run before D060. */
+  before: ExecutionRecordFact[] | null;
   startedAt: string;
   finishedAt: string | null;
 }

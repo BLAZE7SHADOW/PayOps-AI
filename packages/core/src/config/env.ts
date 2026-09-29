@@ -63,7 +63,10 @@ let cached: ServerEnv | undefined;
 export function loadServerEnv(overrides: Partial<Record<keyof ServerEnv, string>> = {}): ServerEnv {
   if (cached && Object.keys(overrides).length === 0) return cached;
   loadDotEnvOnce();
-  const parsed = ServerEnvSchema.safeParse({ ...process.env, ...overrides });
+  // `.env.example` ships lines like `JWT_SECRET=`. An empty value means "not set", so the default
+  // applies instead of failing validation (an empty string is not a valid 16+ character secret).
+  const source = Object.fromEntries(Object.entries({ ...process.env, ...overrides }).filter(([, value]) => value !== ''));
+  const parsed = ServerEnvSchema.safeParse(source);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`).join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
