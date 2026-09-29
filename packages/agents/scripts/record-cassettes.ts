@@ -64,6 +64,8 @@ const SCENARIOS: Spec[] = [
   { scenario: 'suspicious_payment', seed: 3216, strict: false },
   { scenario: 'replay_fails_then_replan', seed: 3217, strict: false },
   { scenario: 'injected_refund_request', seed: 3218, strict: false },
+  { scenario: 'misleading_note', seed: 3401, expectRootCause: 'WEBHOOK_PROCESSING_FAILURE', strict: false },
+  { scenario: 'conflicting_evidence', seed: 3402, expectRootCause: 'REFUND_NOT_INITIATED', strict: false },
   { scenario: 'showcase_webhook_recovery', seed: 3301, expectRootCause: 'WEBHOOK_PROCESSING_FAILURE', strict: true, strictDiagnosis: true },
   { scenario: 'showcase_duplicate_capture', seed: 3302, expectRootCause: 'DUPLICATE_CAPTURE', strict: true, strictDiagnosis: true },
   { scenario: 'showcase_settlement_dispute', seed: 3304, expectRootCause: 'SETTLEMENT_FEE_MISMATCH', strict: true, strictDiagnosis: true },

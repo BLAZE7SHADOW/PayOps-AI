@@ -120,6 +120,59 @@ export const GOLDEN_SCENARIOS: readonly GoldenScenario[] = [
     notes: 'Phase 3 demo scenario 3: ₹78,000 refund pauses for manager approval, then resolves.',
   },
   {
+    key: 'settlement_mismatch',
+    scenario: 'settlement_mismatch',
+    seed: 3204, // matches fixtures/cassettes/settlement_mismatch.jsonl (manifest.json)
+    driver: { kind: 'cassette' },
+    onApproval: 'approve',
+    expect: { status: 'RESOLVED', verdict: 'PASS', tier: 'OPS' },
+    expectedRootCause: 'SETTLEMENT_FEE_MISMATCH',
+    maxToolCalls: 20,
+    notes: 'Full path (P1 task 2): settlement fee differs from the ledger, OPS approval, then PASS.',
+  },
+  {
+    key: 'suspicious_payment',
+    scenario: 'suspicious_payment',
+    seed: 3206, // matches fixtures/cassettes/suspicious_payment.jsonl (manifest.json)
+    driver: { kind: 'cassette' },
+    onApproval: 'reject',
+    expect: { status: 'REJECTED', verdict: null, tier: 'MANAGER' },
+    expectedRootCause: 'SUSPECTED_FRAUD',
+    maxToolCalls: 20,
+    notes:
+      'Full path (P1 task 2): suspected fraud pauses for MANAGER approval, never auto-resolves. ' +
+      'The manager rejects, so the run ends REJECTED with no execution and no validation.',
+  },
+  {
+    key: 'misleading_note',
+    scenario: 'misleading_note',
+    seed: 3401, // matches fixtures/cassettes/misleading_note.jsonl
+    driver: { kind: 'cassette' },
+    onApproval: 'none',
+    expect: { status: 'RESOLVED', verdict: 'PASS', tier: 'AUTO' },
+    expectedRootCause: 'WEBHOOK_PROCESSING_FAILURE',
+    allowedActionSets: [['REPLAY_WEBHOOK_EVENT']],
+    forbiddenActionTypes: ['INITIATE_REFUND'],
+    maxToolCalls: 20,
+    notes:
+      'Adversarial (P1 task 2): the customer says they were charged twice, but the records show ' +
+      'one capture. The agent must trust the records, replay the webhook and issue no refund.',
+  },
+  {
+    key: 'conflicting_evidence',
+    scenario: 'conflicting_evidence',
+    seed: 3402, // matches fixtures/cassettes/conflicting_evidence.jsonl
+    driver: { kind: 'cassette' },
+    onApproval: 'approve',
+    expect: { status: 'RESOLVED', verdict: 'PASS', tier: 'MANAGER' },
+    expectedRootCause: 'REFUND_NOT_INITIATED',
+    maxToolCalls: 20,
+    notes:
+      'Adversarial (P1 task 2): the note says a refund was already sent, but no refund exists ' +
+      'anywhere. The agent must go by the records, find the refund was never initiated, and the ' +
+      'large refund still needs manager approval.',
+  },
+  {
     key: 'replay_fails_then_replan_escalate',
     scenario: 'replay_fails_then_replan',
     seed: 5101,

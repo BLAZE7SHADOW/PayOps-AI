@@ -58,6 +58,7 @@ import { DiagnosisSchema, FindingsSchema, buildFollowUpChoiceSchema } from './sc
 import type { PayOpsStateType, PayOpsUpdate } from './state';
 import {
   BASELINE_TOOLS,
+  FOLLOWUP_TOOLS,
   PAYMENT_FOLLOWUP_TOOLS,
   PAYMENT_TOOLS,
   RECONCILIATION_FOLLOWUP_TOOLS,
@@ -65,7 +66,7 @@ import {
   RISK_TOOLS,
   type ToolDef,
 } from './tools';
-import { checkRootCause } from './grounding/root-cause-checks';
+import { CODE_OVERRIDE_CONFIDENCE, reconcileDiagnosis } from './grounding/candidates';
 import { nextEvidenceId, nextFindingId } from './run-ids';
 import { checkBudgetGuard } from './budget-guard';
 
@@ -679,27 +680,48 @@ export function buildNodes(deps: AgentDeps) {
       await onEvent('resolve', 'FINDING_CREATED', { findingIds: [finding.id] });
     }
 
-    // P1 task 1 (closes D057): a fix that validates does not prove the stated cause was right.
-    // Confirm the cause against the evidence in code; if it is not supported, downgrade to
-    // UNKNOWN so the proposal becomes an escalation to a person rather than an automatic fix
-    // under a wrong label.
-    const rootCauseCheck = checkRootCause(diagnosis.rootCause, state.evidence);
-    if (!rootCauseCheck.ok) {
-      const unknown = narrativeFor('UNKNOWN', state.evidence);
+    // P1 tasks 1 and 2b (D063, D064): a fix that validates does not prove the stated cause was
+    // right, so code confirms the cause against the evidence. The same checks generate candidates:
+    // a label that is a downstream effect, or wrong with one supported cause left, is replaced by
+    // code; a wrong label with none or several supported causes becomes an escalation to a person.
+    //
+    // The settlement checks read `getFeeBreakdown`, which the model may not have asked for. Code
+    // fetches it here so a missing lookup is never mistaken for "no evidence".
+    const missingCheckTools = FOLLOWUP_TOOLS.filter((t) => t.name === 'getFeeBreakdown' && !state.evidence.some((e) => e.source === t.name));
+    const topUpEvidence = evidenceFrom(state.evidence, caseState, missingCheckTools, 'resolve');
+    const checkedEvidence = [...state.evidence, ...topUpEvidence];
+    const reconciliation = reconcileDiagnosis(diagnosis.rootCause, checkedEvidence);
+    if (reconciliation.kind === 'REPLACE') {
+      // The model disagreed with the evidence, so a person approves: confidence below the policy
+      // threshold (P8) puts the proposal in the OPS tier.
+      const replaced = narrativeFor(reconciliation.rootCause, checkedEvidence);
+      const finding: Finding = { id: nextFindingId([...state.findings, ...findings]), agent: 'payment', code: 'OTHER', statement: replaced.text, evidenceIds: replaced.citedIds, confidence: CODE_OVERRIDE_CONFIDENCE };
+      findings.push(finding);
+      diagnosis = {
+        ...diagnosis,
+        rootCause: reconciliation.rootCause,
+        narrative: `${replaced.text} Corrected by code: ${reconciliation.reason}`,
+        confidence: CODE_OVERRIDE_CONFIDENCE,
+        supportingFindingIds: [finding.id],
+      };
+    } else if (reconciliation.kind === 'ESCALATE') {
+      const unknown = narrativeFor('UNKNOWN', checkedEvidence);
+      const options = reconciliation.candidates.length > 0 ? ` Causes the evidence supports: ${reconciliation.candidates.join(', ')}.` : ' The evidence supports no known cause.';
       diagnosis = {
         ...diagnosis,
         rootCause: 'UNKNOWN',
-        narrative: `${unknown.text} The stated cause ${diagnosis.rootCause} was not confirmed: ${rootCauseCheck.reason}`,
+        narrative: `${unknown.text} ${reconciliation.reason}${options}`,
         supportingFindingIds: [],
       };
     }
+    const rootCauseCheck = reconciliation;
 
     const proposal = buildProposal(diagnosis, caseState, toAttemptHistory(state.history));
     await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal, rootCauseCheck });
     await onEvent('resolve', 'NODE_COMPLETED', {});
     // Still before `policyGate` creates a resolution row (docs/DECISIONS.md D049), so a trip
     // here also has nothing to close but the case itself.
-    return await guardBudget('resolve', state, { diagnosis, proposal, findings, budget });
+    return await guardBudget('resolve', state, { diagnosis, proposal, findings, budget, evidence: topUpEvidence });
   }
 
   async function policyGate(state: PayOpsStateType): Promise<PayOpsUpdate> {

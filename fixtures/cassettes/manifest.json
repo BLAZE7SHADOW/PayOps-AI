@@ -178,5 +178,23 @@
     "verdict": "PASS",
     "rootCause": "LEDGER_POSTING_MISSING",
     "recordedAt": "2026-09-29T11:09:37.124Z"
+  },
+  {
+    "scenario": "misleading_note",
+    "seed": 3401,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T16:14:40.971Z"
+  },
+  {
+    "scenario": "conflicting_evidence",
+    "seed": 3402,
+    "status": "RESOLVED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "REFUND_NOT_INITIATED",
+    "recordedAt": "2026-09-29T16:15:19.046Z"
   }
 ]

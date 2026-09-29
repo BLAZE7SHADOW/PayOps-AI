@@ -189,6 +189,13 @@ async function runOne(
     failures.push(`toolCalls ${result.budget.toolCalls} exceeds max ${golden.maxToolCalls}`);
   }
 
+  // When a gate failed, say what the agent actually concluded so the report explains the miss.
+  if (failures.length > 0) {
+    const narrative = result.diagnosis?.narrative;
+    if (narrative) failures.push(`agent diagnosis: ${narrative}`);
+    if (result.error) failures.push(`run error: ${result.error}`);
+  }
+
   let quarantineOk: boolean | null = null;
   if (golden.expectQuarantinedNoteIncluding) {
     const detail = await core.cases.get(caseId);

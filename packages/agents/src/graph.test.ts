@@ -66,6 +66,18 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
     expect(result.diagnosis?.narrative).toMatch(/\[ev_\d+\]/);
   });
 
+  it('propose-only mode keeps an otherwise automatic fix for a person to approve (P1 task 4, D066)', async () => {
+    await core.agentControl.set({ mode: 'PROPOSE_ONLY', reason: 'Reviewing every fix today.' }, { id: 'usr_mgr', name: 'Meera Iyer' });
+    try {
+      const { result } = await run('captured_order_failed', 'WEBHOOK_PROCESSING_FAILURE', 794);
+      expect(result.policy?.tier).toBe('OPS');
+      expect(result.policy?.reasons.map((r: { ruleId: string }) => r.ruleId)).toContain('P12');
+      expect(isInterrupted(result)).toBe(true); // waits for approval; nothing was executed
+    } finally {
+      await core.agentControl.set({ mode: 'NORMAL', reason: '' }, { id: 'usr_mgr', name: 'Meera Iyer' });
+    }
+  });
+
   it('syncs a stuck refund with cited gateway evidence', async () => {
     const { result } = await run('refund_stuck', 'REFUND_STATUS_NOT_SYNCED', 702);
     expect(result.status).toBe('RESOLVED');
@@ -73,13 +85,16 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
     expect(result.diagnosis?.narrative).toMatch(/\[ev_\d+\]/);
   });
 
-  it('catches a wrong root-cause label the fix would not have exposed (P1 task 1, D057 gap)', async () => {
+  it('corrects a wrong root-cause label from the evidence and asks a person to approve (P1 tasks 1 and 2b)', async () => {
     // The evidence shows one failed webhook and one capture. Jev claims DUPLICATE_CAPTURE, which
-    // the evidence cannot support, so the cause is downgraded and the case is not auto-fixed.
+    // the evidence cannot support. Exactly one cause is supported, so code replaces the label, but
+    // because the model disagreed with the evidence a person approves before anything runs.
     const { result } = await run('captured_order_failed', 'DUPLICATE_CAPTURE', 703);
-    expect(result.diagnosis?.rootCause).toBe('UNKNOWN');
-    expect(result.diagnosis?.narrative).toMatch(/DUPLICATE_CAPTURE was not confirmed/);
-    expect(result.proposal?.actions.map((a) => a.type)).toEqual(['ESCALATE_TO_HUMAN']);
+    expect(result.diagnosis?.rootCause).toBe('WEBHOOK_PROCESSING_FAILURE');
+    expect(result.diagnosis?.narrative).toMatch(/Corrected by code: The stated cause DUPLICATE_CAPTURE was not confirmed/);
+    expect(result.diagnosis?.confidence).toBe(0.5);
+    expect(result.policy?.tier).toBe('OPS');
+    expect(isInterrupted(result)).toBe(true);
     expect(result.status).not.toBe('RESOLVED');
   });
 

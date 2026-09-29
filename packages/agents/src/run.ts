@@ -6,7 +6,7 @@
  */
 import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 import { Command, isInterrupted } from '@langchain/langgraph';
-import { createDecisionPort, createLlmPort, type Core, type ServerEnv } from '@payops/core';
+import { AppError, createDecisionPort, createLlmPort, type Core, type ServerEnv } from '@payops/core';
 import { AGENT_BUDGET_LIMITS, newId, type ActorRef } from '@payops/shared';
 import { buildGraph } from './graph';
 import type { AgentDeps } from './deps';
@@ -82,6 +82,12 @@ async function syncRunRow(core: Core, runId: string, caseId: string, state: Part
 
 /** Called synchronously by the route: creates the row so `{runId}` can be returned in the 202. */
 export async function createAgentRun(core: Core, caseId: string, scenarioKey?: string): Promise<{ runId: string }> {
+  // D066: while an operator has the agent paused, no new investigation starts. People can still
+  // resolve cases by hand, so nothing else is blocked.
+  const control = await core.agentControl.get();
+  if (control.mode === 'PAUSED') {
+    throw new AppError('CONFLICT', `The agent is paused${control.reason ? `: ${control.reason}` : '.'} Resolve the case by hand or ask a manager to resume it.`);
+  }
   const runId = newId('run');
   await createRunRow(core, { id: runId, caseId, scenarioKey });
   return { runId };
