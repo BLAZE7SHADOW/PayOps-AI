@@ -102,6 +102,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-09-29 · Publish plain-English project guide
+- Added the eight-file `docs/guide/` reading path for product flow, architecture, agents, safety, replay/deployment, file map, and interview prep.
+- Linked the guide from `README.md` and pushed it to the public `master` branch.
+
 ### 2026-09-29 · Publish source repository
 - Created the public `BLAZE7SHADOW/PayOps-AI` GitHub repository and set the landing page's source link to its URL.
 - Checked that `.env` is ignored and absent from tracked files. Pushed the original `master` history to `origin`; the separate Satyam handoff ZIP is unaffected.

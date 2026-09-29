@@ -4,6 +4,8 @@ Payment reconciliation with a checked AI investigator. When a payment looks wron
 
 > Demo video: _add the 2-minute walkthrough link here_
 
+**New to the project?** Start with the [guide](docs/guide/README.md): product, architecture, the agents and how they are orchestrated, safety, replay, a file map, and interview prep, in plain English.
+
 ![A resolved case: the five systems now agree, the investigation steps, the root cause with cited evidence](apps/web/public/landing/case-screen.jpg)
 
 ## What this is, in plain words
