@@ -18,7 +18,7 @@ function Sub({ title, aside, children }: { title: string; aside?: ReactNode; chi
   return (
     <section className="pt-4">
       <div className="flex items-baseline justify-between gap-3 pb-1.5">
-        <h4 className="text-12 font-medium text-ink-2">{title}</h4>
+        <h3 className="text-12 font-medium text-ink-2">{title}</h3>
         {aside ? <span className="text-12 text-ink-2">{aside}</span> : null}
       </div>
       {children}

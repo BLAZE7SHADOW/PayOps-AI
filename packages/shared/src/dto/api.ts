@@ -19,7 +19,7 @@ import {
   type SystemKey,
 } from '../enums';
 import { SCENARIO_KEYS, type ScenarioKey } from '../scenarios';
-import type { CaseResolutionView } from './resolution';
+import type { CaseResolutionView, ValidationVerdict } from './resolution';
 
 // ── Envelope types ───────────────────────────────────────────────────────────
 export interface ApiErrorBody {
@@ -202,6 +202,8 @@ export interface OverviewMetrics {
   awaitingApproval: number;
   resolved7d: number;
   resolvedByAgent7d: number;
+  /** Validator verdicts recorded in the last 7 days (one row per verification, so a replanned case counts each attempt). */
+  validatorOutcomes7d: Record<ValidationVerdict, number>;
   exceptionsByType: Array<{ date: string } & Partial<Record<CaseType, number>>>;
   oldestOpen: CaseListItem[];
 }

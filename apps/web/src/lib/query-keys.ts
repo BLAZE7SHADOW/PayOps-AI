@@ -34,6 +34,8 @@ export const qk = {
     all: ['runs'] as const,
     list: (caseId: string) => ['runs', 'list', caseId] as const,
     steps: (id: string) => ['runs', 'steps', id] as const,
+    index: (status: string) => ['runs', 'index', status] as const,
+    detail: (id: string) => ['runs', 'detail', id] as const,
   },
   policy: () => ['policy'] as const,
   audit: (f: AuditFilters) => ['audit', f] as const,

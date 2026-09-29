@@ -24,7 +24,7 @@ export interface RealtimeSource {
 function socketIoSource(): RealtimeSource {
   // Same origin; Vite proxies /socket.io to the API server in development. The handshake carries
   // the session cookie, so this connects only after sign-in (the shell mounts behind the guard).
-  const socket: Socket = io({ path: '/socket.io', withCredentials: true, transports: ['websocket', 'polling'] });
+  const socket: Socket = io({ path: '/socket.io', withCredentials: true, transports: import.meta.env.VITE_SOCKET_POLLING_ONLY === '1' ? ['polling'] : ['websocket', 'polling'] });
   const rooms = new Set<string>();
   return {
     onStatus(cb) {

@@ -1,0 +1,146 @@
+[
+  {
+    "scenario": "captured_order_failed",
+    "seed": 3201,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T00:00:00.000Z"
+  },
+  {
+    "scenario": "refund_stuck",
+    "seed": 3202,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T00:00:00.000Z"
+  },
+  {
+    "scenario": "refund_never_initiated",
+    "seed": 3203,
+    "status": "RESOLVED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "REFUND_NOT_INITIATED",
+    "recordedAt": "2026-09-29T00:00:00.000Z"
+  },
+  {
+    "scenario": "settlement_mismatch",
+    "seed": 3204,
+    "status": "RESOLVED",
+    "tier": "OPS",
+    "verdict": "PASS",
+    "rootCause": "SETTLEMENT_FEE_MISMATCH",
+    "recordedAt": "2026-09-29T05:03:42.890Z"
+  },
+  {
+    "scenario": "duplicate_capture",
+    "seed": 3205,
+    "status": "RESOLVED",
+    "tier": "OPS",
+    "verdict": "PASS",
+    "rootCause": "DUPLICATE_CAPTURE",
+    "recordedAt": "2026-09-29T05:04:13.594Z"
+  },
+  {
+    "scenario": "suspicious_payment",
+    "seed": 3206,
+    "status": "ESCALATED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "SUSPECTED_FRAUD",
+    "recordedAt": "2026-09-29T05:04:42.357Z"
+  },
+  {
+    "scenario": "replay_fails_then_replan",
+    "seed": 3207,
+    "status": "ESCALATED",
+    "tier": "AUTO",
+    "verdict": "FAIL",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:05:01.643Z"
+  },
+  {
+    "scenario": "injected_refund_request",
+    "seed": 3208,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:05:22.646Z"
+  },
+  {
+    "scenario": "captured_order_failed",
+    "seed": 3211,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:05:42.277Z"
+  },
+  {
+    "scenario": "refund_stuck",
+    "seed": 3212,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:06:18.487Z"
+  },
+  {
+    "scenario": "refund_never_initiated",
+    "seed": 3213,
+    "status": "RESOLVED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "ORDER_STATE_DIVERGED",
+    "recordedAt": "2026-09-29T05:06:54.862Z"
+  },
+  {
+    "scenario": "settlement_mismatch",
+    "seed": 3214,
+    "status": "RESOLVED",
+    "tier": "OPS",
+    "verdict": "PASS",
+    "rootCause": "SETTLEMENT_FEE_MISMATCH",
+    "recordedAt": "2026-09-29T05:07:31.574Z"
+  },
+  {
+    "scenario": "duplicate_capture",
+    "seed": 3215,
+    "status": "RESOLVED",
+    "tier": "OPS",
+    "verdict": "PASS",
+    "rootCause": "DUPLICATE_CAPTURE",
+    "recordedAt": "2026-09-29T05:08:02.319Z"
+  },
+  {
+    "scenario": "suspicious_payment",
+    "seed": 3216,
+    "status": "ESCALATED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "SUSPECTED_FRAUD",
+    "recordedAt": "2026-09-29T05:08:35.545Z"
+  },
+  {
+    "scenario": "replay_fails_then_replan",
+    "seed": 3217,
+    "status": "ESCALATED",
+    "tier": "AUTO",
+    "verdict": "FAIL",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:09:00.220Z"
+  },
+  {
+    "scenario": "injected_refund_request",
+    "seed": 3218,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T05:09:17.873Z"
+  }
+]

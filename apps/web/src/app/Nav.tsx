@@ -15,6 +15,7 @@ const MAIN: Array<{ to: string; label: string; count?: CountKey; countLabel?: st
   { to: '/payments', label: 'Payments' },
   { to: '/exceptions', label: 'Exceptions', count: 'openExceptions', countLabel: 'open' },
   { to: '/approvals', label: 'Approvals', count: 'awaitingApproval', countLabel: 'pending' },
+  { to: '/runs', label: 'Agent runs' },
   { to: '/audit', label: 'Audit log' },
 ];
 

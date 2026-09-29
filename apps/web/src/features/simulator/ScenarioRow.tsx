@@ -9,13 +9,14 @@ import { useGenerateScenario } from './api';
 
 const MAX_IDS = 4;
 
-export function ScenarioRow({ scenario }: { scenario: ScenarioInfo }) {
+export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { scenario: ScenarioInfo; recordedSeeds?: number[]; replay?: boolean }) {
   const id = useId();
   const [seed, setSeed] = useState('');
   const [noise, setNoise] = useState('0');
   const gen = useGenerateScenario();
 
-  const seedNum = seed.trim() === '' ? undefined : Number(seed);
+  // In REPLAY, an empty seed means the first recorded one; a random seed would have no recording.
+  const seedNum = seed.trim() === '' ? (replay ? recordedSeeds[0] : undefined) : Number(seed);
   const noiseNum = Number(noise === '' ? 0 : noise);
   const seedValid = seedNum === undefined || (Number.isInteger(seedNum) && seedNum >= 0 && seedNum <= 2 ** 31);
   const noiseValid = Number.isInteger(noiseNum) && noiseNum >= 0 && noiseNum <= 50;
@@ -37,6 +38,16 @@ export function ScenarioRow({ scenario }: { scenario: ScenarioInfo }) {
             <span className="truncate font-mono text-12 text-ink-2">{scenario.key}</span>
           </p>
           <p className="mt-0.5 max-w-[72ch] text-13 text-ink-2">{scenario.description}</p>
+          {recordedSeeds.length > 0 ? (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-12 text-ink-2">
+              <span>Recorded seeds</span>
+              {recordedSeeds.map((rs) => (
+                <button key={rs} type="button" className="link tabular font-mono" onClick={() => setSeed(String(rs))}>
+                  {rs}
+                </button>
+              ))}
+            </p>
+          ) : null}
         </div>
         <p className="pt-1.5 text-13">
           {scenario.expectedCaseType ? CASE_TYPE_LABEL[scenario.expectedCaseType] : <span className="text-ink-2">No case</span>}
@@ -46,7 +57,7 @@ export function ScenarioRow({ scenario }: { scenario: ScenarioInfo }) {
           inputMode="numeric"
           aria-label={`Seed for ${scenario.title}`}
           aria-invalid={!seedValid || undefined}
-          placeholder="random"
+          placeholder={replay && recordedSeeds[0] !== undefined ? String(recordedSeeds[0]) : 'random'}
           value={seed}
           onChange={(e) => setSeed(e.target.value.replace(/[^\d]/g, ''))}
           className={seedValid ? 'w-full' : 'w-full border-bad'}

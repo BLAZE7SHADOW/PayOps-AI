@@ -4,21 +4,8 @@ Update at the end of every session. Newest session log entry on top.
 
 ## Current phase
 
-**Phase 5 · all 6 tasks done (D047-D050).** Phase 4 is complete (see below). Tasks 1-5 are done
-(D047, D048, D049, see prior session logs). Task 6 (failure drills: Gemini timeout, Jev timeout,
-database serialization conflict during execute; each ends in a defined state) is done (D050):
-Jev timeout needed no new production code (every J2-J6 decision point already had a documented
-fallback) beyond one new graph-level drill proving a full run still resolves when Jev is down
-throughout. Gemini timeout was a real gap -- two `llm.invokeStructured` call sites (the specialist
-node factory, `resolve`'s diagnosis call) had no `try`/`catch` at all and would have crashed the
-run uncaught; both now have a defined fallback (a specialist contributes nothing; `resolve`
-escalates with no resolution, reusing D049's `state.error` branch). Database serialization
-conflict got a new small `withSerializationRetry` helper (`packages/core/src/db/retry.ts`) wired
-around the executor's result-recording transaction, plus a new `ResolutionService.
-escalateExecutionError` for when retries are exhausted. `pnpm typecheck`, `pnpm lint`, `pnpm test`
-(425 passed, 0 skipped) all clean; `pnpm eval` (REPLAY) still 7/7. Phase 5's own "Done when" also
-names a `pnpm eval:live` report committed under `docs/evals/` -- still outstanding, needs a real
-Gemini/Jev call from Shivam's Mac (see Next task).
+**Phase 6 · in progress, re-scoped by Shivam (D051): UI polish, metrics/charts, landing page, then README.** Docker, hosted deploy and the Razorpay stretch are parked. Phase 5 is complete (D047-D050); its live eval
+report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Phase checklist
 
@@ -27,29 +14,19 @@ Gemini/Jev call from Shivam's Mac (see Next task).
 - [x] Phase 2 · Resolution spine
 - [x] Phase 3 · First agent (resume-ready milestone)
 - [x] Phase 4 · Multi-agent, context, evidence, Jev
-- [ ] Phase 5 · Replan, evals, hardening (6 of 6 tasks done; phase's own "Done when" still needs a `pnpm eval:live` report committed, see Next task)
-- [ ] Phase 6 · Polish, public demo, deploy
+- [x] Phase 5 · Replan, evals, hardening
+- [x] Phase 6 · Polish, metrics/charts, landing page, README (re-scoped, D051)
 
 ## Next task
 
-**Phase 5's six tasks are all done (D047-D050). Start a new chat session for Phase 6**
-(docs/06-phases.md), but first close Phase 5's own "Done when" gap: a real `pnpm eval:live` run
-(needs live Gemini/Jev, so it must run on Shivam's Mac, same as Phase 4's `pnpm cassette:record`
-did) with its markdown report committed under `docs/evals/`. That is bookkeeping, not new agent
-code -- everything the report measures already passes in REPLAY (`pnpm eval`, 7/7).
+**Phase 6 is complete (parts A-D, D051 scope).** Follow-ups for Shivam: set `GITHUB_URL` in
+`apps/web/src/features/landing/links.ts` once the repo is public; run Lighthouse a11y on `/`; record
+the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
+page scored 97 accessibility; fixed the live-region role, duplicate step keys and table group headers.
+Parked (D051): Dockerfile, hosted deploy, nightly reset, Razorpay adapter.
 
-Two small, known, deliberately-not-done-speculatively items carried over, neither blocking:
-- D049's narrow edge case: a budget trip during a `reinvestigate` loop's second pass can
-  attribute the close to the wrong branch of `closeEscalated` (still ends ESCALATED either way).
-  A one-line pickup (clearing `state.validation` on `reinvestigate` in `nodes.ts`'s `replan`) if
-  a future session touches the replan loop.
-- `packages/evals`'s golden set still covers 7 of 9 scenarios by design (D048) --
-  `settlement_mismatch` and `suspicious_payment` both take the full path and were deliberately
-  left out rather than guessing fixtures with no full-path integration test to model them on.
-  D050's new `graph.test.ts` failure-drill tests do now exercise `settlement_mismatch`'s full path
-  end to end (with a hand-built decision/LLM fixture, not golden-set fixtures) -- a real golden
-  scenario for it is still fair game for whichever future session extends the golden set, using
-  D050's fixture as a starting point.
+Carried over, non-blocking: D049's replan-loop attribution edge case; golden set covers 7 of 9
+scenarios (D048).
 
 ## How to run locally
 
@@ -121,10 +98,60 @@ Shivam's Mac directly, same as task 9 did.
 - Separate Refund specialist agent
 - Cross-case pattern memory (LangGraph Store), e.g. merchant webhook failure streaks
 - Dark theme with its own tokens
-- Razorpay test adapter (Phase 6 stretch)
-- Validator outcomes block on Overview (needs Phase 2 data)
+- Razorpay test adapter (Phase 6 stretch, parked by D051)
+- Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Free deploy prep, reset undo, wider replay coverage
+- Reset now snapshots the demo data first (`packages/simulator/src/undo.ts`, schema `demo_undo`); `POST /api/simulator/undo-reset` restores it, `GET /reset-status` reports it. 10 s cooldown and a lock on reset and undo. Simulator page has "Undo last reset". Test added in `apps/server/src/app.test.ts`.
+- `record-cassettes.ts` now covers all 8 fault scenarios, two seeds each, appends by default, writes `fixtures/cassettes/manifest.json`, and auto-approves any approval as a manager. **Not yet run: Shivam must run `pnpm cassette:record` on the Mac with real keys, then commit `fixtures/cassettes/`.** Manifest currently lists only the original 3.
+- Simulator page shows recorded seeds per scenario (from `GET /api/simulator/recorded`); in REPLAY an empty seed uses the first recorded one. `pnpm seed` now seeds each fault with its first recorded seed.
+- `render.yaml`, `vercel.json`, `docs/DEPLOY.md` added. Replace `YOUR-API-NAME` in `vercel.json` with the Render URL. Socket.IO is polling-only on Vercel (`VITE_SOCKET_POLLING_ONLY`).
+- Checks: `pnpm test` 441 passed; web and server typecheck clean.
+
+### 2026-09-29 · Phase 6 part C: landing page, /terms, /privacy
+- New `apps/web/src/features/landing/`: `LandingRoute` (`/`: signed-in users redirect to `/overview`, others see the page), `LandingPage` (product sentence, "Open the demo", real case screenshot, "How decisions are made" in prose, inline-SVG `Architecture` drawn with tokens, "Try it" steps using seed 3201), `TermsPage`, `PrivacyPage`, shared `PublicLayout`/`LegalPage`. Routes added outside the auth guard; the old `/` redirect inside the guard was removed.
+- Real screenshot `apps/web/public/landing/case-screen.jpg` taken from the running app (resolved seed-3201 case). Docs asked for a screen recording; a still image is used until Shivam records one.
+- No claim of a live public demo (D051). GitHub link hidden until `GITHUB_URL` is set. Privacy text: note text goes to TypeSafe for J1 screening only; Gemini gets structured case facts; REPLAY sends nothing.
+- Tests: `LandingRoute.test.tsx` (landing content and links, legal pages render). typecheck, lint clean.
+- Not done: README, Lighthouse on `/`.
+
+### 2026-09-29 · Phase 6 part B (done) + D053
+- REPLAY fix (D053): scenario-less runs read all recorded cassettes; `cassette.test.ts` (4 tests). Verified in a browser: Simulator `captured_order_failed` seed 3201 then Start investigation ends RESOLVED (FULL path, 3 LLM, 4 Jev, replayed). Agent runs list and run detail render correctly with real data.
+- A11y sweep on the Case page (DOM script, not Lighthouse): no unnamed buttons/links, no unlabeled inputs, no duplicate ids, one `main`. Fixed: heading order (Resolution attempt blocks h4 to h3), and meaningful text using `--ink-3` (matrix and signals dash placeholders, `[ev_id]` citations) now `--ink-2` per docs/05. Node column widened on run detail.
+- Checks: `pnpm test` 438 passed; web typecheck clean.
+- Not done: real Lighthouse score (Shivam, DevTools), landing page, README.
+
+### 2026-09-29 · Phase 6 part B (started): browser pass, one real finding
+- Static audit of `apps/web` against docs/05 §8/§9/§12: clean (no em dashes, raw hex, banned words, gradients, hover transforms; loading states present; focus styles present).
+- Browser pass (manager account, local dev): Overview (validator empty state), Agent runs list, AI tag and Case page all render. Fixed: Agent runs table clipped the Started column (narrower Run/Case/Status columns); the Case findings panel said "Collecting evidence" after a run had already ended, now says the investigation ended without a diagnosis.
+- **Resolved (D053):** with `AI_MODE=REPLAY`, an investigation started from the Case page on a seeded case escalates. Every Jev/LLM call is a REPLAY miss, because the web app sends no `scenarioKey` (server uses `'default'`, D032) and cassettes are per scenario and seed (D034). Fixed by making a scenario-less REPLAY run read all scenario cassettes (D053). Verified: Simulator `captured_order_failed` seed 3201 then Start investigation ends RESOLVED (FULL path). Demo must use seeds 3201/3202/3203; seeded cases still escalate in REPLAY by design.
+- Not done: Lighthouse a11y on the Case page, keyboard pass, landing page, README.
+
+### 2026-09-29 · Phase 6 part A: Agent runs list + detail, AI mode tag (D052)
+- Found `AgentRunItem.budget` already holds LLM/Jev/tool counts, tokens and cost, so no new
+  aggregation or shared DTO was needed. `GET /api/runs` already worked without `caseId`.
+- New `apps/web/src/features/runs/`: `run-metrics.ts` (+ 9 tests: duration, formatting, per-node
+  latency from NODE_STARTED/NODE_COMPLETED timestamps, gap since previous step, context tokens,
+  step names), `RunsPage` (`/runs`, status filter, sortable, keyboard row nav, skeleton + empty),
+  `RunDetailPage` (`/runs/:runId`: figures, time-per-node bars, step table with expandable JSON).
+  "Agent runs" added to the nav and router.
+- `GET /api/health` now also returns `aiMode`; top bar shows `AI: REPLAY|LIVE|RECORD` (docs/05 §10).
+  Mock server answers `/api/runs` with an empty page and health with `aiMode`.
+- Checks: `pnpm typecheck`, `pnpm lint` clean; `pnpm test` 434 passed. Not yet looked at in a browser.
+- Not done: UI polish, landing page, README.
+
+### 2026-09-29 · Phase 6 task 1 (part 1): Overview validator outcomes
+- `OverviewMetrics.validatorOutcomes7d` (`Record<PASS|PARTIAL|FAIL, number>`, zero-filled) added to
+  `packages/shared`, computed in `OverviewService.metrics` from `validation_results` in the last 7
+  days (one row per verification, so each replan attempt counts). New `ValidatorOutcomes` block on
+  the Overview page (direct labels, counts, redundant bars, skeleton and empty states); the
+  oldest-open table moved to a full-width row. Web mock server updated.
+- Test first: `app.test.ts` overview test asserts all three verdict keys are present and >= 0.
+- Checks: `pnpm typecheck`, `pnpm lint` clean; `app.test.ts` + core service tests pass (29).
+  Full `pnpm test` and a browser look at the Overview page not yet run this session.
+- Not done: Agent runs list/detail (rest of task 1), tasks 2 to 6.
 
 ### 2026-09-29 · Phase 5 task 6 (last task in the phase): failure drills -- Gemini timeout, Jev timeout, DB serialization conflict, see D050
 - Confirmed Jev timeout needed no new production code: every Jev decision point (J2/J3/J4/J5/J6)

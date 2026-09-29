@@ -10,7 +10,7 @@ import { Tag } from '../ui/Tag';
 export function Notices() {
   const notices = useRealtimeStore((s) => s.notices);
   return (
-    <div aria-live="polite" aria-label="Updates" className="fixed right-6 bottom-6 z-30 flex w-[440px] max-w-[calc(100vw-48px)] flex-col gap-2">
+    <div role="status" aria-live="polite" aria-label="Updates" className="fixed right-6 bottom-6 z-30 flex w-[440px] max-w-[calc(100vw-48px)] flex-col gap-2">
       {notices.map((n) => (
         <NoticeRow key={n.key} notice={n} />
       ))}

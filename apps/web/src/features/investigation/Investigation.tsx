@@ -57,7 +57,7 @@ export function Investigation({ c }: { c: CaseDetail }) {
             {runs.isPending || (run && steps.isPending) ? <InvestigationSkeleton /> : steps.isError ? <ErrorState title="Could not load steps." error={steps.error} onRetry={() => void steps.refetch()} /> : run ? <Trace steps={steps.data?.items ?? []} run={run} /> : <EmptyState message="Start an investigation to collect evidence and propose a resolution." />}
           </Section>
           <Section title="Findings & resolution" titleId="findings-title" className="border-t border-rule xl:border-t-0 xl:border-l" bodyClassName="space-y-4 p-4 text-13">
-            {runs.isPending ? <InvestigationSkeleton /> : !run?.diagnosis ? <p className="text-ink-2">{run ? 'Collecting evidence. Findings appear when the investigation completes.' : 'No findings yet.'}</p> : <>
+            {runs.isPending ? <InvestigationSkeleton /> : !run?.diagnosis ? <p className="text-ink-2">{run ? (activeRun(run.status) ? 'Collecting evidence. Findings appear when the investigation completes.' : 'The investigation ended without a diagnosis. Review the trace or resolve this case manually.') : 'No findings yet.'}</p> : <>
               <div><h3 className="mb-1 font-semibold">Root cause</h3><p>{narrative(run.diagnosis.narrative)}</p></div>
               {run.findings.map((finding) => <FindingLine key={finding.id} finding={finding} violation={run.grounding?.violations.find((v) => v.findingId === finding.id) ?? null} citation={citation} />)}
               {run.proposal ? <div className="space-y-2 border-t border-rule pt-3">
@@ -125,11 +125,11 @@ export function Trace({ steps, run }: { steps: AgentStepItem[]; run: AgentRunIte
 }
 
 function StepList({ steps, run }: { steps: AgentStepItem[]; run: AgentRunItem }) {
-  return <ol className="max-h-[640px] overflow-y-auto">{steps.map((step) => {
+  return <ol className="max-h-[640px] overflow-y-auto">{steps.map((step, index) => {
     const finished = steps.some((s) => s.seq > step.seq && s.node === step.node && s.kind === 'NODE_COMPLETED');
     const status = step.kind === 'RUN_FAILED' ? 'FAILED' : step.kind === 'NODE_STARTED' && !finished
       ? run.status === 'AWAITING_APPROVAL' && step.node === 'awaitApproval' ? 'WAITING' : activeRun(run.status) ? 'RUNNING' : 'STOPPED' : 'DONE';
-    return <li key={step.seq} className="border-b border-rule px-3 py-2 text-12 last:border-0">
+    return <li key={`${step.seq}-${index}`} className="border-b border-rule px-3 py-2 text-12 last:border-0">
       <div className="flex flex-wrap items-center gap-2"><span className="font-mono text-ink-2">{String(step.seq).padStart(2, '0')}</span><span className="font-mono">{step.node}</span><Tag tone={status === 'FAILED' ? 'bad' : 'neutral'}>{status}</Tag></div>
       <p className="mt-1 text-ink-2">{statusLabel(step.kind)} · <time dateTime={step.at} className="font-mono">{formatDateTime(step.at)}</time></p>
       {Array.isArray(step.payload.tools) ? <p className="mt-1 font-mono break-words">{step.payload.tools.join(', ')}</p> : null}
@@ -199,7 +199,7 @@ export function FindingLine({ finding, violation, citation }: {
     <p className={violation ? 'text-ink-2 line-through' : undefined}>
       {finding.statement}{' '}
       {finding.evidenceIds.map((id) => violation
-        ? <span key={id} className="mr-1 font-mono text-12 text-ink-3">[{id}]</span>
+        ? <span key={id} className="mr-1 font-mono text-12 text-ink-2">[{id}]</span>
         : <Fragment key={id}>{citation(id)}{' '}</Fragment>)}
     </p>
     {violation ? <p className="text-12 text-ink-2">Dropped: {violation.reason}</p> : null}

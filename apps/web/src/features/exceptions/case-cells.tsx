@@ -25,7 +25,7 @@ export function Age({ iso }: { iso: string }) {
 
 export function Signals({ signals }: { signals: CaseListItem['signals'] }) {
   const { complaintType, urgent, quarantined } = signals;
-  if (!complaintType && !urgent && !quarantined) return <span className="font-mono text-ink-3">–</span>;
+  if (!complaintType && !urgent && !quarantined) return <span className="font-mono text-ink-2">–</span>;
   return (
     // Tags that do not fit wrap onto a hidden second line instead of being clipped mid-word.
     <span className="flex h-5 flex-wrap gap-1 overflow-hidden" title={[quarantined && 'QUARANTINED TEXT', urgent && 'URGENT', complaintType && statusLabel(complaintType)].filter(Boolean).join(' · ')}>

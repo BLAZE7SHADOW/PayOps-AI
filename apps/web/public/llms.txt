@@ -1,0 +1,9 @@
+# PayOps AI
+
+> Payment reconciliation with a checked AI investigator. It compares what the gateway, order service, ledger, webhooks and settlement each say about a payment, opens a case when they disagree, cites evidence, proposes a fix and verifies the result. A person approves anything risky.
+
+This is a portfolio project running on simulated data.
+
+- [Home](/): product overview and walkthrough
+- [Terms](/terms)
+- [Privacy](/privacy)

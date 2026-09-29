@@ -104,7 +104,7 @@ function Cell({ cell, row, compact, last }: { cell: MatrixCell; row: RowKey; com
   );
 }
 
-const Dash = () => <span className="font-mono text-ink-3">–</span>;
+const Dash = () => <span className="font-mono text-ink-2">–</span>;
 
 function CellValue({ cell, row }: { cell: MatrixCell; row: RowKey }) {
   switch (row) {

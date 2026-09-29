@@ -10,6 +10,7 @@ import { caseColumns } from '../exceptions/case-cells';
 import { useOverview } from './api';
 import { ExceptionsChart, ExceptionsChartSkeleton } from './ExceptionsChart';
 import { Figures } from './Figures';
+import { ValidatorOutcomes } from './ValidatorOutcomes';
 
 const oldestColumns = [
   caseColumns.case,
@@ -47,7 +48,15 @@ export function OverviewPage() {
                 {q.data ? <ExceptionsChart data={q.data.exceptionsByType} /> : <ExceptionsChartSkeleton />}
               </div>
             </section>
-            <section aria-labelledby="oldest-title" className="col-span-5 min-w-0">
+            <section aria-labelledby="validator-title" className="col-span-5 min-w-0">
+              <div className="flex h-10 items-center">
+                <h2 id="validator-title" className="text-13 font-semibold">
+                  Validator outcomes, last 7 days
+                </h2>
+              </div>
+              <ValidatorOutcomes data={q.data?.validatorOutcomes7d} />
+            </section>
+            <section aria-labelledby="oldest-title" className="col-span-12 min-w-0">
               <div className="flex h-10 items-center justify-between">
                 <h2 id="oldest-title" className="text-13 font-semibold">
                   Oldest open cases

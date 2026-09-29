@@ -5,20 +5,24 @@ import { Button } from '../../ui/Button';
 import { Dialog, DialogClose } from '../../ui/Dialog';
 import { ErrorState } from '../../ui/ErrorState';
 import { PageHeader } from '../../ui/PageHeader';
-import { useResetDemo } from './api';
+import { formatTime } from '../../lib/format';
+import { useAiMode } from '../../lib/use-ai-mode';
+import { useRecordedRuns, useResetDemo, useResetStatus, useUndoReset } from './api';
 import { ScenarioRow } from './ScenarioRow';
 
 export function SimulatorPage() {
   useDocumentTitle('Simulator');
   // Bumping the epoch remounts rows so stale results disappear after a reset.
   const [epoch, setEpoch] = useState(0);
+  const aiMode = useAiMode();
+  const recorded = useRecordedRuns().data ?? [];
 
   return (
     <>
       <PageHeader
         title="Simulator"
         meta="Generate payments with a known fault. Detection runs right after, and any case it opens appears in Exceptions."
-        actions={<ResetButton onDone={() => setEpoch((e) => e + 1)} />}
+        actions={<ResetActions onDone={() => setEpoch((e) => e + 1)} />}
       />
       <div className="border border-rule bg-surface" role="list" aria-label="Scenarios">
         <div
@@ -32,13 +36,37 @@ export function SimulatorPage() {
           <span />
         </div>
         {SCENARIOS.map((s) => (
-          <ScenarioRow key={`${s.key}:${epoch}`} scenario={s} />
+          <ScenarioRow key={`${s.key}:${epoch}`} scenario={s} recordedSeeds={recorded.filter((r) => r.scenario === s.key).map((r) => r.seed)} replay={aiMode === 'REPLAY'} />
         ))}
       </div>
       <p className="mt-3 text-12 text-ink-2">
+        {aiMode === 'REPLAY'
+          ? 'This demo replays recorded AI responses. Pick a recorded seed under a scenario (or leave the seed empty to use the first one); other seeds still create the case, but the investigation escalates because no response was recorded for it. '
+          : ''}
         Seed makes a run reproducible; leave it empty for a random one. Noise adds up to 50 healthy payments around the scenario.
       </p>
     </>
+  );
+}
+
+function ResetActions({ onDone }: { onDone: () => void }) {
+  const status = useResetStatus();
+  const undo = useUndoReset();
+  return (
+    <div className="flex items-center gap-3">
+      {undo.isError ? <span role="alert" className="text-12 text-bad">{undo.error instanceof Error ? undo.error.message : 'Undo failed.'}</span> : null}
+      {status.data?.canUndo ? (
+        <Button
+          variant="secondary"
+          disabled={undo.isPending}
+          title={status.data.snapshotAt ? `Restores the data as it was at ${formatTime(status.data.snapshotAt)}` : undefined}
+          onClick={() => undo.mutate(undefined, { onSuccess: onDone })}
+        >
+          {undo.isPending ? 'Restoring' : 'Undo last reset'}
+        </Button>
+      ) : null}
+      <ResetButton onDone={onDone} />
+    </div>
   );
 }
 
@@ -57,7 +85,7 @@ function ResetButton({ onDone }: { onDone: () => void }) {
           if (!o) reset.reset();
         }}
         title="Reset demo data"
-        description="This removes every generated payment, order, case and audit event, then restores the baseline data. It cannot be undone."
+        description="This removes every generated payment, order, case and audit event, then restores the baseline data. This demo is shared, so anyone can reset it. Use Undo last reset to bring the previous data back."
         footer={
           <>
             <DialogClose asChild>

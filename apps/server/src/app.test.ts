@@ -68,6 +68,19 @@ describe('simulator API', () => {
     expect(list.items.map((c) => c.id)).toEqual([result.casesOpened[0]?.id]);
   });
 
+  it('undoes a reset by restoring the snapshot', async () => {
+    const before = (await ops.get('/api/cases').expect(200)).body as Page<CaseListItem>;
+    expect(before.items.length).toBeGreaterThan(0);
+    await ops.post('/api/simulator/reset').send({}).expect(200);
+    const wiped = (await ops.get('/api/cases').expect(200)).body as Page<CaseListItem>;
+    expect(wiped.items).toHaveLength(0);
+    expect((await ops.get('/api/simulator/reset-status').expect(200)).body.canUndo).toBe(true);
+    await ops.post('/api/simulator/undo-reset').send({}).expect(200);
+    const after = (await ops.get('/api/cases').expect(200)).body as Page<CaseListItem>;
+    expect(after.items.map((c) => c.id)).toEqual(before.items.map((c) => c.id));
+    expect((await ops.get('/api/simulator/reset-status').expect(200)).body.canUndo).toBe(false);
+  });
+
   it('rejects the same seed twice with 409', async () => {
     const res = await ops.post('/api/simulator/scenarios').send({ scenario: 'captured_order_failed', seed: 1 }).expect(409);
     expect(res.body.error.code).toBe('CONFLICT');
@@ -196,6 +209,9 @@ describe('overview and audit API', () => {
     expect(body.exceptionsByType[13]).toEqual({ date: '2026-09-28', PAYMENT_MISMATCH: 1, REFUND_EXCEPTION: 1, SETTLEMENT_MISMATCH: 1 });
     expect(body.oldestOpen).toHaveLength(3);
     expect(body.resolvedByAgent7d).toBe(0);
+    // Validator outcomes always report all three verdicts, zero-filled, so the chart never has a missing bar.
+    expect(Object.keys(body.validatorOutcomes7d).sort()).toEqual(['FAIL', 'PARTIAL', 'PASS']);
+    for (const n of Object.values(body.validatorOutcomes7d)) expect(n).toBeGreaterThanOrEqual(0);
     expect(body.capturedTodayCount).toBeGreaterThanOrEqual(0);
   });
 

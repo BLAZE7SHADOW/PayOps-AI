@@ -27,9 +27,9 @@ describe('VerificationTable', () => {
     render(<VerificationTable validation={failed} actions={[{ type: 'MARK_ORDER_PAID', params: { orderId: 'ord_1abc', paymentId: 'pay_1abc' } }]} />);
     const bodies = screen.getByRole('table', { name: 'Verification checks' }).querySelectorAll('tbody');
     expect(bodies).toHaveLength(2);
-    expect(within(bodies[0] as HTMLElement).getByRole('columnheader', { name: 'Action postconditions' })).toBeInTheDocument();
+    expect(within(bodies[0] as HTMLElement).getByRole('cell', { name: 'Action postconditions' })).toBeInTheDocument();
     expect(within(bodies[0] as HTMLElement).getAllByText(/^subject\.post/)).toHaveLength(2);
-    expect(within(bodies[1] as HTMLElement).getByRole('columnheader', { name: 'Case invariants' })).toBeInTheDocument();
+    expect(within(bodies[1] as HTMLElement).getByRole('cell', { name: 'Case invariants' })).toBeInTheDocument();
     expect(within(bodies[1] as HTMLElement).getAllByText(/^subject\.inv/)).toHaveLength(3);
   });
 

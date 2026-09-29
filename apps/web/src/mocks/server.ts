@@ -116,6 +116,7 @@ function overview(): OverviewMetrics {
     awaitingApproval: db.approvals.filter((a) => a.status === 'PENDING').length,
     resolved7d: db.cases.filter((c) => c.status === 'RESOLVED').length + 23,
     resolvedByAgent7d: 0,
+    validatorOutcomes7d: { PASS: 14, PARTIAL: 2, FAIL: 3 },
     exceptionsByType: exceptionsByType(db),
     oldestOpen: [...open].sort((a, b) => a.openedAt.localeCompare(b.openedAt)).slice(0, 5).map(toCaseItem),
   };
@@ -176,7 +177,8 @@ async function handle(method: string, url: URL, body: unknown, isJson: boolean):
   const path = url.pathname;
   let m: RegExpExecArray | null;
 
-  if (method === 'GET' && path === '/api/health') return json({ ok: true });
+  if (method === 'GET' && path === '/api/health') return json({ status: 'ok', aiMode: 'REPLAY' });
+  if (method === 'GET' && (path === '/api/runs' || /^\/api\/runs\/[^/]+\/steps$/.test(path))) return json({ items: [], nextCursor: null, total: 0 });
 
   // ── Auth ──
   if (method === 'GET' && path === '/api/auth/demo-accounts') return json(demoAccounts());

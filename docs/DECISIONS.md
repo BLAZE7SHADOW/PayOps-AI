@@ -864,3 +864,49 @@ new drills above are for).
 report committed under `docs/evals/`, which needs a real Gemini/Jev call and so cannot run from
 this cloud session (docs/PROGRESS.md's Blockers section, D045) -- still outstanding, needs
 Shivam's Mac, same as Phase 4's cassette recording did.
+
+
+## D051 · Phase 6 re-scope: no Docker or hosted deploy yet, no Razorpay stretch
+
+**Decision.** Phase 6 now covers UI polish, metrics/charts (Overview plus Agent runs), the landing page
+with `/terms` and `/privacy`, and the README. The Dockerfile, hosted deploy with nightly reset, and
+`RazorpayTestAdapter` are parked in `PROGRESS.md > Later`.
+
+**Why.** Shivam wants the cheapest possible hosting and does not want to pay for a container host.
+The product runs fine locally (`pnpm db:local`, `pnpm seed`, `pnpm dev`), so the README can document
+local run and a recorded demo instead. Deploy stays possible later: the server is one Node process
+(API, jobs, sockets), so any host that runs a long-lived Node service works, with or without Docker.
+
+**Consequences.** Phase 6 "Done when" ("a stranger can open the link") is deferred until a deploy
+exists; the Lighthouse a11y goal (>= 95 on the Case page) still applies and is checked locally.
+Landing page copy and README must not claim a public live demo link.
+
+
+## D052 · Agent runs screens: reuse the run budget, and show AI mode globally instead of per run
+
+**Decision.** The Agent runs table reads counts, tokens and cost from `agent_runs.budget`, and
+duration from `createdAt`/`finishedAt`. Per-node time is computed in the browser from step timestamps
+(`features/runs/run-metrics.ts`, unit-tested). docs/05 §11 lists a per-run "Mode" column; runs do not
+store their AI mode, so mode is shown once as the `AI: <mode>` tag in the top bar (from `/api/health`).
+
+**Why.** The budget is already the single code-maintained record of usage, so a second aggregation
+would only risk disagreeing with it. A per-run mode column would need a schema migration for a value
+that is the same for every run on a given server.
+
+**Consequence.** If runs from different modes ever need to share a database, add `aiMode` to `agent_runs`.
+
+
+## D053 · REPLAY without a scenario reads every recorded scenario
+
+**Decision.** `replayCassettePaths` (`packages/core/src/adapters/cassette.ts`): for the key `'default'`
+(what a run gets when the web app sends no `scenarioKey`, D032) and no `default.jsonl`, REPLAY reads all
+`fixtures/cassettes/*.jsonl`. Named scenarios (evals, tests) still read only their own file.
+
+**Why.** "Start investigation" in the UI sent no scenario, so every model call was a REPLAY miss and the
+run escalated. Entries are found by content hash (node, call index, normalized prompt), so merging files
+cannot make one scenario answer another's prompt. No schema change and no generated file to keep in sync.
+
+**Consequence.** In REPLAY, an investigation succeeds only for data identical to a recording: generate
+`captured_order_failed` (seed 3201), `refund_stuck` (3202) or `refund_never_initiated` (3203) in the
+Simulator. Seeded cases and other seeds still miss and escalate, by design (D034). Verified in a browser:
+seed 3201 ends RESOLVED on the FULL path with 3 LLM and 4 Jev calls, all replayed.

@@ -18,6 +18,8 @@ import { SCENARIO_WRITERS } from './scenarios';
 import { WORLD, seedWorld } from './world';
 
 export { WORLD, seedWorld } from './world';
+export { snapshotDemoData, undoLastReset, undoStatus } from './undo';
+export type { UndoStatus } from './undo';
 export type { World, WorldCustomer, WorldMerchant, MerchantKey } from './world';
 
 const SIMULATOR_ACTOR = { actorType: 'SYSTEM', actorId: 'simulator', actorName: 'Simulator' } as const;

@@ -28,7 +28,7 @@ export function buildRouter(deps: RouterDeps): Router {
 
   router.get('/health', async (_req, res) => {
     const db = await pingDatabase(deps.database.pool);
-    res.status(db ? 200 : 503).json({ status: db ? 'ok' : 'degraded', checks: { database: db ? 'ok' : 'down' } });
+    res.status(db ? 200 : 503).json({ status: db ? 'ok' : 'degraded', checks: { database: db ? 'ok' : 'down' }, aiMode: deps.env.AI_MODE });
   });
 
   router.use('/auth', authRoutes(deps.core, deps.env, deps.session));

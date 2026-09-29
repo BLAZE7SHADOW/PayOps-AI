@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /overview
+Disallow: /payments
+Disallow: /exceptions
+Disallow: /cases/
+Disallow: /approvals
+Disallow: /simulator
+Disallow: /policy
+Disallow: /runs
+Disallow: /audit

@@ -48,9 +48,9 @@ export function VerificationTable({ validation, actions }: { validation: Validat
           return (
             <tbody key={g.kind}>
               <tr>
-                <th scope="colgroup" colSpan={4} className="h-7 border-b border-rule bg-paper px-3 text-left text-12 font-medium text-ink-2">
+                <td colSpan={4} className="h-7 border-b border-rule bg-paper px-3 text-left text-12 font-medium text-ink-2">
                   {g.title}
-                </th>
+                </td>
               </tr>
               {rows.map((c) => (
                 <CheckRow key={c.id} check={c} action={c.actionIndex !== null ? actions?.[c.actionIndex] : undefined} />

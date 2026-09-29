@@ -5,9 +5,10 @@ import {
   OPEN_CASE_STATUSES,
   type CaseType,
   type OverviewMetrics,
+  type ValidationVerdict,
 } from '@payops/shared';
 import type { Db } from '../db/client';
-import { approvals, cases, users } from '../db/schema';
+import { approvals, cases, users, validationResults } from '../db/schema';
 import type { ClockPort } from '../ports/clock';
 import type { PaymentGatewayPort } from '../ports/gateway';
 import { toCaseListItem } from './case.service';
@@ -32,7 +33,7 @@ export class OverviewService {
     const trendStart = new Date(today.getTime() - (TREND_DAYS - 1) * DAY_MS);
     const day = sql<string>`to_char(${cases.openedAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
-    const [captured, openRows, resolvedRows, trendRows, oldest, pending, agentResolved] = await Promise.all([
+    const [captured, openRows, resolvedRows, trendRows, oldest, pending, agentResolved, verdictRows] = await Promise.all([
       this.gateway.summarizeCaptures({ from: today, to: new Date(today.getTime() + DAY_MS) }),
       this.db
         .select({ status: cases.status, n: count() })
@@ -60,7 +61,15 @@ export class OverviewService {
         eq(cases.status, 'RESOLVED'), gte(cases.resolvedAt, new Date(now.getTime() - 7 * DAY_MS)),
         sql`${cases.resolution}->>'by' = 'AGENT'`,
       )),
+      this.db
+        .select({ verdict: validationResults.verdict, n: count() })
+        .from(validationResults)
+        .where(gte(validationResults.at, new Date(now.getTime() - 7 * DAY_MS)))
+        .groupBy(validationResults.verdict),
     ]);
+
+    const validatorOutcomes7d: Record<ValidationVerdict, number> = { PASS: 0, PARTIAL: 0, FAIL: 0 };
+    for (const r of verdictRows) validatorOutcomes7d[r.verdict] = r.n;
 
     const byDay = new Map<string, Partial<Record<CaseType, number>>>();
     for (let i = 0; i < TREND_DAYS; i++) {
@@ -78,6 +87,7 @@ export class OverviewService {
       awaitingApproval: pending[0]?.n ?? 0,
       resolved7d: resolvedRows[0]?.n ?? 0,
       resolvedByAgent7d: agentResolved[0]?.n ?? 0,
+      validatorOutcomes7d,
       exceptionsByType: [...byDay.entries()].map(([date, counts]) => ({ date, ...counts })),
       oldestOpen: oldest.map((r) => toCaseListItem(r.row, r.assigneeName)),
     };

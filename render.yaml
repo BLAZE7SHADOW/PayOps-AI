@@ -1,0 +1,26 @@
+# Render blueprint for the free API host. The database is Supabase (free) and the web app is on Vercel.
+# Free web services sleep after 15 minutes idle, so the first request takes about 50 seconds to wake.
+services:
+  - type: web
+    name: payops-api
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
+    # Seeding is idempotent: it migrates, creates demo users, and adds any missing fault scenarios.
+    startCommand: pnpm --filter @payops/server seed && pnpm --filter @payops/server exec tsx src/main.ts
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: AI_MODE
+        value: REPLAY          # recorded responses only: no Gemini or Jev keys needed
+      - key: DEMO_MODE
+        value: true
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false            # Supabase: Project Settings > Database > Session pooler (port 5432)
+      - key: WEB_ORIGIN
+        sync: false            # your Vercel URL, e.g. https://payops-ai.vercel.app
