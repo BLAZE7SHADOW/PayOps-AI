@@ -3,6 +3,7 @@ import { useRealtime } from '../lib/socket';
 import { MobileNav, Nav } from './Nav';
 import { TopBar } from './TopBar';
 import { Notices } from './Notices';
+import { AgentControlBanner } from '../features/agent-control/AgentControl';
 
 /** Desktop rail and a compact mobile nav; main content owns scrolling. */
 export function AppShell() {
@@ -20,6 +21,7 @@ export function AppShell() {
         <MobileNav />
         <TopBar />
         <main id="main" tabIndex={-1} className="relative min-h-0 flex-1 overflow-auto px-4 pt-6 pb-10 outline-none min-[1360px]:px-8 md:px-6">
+          <AgentControlBanner />
           <Outlet />
         </main>
       </div>

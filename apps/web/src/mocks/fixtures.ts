@@ -3,6 +3,7 @@
  * Loaded through a dynamic import behind import.meta.env.DEV, so production builds never include it.
  */
 import {
+  dueAtFor,
   CASE_DISPLAY_PREFIX,
   CASE_TYPES,
   HOUR_MS,
@@ -437,6 +438,8 @@ export function caseFromPayment(db: MockDb, p: PaymentDetail, spec: CaseSpec): C
     openedAt,
     updatedAt: openedAt,
     assignee: null,
+    dueAt: dueAtFor(spec.severity, new Date(openedAt)).toISOString(),
+    overdue: false,
     primaryRef: { paymentId: p.paymentId, orderId: p.orderId },
     matrix: p.matrix,
     entityRefs: {
@@ -477,6 +480,8 @@ function settlementCase(db: MockDb): CaseDetail {
     openedAt,
     updatedAt: openedAt,
     assignee: null,
+    dueAt: dueAtFor('MEDIUM', new Date(openedAt)).toISOString(),
+    overdue: false,
     primaryRef: { batchId },
     matrix: matrixOf({
       GATEWAY: { status: 'CAPTURED', amountMinor: 11_842_500, at: ago(30 * HOUR_MS), detail: '46 captures in window' },

@@ -3,11 +3,15 @@ import { Link } from 'react-router';
 import type { CaseDetail } from '@payops/shared';
 import { can, VIEW_ONLY_NOTE } from '../../lib/permissions';
 import { useUser } from '../../lib/session';
+import { useAgentControl } from '../agent-control/api';
+import { limitSentence } from '../agent-control/AgentControl';
 import { activeRun, useRuns, useStartRun } from '../investigation/api';
 import { ResolveDrawer } from '../resolution/ResolveDrawer';
 import { Button } from '../../ui/Button';
 import { ErrorState } from '../../ui/ErrorState';
 import { Tag } from '../../ui/Tag';
+import { HandoffCard } from '../runs/HandoffCard';
+import { describeHandoff } from '../runs/handoff';
 
 /** A single place for the next permitted case action. Server permissions still decide what runs. */
 export function CaseActions({ c }: { c: CaseDetail }) {
@@ -18,7 +22,11 @@ export function CaseActions({ c }: { c: CaseDetail }) {
   const mayResolve = can(user?.role, 'resolve');
   const mayPropose = mayResolve && c.resolutionView.canPropose;
   const busy = runs.data?.items.some((r) => activeRun(r.status) || r.status === 'AWAITING_APPROVAL') ?? false;
-  const mayStart = mayPropose && c.status !== 'RESOLVED' && !busy && !runs.isPending && !runs.isError && !start.isPending;
+  const latestRun = runs.data?.items[0];
+  const handoff = c.status === 'ESCALATED' && latestRun ? describeHandoff(latestRun) : null;
+  const control = useAgentControl().data;
+  const paused = control?.mode === 'PAUSED';
+  const mayStart = mayPropose && !paused && c.status !== 'RESOLVED' && !busy && !runs.isPending && !runs.isError && !start.isPending;
   const approvalId = c.resolutionView.pendingApprovalId;
   const lastValidation = c.resolutionView.resolutions.find((r) => r.validation)?.validation;
 
@@ -40,6 +48,9 @@ export function CaseActions({ c }: { c: CaseDetail }) {
   } else if (busy || c.status === 'INVESTIGATING') {
     title = 'Investigation in progress';
     description = 'Evidence and findings will update as the investigation runs.';
+  } else if (mayPropose && paused && control) {
+    title = 'Review the next step';
+    description = `${limitSentence(control)} You can still resolve this case manually.`;
   } else if (mayStart) {
     title = c.status === 'ESCALATED' || c.status === 'REJECTED' ? 'Review the next step' : 'Investigate the mismatch';
     description = 'Collect evidence and receive a proposed resolution, or choose actions manually.';
@@ -68,6 +79,7 @@ export function CaseActions({ c }: { c: CaseDetail }) {
         {mayPropose && c.status !== 'RESOLVED' ? <Button variant="secondary" onClick={() => setManualOpen(true)}>Resolve manually</Button> : null}
       </div>
 
+      {handoff ? <HandoffCard handoff={handoff} className="mt-5" /> : null}
       {lastValidation && c.status === 'RESOLVED' ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">Independent verification <Tag tone={lastValidation.verdict === 'PASS' ? 'ok' : 'bad'}>{lastValidation.verdict}</Tag></p> : null}
       {approvalId ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">Approvals use the existing role and requester checks.</p> : null}
       {start.isError && mayStart ? <ErrorState className="mt-4" title="Could not start investigation." error={start.error} onRetry={() => start.mutate()} /> : null}

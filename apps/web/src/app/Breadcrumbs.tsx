@@ -11,6 +11,7 @@ const ROOT: Record<string, string> = {
   simulator: 'Simulator',
   policy: 'Policy',
   audit: 'Audit log',
+  webhooks: 'Webhook events',
 };
 
 export function Breadcrumbs() {

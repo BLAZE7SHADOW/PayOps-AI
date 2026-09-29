@@ -21,6 +21,7 @@ const baseRun: AgentRunItem = {
   proposal: null,
   policy: null,
   approvalId: null,
+  error: null,
   executions: [],
   validation: null,
   findings: [],

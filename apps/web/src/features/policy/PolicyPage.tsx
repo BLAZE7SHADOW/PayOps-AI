@@ -5,6 +5,7 @@ import { api } from '../../lib/api';
 import { qk } from '../../lib/query-keys';
 import { resolutionTone } from '../../lib/resolution';
 import { useDocumentTitle } from '../../lib/use-document-title';
+import { AgentControlPanel } from '../agent-control/AgentControl';
 import { ErrorState } from '../../ui/ErrorState';
 import { PageHeader } from '../../ui/PageHeader';
 import { Skeleton } from '../../ui/Skeleton';
@@ -66,6 +67,7 @@ export function PolicyPage() {
           <p className="mt-2 max-w-[72ch] text-12 text-ink-2">
             Every rule that matches is recorded; the strictest tier wins. BLOCKED proposals cannot be approved by anyone.
           </p>
+          <AgentControlPanel />
           <div className="mt-6 grid grid-cols-12 gap-6">
             <section aria-labelledby="thresholds-title" className="col-span-7 min-w-0">
               <h2 id="thresholds-title" className="flex h-10 items-center text-13 font-semibold">

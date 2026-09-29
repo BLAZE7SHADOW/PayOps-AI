@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ApprovalDecisionBody, ApprovalDetail, ApprovalItem } from '@payops/shared';
+import type { ApprovalDecisionBody, ApprovalDetail, ApprovalItem, BulkApprovalBody, BulkApprovalResult } from '@payops/shared';
 import { api } from '../../lib/api';
 import { qk, type ApprovalScope } from '../../lib/query-keys';
 import { useCursorList } from '../../lib/use-cursor-list';
@@ -26,6 +26,17 @@ export function useDecide(id: string, caseId: string | undefined) {
       const keys: ReadonlyArray<readonly unknown[]> = [qk.approvals.all, qk.overview(), qk.cases.all, ['audit']];
       for (const queryKey of keys) void qc.invalidateQueries({ queryKey });
       if (caseId) void qc.invalidateQueries({ queryKey: qk.cases.detail(caseId) });
+    },
+  });
+}
+
+export function useBulkApprove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: BulkApprovalBody) => api<BulkApprovalResult>('/api/approvals/bulk-approve', { method: 'POST', body }),
+    onSettled: () => {
+      const keys: ReadonlyArray<readonly unknown[]> = [qk.approvals.all, qk.overview(), qk.cases.all, ['audit']];
+      for (const queryKey of keys) void qc.invalidateQueries({ queryKey });
     },
   });
 }

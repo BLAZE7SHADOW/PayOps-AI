@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { CASE_TYPE_LABEL, SEVERITY_RANK, type CaseListItem } from '@payops/shared';
+import { CASE_TYPE_LABEL, SEVERITY_RANK, dueLabel, type CaseListItem } from '@payops/shared';
 import { ageLabel, formatFullDateTime, statusLabel } from '../../lib/format';
 import { tone } from '../../lib/status';
 import type { Column } from '../../ui/Table';
@@ -23,6 +23,16 @@ export function Age({ iso }: { iso: string }) {
   );
 }
 
+/** Time left or time late against the severity window; only open cases carry a due time that matters. */
+export function Due({ item }: { item: Pick<CaseListItem, 'dueAt' | 'overdue' | 'status'> }) {
+  if (!item.dueAt || CLOSED.includes(item.status)) return <span className="font-mono text-ink-2">–</span>;
+  return (
+    <time dateTime={item.dueAt} title={formatFullDateTime(item.dueAt)} className={`tabular font-mono ${item.overdue ? 'text-bad' : 'text-ink-2'}`}>
+      {dueLabel(item.dueAt)}
+    </time>
+  );
+}
+
 export function Signals({ signals }: { signals: CaseListItem['signals'] }) {
   const { complaintType, urgent, quarantined } = signals;
   if (!complaintType && !urgent && !quarantined) return <span className="font-mono text-ink-2">–</span>;
@@ -36,6 +46,8 @@ export function Signals({ signals }: { signals: CaseListItem['signals'] }) {
   );
 }
 
+const CLOSED: readonly string[] = ['RESOLVED', 'REJECTED'];
+
 type Col = Column<CaseListItem>;
 
 export const caseColumns = {
@@ -45,6 +57,8 @@ export const caseColumns = {
   disagreement: { key: 'disagreement', header: 'Disagreement', width: 112, render: (c) => <MiniMatrix mismatched={c.mismatched} />, skeleton: 88 } satisfies Col,
   severity: { key: 'severity', header: 'Severity', width: 104, render: (c) => <Tag tone={tone.severity(c.severity)}>{c.severity}</Tag>, sortValue: (c) => SEVERITY_RANK[c.severity], skeleton: 56 } satisfies Col,
   age: { key: 'age', header: 'Age', width: 64, align: 'right', render: (c) => <Age iso={c.openedAt} />, sortValue: (c) => -new Date(c.openedAt).getTime(), skeleton: 24 } satisfies Col,
+  due: { key: 'due', header: 'Due', width: 88, align: 'right', render: (c) => <Due item={c} />, sortValue: (c) => (c.dueAt ? new Date(c.dueAt).getTime() : Number.MAX_SAFE_INTEGER), skeleton: 40 } satisfies Col,
+  assignee: { key: 'assignee', header: 'Assignee', width: 128, render: (c) => (c.assignee ? <span className="block truncate">{c.assignee.name}</span> : <span className="text-ink-2">Unassigned</span>), sortValue: (c) => c.assignee?.name ?? '', skeleton: 72 } satisfies Col,
   signals: { key: 'signals', header: 'Signals', render: (c) => <Signals signals={c.signals} />, skeleton: '50%' } satisfies Col,
   status: { key: 'status', header: 'Status', width: 152, render: (c) => <Tag tone={tone.caseStatus(c.status)}>{statusLabel(c.status)}</Tag>, sortValue: (c) => c.status, skeleton: 56 } satisfies Col,
 };

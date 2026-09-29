@@ -17,7 +17,9 @@ import { Table, type Column } from '../../ui/Table';
 import { Tag } from '../../ui/Tag';
 import { Age, CaseLink } from '../exceptions/case-cells';
 import { RuleIds } from '../resolution/parts';
-import { useApprovals } from './api';
+import { useApprovals, useBulkApprove } from './api';
+import { BulkApprove } from './BulkApprove';
+import { bulkEligible } from './bulk-approve';
 import { ApprovalDrawer } from './ApprovalDrawer';
 
 const SCOPES = ['pending', 'decided', 'all'] as const satisfies readonly ApprovalScope[];
@@ -85,6 +87,7 @@ export function ApprovalsPage() {
   const [url, setUrl] = useUrlState(['scope', 'approval'] as const);
   const scope: ApprovalScope = pickEnum(url.scope, SCOPES) ?? 'pending';
   const list = useApprovals(scope);
+  const bulk = useBulkApprove();
 
   return (
     <>
@@ -92,6 +95,16 @@ export function ApprovalsPage() {
       <FilterBar>
         <Segmented label="Approval scope" value={scope} options={scopeOptions} onChange={(s) => setUrl({ scope: s === 'pending' ? undefined : s })} />
       </FilterBar>
+
+      {scope === 'pending' ? (
+        <BulkApprove
+          items={bulkEligible(list.items)}
+          pending={bulk.isPending}
+          error={bulk.error instanceof Error ? bulk.error.message : null}
+          result={bulk.data ?? null}
+          onApprove={(ids) => bulk.mutate({ ids, comment: '' })}
+        />
+      ) : null}
 
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">

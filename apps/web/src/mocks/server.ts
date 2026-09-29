@@ -2,6 +2,7 @@
 import {
   DAY_MS,
   OPEN_CASE_STATUSES,
+  isOverdue,
   SCENARIOS,
   ApprovalDecisionBody,
   PreviewActionsBody,
@@ -93,6 +94,7 @@ function toListItem(p: PaymentDetail): PaymentListItem {
   return rest;
 }
 function toCaseItem(c: CaseDetail): CaseListItem {
+  c.overdue = isOverdue(c.dueAt ? new Date(c.dueAt) : null, OPEN_CASE_STATUSES.includes(c.status), new Date());
   const { matrix: _m, entityRefs: _e, customer: _c, merchant: _me, notes: _n, lifecycle: _l, resolvedAt: _r, resolution: _res, resolutionView: _rv, ...rest } = c;
   return rest;
 }
@@ -172,13 +174,18 @@ function runExecution(caseId: string, resolutionId: string) {
   }, 1_500);
 }
 
+interface MockNote { id: string; caseId: string; text: string; authorId: string; authorName: string; createdAt: string }
+const mockNotes: MockNote[] = [];
+const mockViews: Array<{ id: string; ownerId: string; name: string; filters: Record<string, unknown>; createdAt: string }> = [];
+
 async function handle(method: string, url: URL, body: unknown, isJson: boolean): Promise<Response> {
   const sp = url.searchParams;
   const path = url.pathname;
   let m: RegExpExecArray | null;
 
   if (method === 'GET' && path === '/api/health') return json({ status: 'ok', aiMode: 'REPLAY' });
-  if (method === 'GET' && (path === '/api/runs' || /^\/api\/runs\/[^/]+\/steps$/.test(path))) return json({ items: [], nextCursor: null, total: 0 });
+  if (method === 'GET' && path === '/api/agent-control') return json({ mode: 'NORMAL', reason: '', changedByName: null, changedAt: null });
+  if (method === 'GET' && (path === '/api/runs' || /^\/api\/runs\/[^/]+\/(steps|feedback)$/.test(path))) return json({ items: [], nextCursor: null, total: 0 });
 
   // ── Auth ──
   if (method === 'GET' && path === '/api/auth/demo-accounts') return json(demoAccounts());
@@ -306,9 +313,89 @@ async function handle(method: string, url: URL, body: unknown, isJson: boolean):
       .filter((c) => !sp.get('type') || c.type === sp.get('type'))
       .filter((c) => !sp.get('severity') || c.severity === sp.get('severity'))
       .filter((c) => !q || c.displayId === q)
-      .sort((a, b) => b.priority - a.priority);
-    return json(paginate(list.map(toCaseItem), sp));
+      .filter((c) => !sp.get('assigneeId') || (sp.get('assigneeId') === 'unassigned' ? !c.assignee : c.assignee?.id === sp.get('assigneeId')))
+      .sort((a, b) => b.priority - a.priority)
+      .map(toCaseItem)
+      .filter((c) => sp.get('overdue') !== 'true' || c.overdue);
+    return json(paginate(list, sp));
   }
+  if (method === 'PUT' && (m = /^\/api\/cases\/([^/]+)\/assignee$/.exec(path))) {
+    if (user.role === 'VIEWER') return error(403, 'FORBIDDEN', 'This needs the OPS role or above');
+    const c = db.cases.find((x) => x.id === m![1]);
+    if (!c) return error(404, 'CASE_NOT_FOUND', `No case with id ${m[1]}.`);
+    const assigneeId = (body as { assigneeId: string | null }).assigneeId;
+    c.assignee = assigneeId ? { id: assigneeId, name: assigneeId === user.id ? user.name : 'Another analyst' } : null;
+    return json(toCaseItem(c));
+  }
+  // ── Operator workflow (P2 task 2) ──
+  if (path === '/api/handoff' && method === 'GET') {
+    const hours = Number(sp.get('hours') ?? 8);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 72) return error(422, 'VALIDATION_FAILED', 'hours must be between 1 and 72.');
+    const now = new Date();
+    const open = db.cases.filter((c) => OPEN_CASE_STATUSES.includes(c.status)).map(toCaseItem);
+    const bySeverity = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    for (const c of open) bySeverity[c.severity] += 1;
+    const attention = open
+      .map((c) => ({ c, reasons: [c.overdue && 'Overdue', c.severity === 'CRITICAL' && 'Critical', c.status === 'AWAITING_APPROVAL' && 'Waiting for approval', c.status === 'ESCALATED' && 'Escalated'].filter((r): r is string => Boolean(r)) }))
+      .filter((x) => x.reasons.length > 0)
+      .sort((a, b) => b.c.priority - a.c.priority)
+      .slice(0, 10);
+    return json({
+      generatedAt: now.toISOString(),
+      sinceHours: hours,
+      since: new Date(now.getTime() - hours * 3_600_000).toISOString(),
+      open: { total: open.length, overdue: open.filter((c) => c.overdue).length, awaitingApproval: open.filter((c) => c.status === 'AWAITING_APPROVAL').length, unassigned: open.filter((c) => !c.assignee).length, bySeverity },
+      needsAttention: attention.map(({ c, reasons }) => {
+        const last = mockNotes.filter((n) => n.caseId === c.id).at(-1);
+        return {
+          id: c.id, displayId: c.displayId, type: c.type, severity: c.severity, status: c.status, amountMinor: c.amountMinor,
+          dueAt: c.dueAt, overdue: c.overdue, assigneeName: c.assignee?.name ?? null, reasons,
+          lastNote: last ? { text: last.text, authorName: last.authorName, at: last.createdAt } : null,
+        };
+      }),
+      resolved: { total: 0, by: { USER: 0, AGENT: 0, SYSTEM: 0 } },
+      recentNotes: [...mockNotes].reverse().slice(0, 10).map((n) => ({ caseId: n.caseId, displayId: db.cases.find((c) => c.id === n.caseId)?.displayId ?? n.caseId, text: n.text, authorName: n.authorName, at: n.createdAt })),
+    });
+  }
+  if ((m = /^\/api\/cases\/([^/]+)\/notes$/.exec(path))) {
+    const c = db.cases.find((x) => x.id === m![1]);
+    if (!c) return error(404, 'NOT_FOUND', `Case ${m[1]} not found`);
+    if (method === 'GET') {
+      const items = mockNotes.filter((n) => n.caseId === c.id).reverse();
+      return json({ items, nextCursor: null, total: items.length });
+    }
+    if (method === 'POST') {
+      if (user.role === 'VIEWER') return error(403, 'FORBIDDEN', 'This needs the OPS role or above');
+      const text = String((body as { text?: string }).text ?? '').trim();
+      if (!text) return error(422, 'VALIDATION_FAILED', 'Write a note first.');
+      const note = { id: `note_${mockNotes.length + 1}`, caseId: c.id, text, authorId: user.id, authorName: user.name, createdAt: new Date().toISOString() };
+      mockNotes.push(note);
+      return json(note, 201);
+    }
+  }
+  if (path === '/api/views') {
+    if (method === 'GET') {
+      const items = mockViews.filter((v) => v.ownerId === user.id).map(({ ownerId: _o, ...v }) => v);
+      return json({ items, nextCursor: null, total: items.length });
+    }
+    if (method === 'POST') {
+      const b = body as { name?: string; filters?: Record<string, unknown> };
+      const name = String(b.name ?? '').trim();
+      if (!name) return error(422, 'VALIDATION_FAILED', 'Name the view.');
+      if (mockViews.some((v) => v.ownerId === user.id && v.name === name)) return error(409, 'CONFLICT', `You already have a view named "${name}".`);
+      const view = { id: `viw_${mockViews.length + 1}`, ownerId: user.id, name, filters: b.filters ?? {}, createdAt: new Date().toISOString() };
+      mockViews.push(view);
+      const { ownerId: _o, ...out } = view;
+      return json(out, 201);
+    }
+  }
+  if (method === 'DELETE' && (m = /^\/api\/views\/([^/]+)$/.exec(path))) {
+    const i = mockViews.findIndex((v) => v.id === m![1] && v.ownerId === user.id);
+    if (i < 0) return error(404, 'NOT_FOUND', `Saved view ${m[1]} not found`);
+    mockViews.splice(i, 1);
+    return new Response(null, { status: 204 });
+  }
+
   if (method === 'GET' && (m = /^\/api\/cases\/([^/]+)$/.exec(path))) {
     const c = db.cases.find((x) => x.id === m![1] || x.displayId === m![1]);
     return c ? json({ ...c, resolutionView: resolutionView(db, c, user) }) : error(404, 'CASE_NOT_FOUND', `No case with id ${m[1]}.`);

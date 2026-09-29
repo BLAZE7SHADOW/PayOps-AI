@@ -11,6 +11,9 @@ import { useRunSteps } from '../investigation/api';
 import { useRun } from './api';
 import { useCase } from '../cases/api';
 import { tone } from '../../lib/status';
+import { DiagnosisFeedback } from './DiagnosisFeedback';
+import { HandoffCard } from './HandoffCard';
+import { describeHandoff } from './handoff';
 import { RunSteps } from './RunSteps';
 import { RUN_TONE, contextTokens, formatCost, formatDuration, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
 
@@ -63,12 +66,14 @@ export function RunDetailPage() {
         }
       />
       {c ? <CaseBanner c={c} /> : null}
+      {r && describeHandoff(r) ? <HandoffCard handoff={describeHandoff(r)!} className="mb-6" /> : null}
       <section aria-labelledby="flow-title">
         <h2 id="flow-title" className="mb-3 text-20 font-semibold">What the agent did, step by step</h2>
         {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} />
           : !r || steps.isPending ? <div className="space-y-3 rounded-lg border border-rule bg-surface p-5" aria-hidden="true">{[0, 1, 2].map((i) => <Skeleton key={i} height={76} width="100%" />)}</div>
           : <RunSteps run={r} steps={items} />}
       </section>
+      {r ? <DiagnosisFeedback run={r} /> : null}
       <section aria-labelledby="usage-title" className="mt-8">
         <h2 id="usage-title" className="mb-3 text-18 font-semibold">Run usage</h2>
         <Figures run={r} />

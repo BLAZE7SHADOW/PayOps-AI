@@ -51,3 +51,17 @@ export function usePropose(caseId: string) {
     },
   });
 }
+
+/** Undo a passed resolution that posted to the ledger. It creates a normal proposal (D070). */
+export function useUndoResolution(caseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (resolutionId: string) =>
+      api<ResolutionItem>(`/api/cases/${encodeURIComponent(caseId)}/resolutions/${encodeURIComponent(resolutionId)}/undo`, { method: 'POST', body: {} }),
+    onSuccess: () => {
+      for (const queryKey of [qk.cases.detail(caseId), qk.cases.all, qk.approvals.all, qk.overview(), ['audit']]) {
+        void qc.invalidateQueries({ queryKey });
+      }
+    },
+  });
+}

@@ -13,9 +13,11 @@ import { useCase } from './api';
 import { CaseDetails, CaseDetailsSkeleton } from './CaseDetails';
 import { CaseHeader, CaseHeaderSkeleton } from './CaseHeader';
 import { CaseActions } from './CaseActions';
+import { CaseNotes } from './CaseNotes';
 import { CaseSourceRecords } from './CaseSourceRecords';
 import { CaseStory, StorySkeleton } from './CaseStory';
 import { caseVerdict } from './case-verdict';
+import { UndoResolution } from './UndoResolution';
 import { ResolutionSection } from '../resolution/ResolutionSection';
 
 /**
@@ -61,6 +63,7 @@ export function CasePage() {
     <article aria-busy={!c || undefined}>
       {c ? <CaseHeader c={c} /> : <CaseHeaderSkeleton />}
       {c ? <VerdictLine c={c} /> : null}
+      {c ? <UndoResolution c={c} /> : null}
 
       <section aria-labelledby="matrix-title" className="mb-6 min-w-0">
         <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 pb-2">
@@ -81,7 +84,10 @@ export function CasePage() {
 
       <div className="grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="order-2 min-w-0 xl:order-1">{c ? <CaseStory key={c.id} c={c} /> : <div className="rounded-lg border border-rule bg-surface"><StorySkeleton /></div>}</div>
-        <div className="order-1 xl:order-2">{c ? <CaseActions c={c} /> : <div className="rounded-lg border border-rule bg-surface p-6"><Skeleton width={140} height={20} /><Skeleton width="80%" className="mt-4" /><Skeleton width="100%" height={40} className="mt-6" /></div>}</div>
+        <div className="order-1 space-y-6 xl:order-2">
+          {c ? <CaseActions c={c} /> : <div className="rounded-lg border border-rule bg-surface p-6"><Skeleton width={140} height={20} /><Skeleton width="80%" className="mt-4" /><Skeleton width="100%" height={40} className="mt-6" /></div>}
+          {c ? <CaseNotes key={c.id} caseId={c.id} /> : null}
+        </div>
       </div>
 
       <details ref={technical} className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">

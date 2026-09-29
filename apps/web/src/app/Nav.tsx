@@ -15,7 +15,9 @@ const MAIN: Array<{ to: string; label: string; count?: CountKey; countLabel?: st
   { to: '/payments', label: 'Payments' },
   { to: '/exceptions', label: 'Exceptions', count: 'openExceptions', countLabel: 'open' },
   { to: '/approvals', label: 'Approvals', count: 'awaitingApproval', countLabel: 'pending' },
+  { to: '/handoff', label: 'Shift handoff' },
   { to: '/runs', label: 'Agent runs' },
+  { to: '/webhooks', label: 'Webhook events' },
   { to: '/audit', label: 'Audit log' },
 ];
 
