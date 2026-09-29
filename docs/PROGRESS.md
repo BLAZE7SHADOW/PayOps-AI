@@ -104,7 +104,7 @@ Shivam's Mac directly, same as task 9 did.
 
 ### 2026-09-29 · Publish source repository
 - Created the public `BLAZE7SHADOW/PayOps-AI` GitHub repository and set the landing page's source link to its URL.
-- Checked that `.env` is ignored and absent from tracked files. Push the original `master` history to `origin` from this checkout; the separate Satyam handoff ZIP is unaffected.
+- Checked that `.env` is ignored and absent from tracked files. Pushed the original `master` history to `origin`; the separate Satyam handoff ZIP is unaffected.
 
 ### 2026-09-29 · Brother repository handoff
 - Prepared `Claude outputs/PayOps-AI-Satyam.zip` from an isolated clone. All Git author and committer fields use Satyam Govind Rao <satyamgrao007@gmail.com>; the source repository's existing commits were not rewritten.
