@@ -19,8 +19,7 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope).** Follow-ups for Shivam: set `GITHUB_URL` in
-`apps/web/src/features/landing/links.ts` once the repo is public; run Lighthouse a11y on `/`; record
+**Phase 6 is complete (parts A-D, D051 scope).** Follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
 page scored 97 accessibility; fixed the live-region role, duplicate step keys and table group headers.
 Parked (D051): Dockerfile, hosted deploy, nightly reset, Razorpay adapter.
@@ -102,6 +101,10 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Publish source repository
+- Created the public `BLAZE7SHADOW/PayOps-AI` GitHub repository and set the landing page's source link to its URL.
+- Checked that `.env` is ignored and absent from tracked files. Push the original `master` history to `origin` from this checkout; the separate Satyam handoff ZIP is unaffected.
 
 ### 2026-09-29 · Brother repository handoff
 - Prepared `Claude outputs/PayOps-AI-Satyam.zip` from an isolated clone. All Git author and committer fields use Satyam Govind Rao <satyamgrao007@gmail.com>; the source repository's existing commits were not rewritten.
