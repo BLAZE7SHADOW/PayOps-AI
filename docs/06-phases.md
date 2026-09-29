@@ -1,5 +1,7 @@
 # 06 · Phase Plan and Execution
 
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+
 Seven phases, about 6–7 weeks part-time. Every phase ends with something that runs and can be demoed. Do not start a phase until the previous phase's "Done when" list is fully true. Current status lives in `docs/PROGRESS.md`.
 
 Resume checkpoint: **after Phase 3 the project is resume-ready** (working product + real agent with interrupt/resume). Start applying then; Phases 4–6 continue in parallel.
@@ -151,6 +153,59 @@ Tasks
 Done when
 - A stranger can open the link and complete the 2-minute demo without instructions.
 - Lighthouse a11y ≥ 95 on Case page.
+
+---
+
+## Polish track (D062): phases P0 to P6
+
+Goal: make PayOps AI the strongest portfolio piece for agentic AI solving a real payments problem. Razorpay and PayPal adapters stay out of this track and come after it. Each phase below runs in **its own fresh chat** to keep token use low: start with "Read CLAUDE.md and docs/PROGRESS.md, then continue.", do only the tasks listed, run the done-when checks, update PROGRESS.md, stop. Do not read other docs unless a task names them.
+
+**P0 · Quick win (about half a day)**
+1. One-line verdict at the top of every Case ("Fixed automatically and verified. Nothing needed from you.").
+2. One shared `FAST_PATH` constant used by `diagnose()` and the run page.
+Done when: verdict shows for every case status (unit-tested); typecheck and tests green.
+
+**P1 · AI trust (3 to 4 days)**
+1. Per-root-cause code checks that confirm the stated cause, closing the D057 gap (fix passes but the label is wrong).
+2. Evals across all scenarios plus adversarial variants (misleading notes, conflicting evidence); commit the report under `docs/evals/`.
+3. Operator feedback on a diagnosis ("right" or "wrong", with a reason), stored and shown in metrics later.
+4. Global pause, propose-only mode, and clearer handoff messages when the agent stops.
+Done when: a wrong root-cause label is caught by a test; eval report committed; pause stops new auto-executions.
+
+**P2 · Operator workflow (3 to 4 days)**
+1. Case assignment, due times, alerts for overdue cases.
+2. Saved views, case notes, shift handoff summary.
+3. Bulk approve for low-risk actions; auto-close when systems reconcile by themselves.
+4. Undo through a reversing action where the catalog allows it.
+Done when: an operator can run a shift from the Exceptions page without opening a case for routine ones.
+
+**P3 · Realistic data and adapter test kit (3 days)**
+1. Grow scenarios from 9 to about 15 with messier variants (late webhooks, partial refunds, out-of-order events, duplicates).
+2. Raw event log with replay, and a retry queue for failed webhooks.
+3. A 10,000-payment volume test with detection timings.
+4. Adapter contract tests and a webhook signature-check helper, so Razorpay and PayPal only need an adapter.
+Done when: contract tests run against the simulator adapter; volume test result written to docs.
+
+**P4 · Security and compliance (3 to 4 days)**
+1. MFA (TOTP), session revoke, persistent rate limiting.
+2. Role and permission table in code and docs.
+3. Hash-chained tamper-evident audit, database rules blocking update and delete, CSV export.
+4. Threat model, and a data-flow table of what goes to Gemini and Jev, with PII masking tests.
+Done when: audit chain verification passes and fails on a tampered row (tested); data-flow doc reviewed.
+
+**P5 · Metrics and tracing (2 to 3 days)**
+1. Resolution time, auto-resolution rate, agent accuracy (using P1 feedback), approval turnaround, cost per case.
+2. Trace links from case to run to model call.
+Done when: Overview shows each metric from real seeded data, each with a stated definition.
+
+**P6 · Delivery (3 to 4 days)**
+1. Accessibility, empty and error states on every page; Lighthouse a11y at least 95 on Case.
+2. Playwright flows for the main journeys; CI.
+3. Docker, hosted demo, scripted walkthrough, 2-minute video.
+4. Usability test with three people; fix what they hit.
+Done when: a stranger completes the demo from the link without help.
+
+Not building: multi-tenant billing, real SSO, dark mode, a separate refund agent.
 
 ---
 

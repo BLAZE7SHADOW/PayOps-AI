@@ -185,12 +185,15 @@ One scenario (`refund_stuck`) got the expected fix but named a neighbouring root
 
 Requires Node 22 or newer and pnpm 10.
 
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this README as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+
 ```
 pnpm install
 cp .env.example .env
-pnpm db:local        # terminal 1: in-process Postgres (PGlite) on :54329
+pnpm db:local        # terminal 1: in-process Postgres (PGlite) on :54329, leave it running
+pnpm db:migrate      # terminal 2: apply migrations (the database must be running first)
 pnpm seed            # migrate, then seed merchants, customers and one case per scenario
-pnpm dev             # server :4000, web :5173
+pnpm dev             # server :4000 and web :5173 together
 ```
 
 Open http://localhost:5173 and sign in. All demo accounts share the password `payops-demo`.

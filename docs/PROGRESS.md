@@ -19,23 +19,21 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope). The UI revamp, recorded choice trail, bounded provider retries, and four verified critical showcase cases are implemented (D055-D058).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
+**P0 is done (D062). Next session: P1 · AI trust** (see `docs/06-phases.md`, "Polish track"). Open a fresh chat with "Read CLAUDE.md and docs/PROGRESS.md, then continue." and P1 task 1 is done (D063). Do P1 task 2 (evals) next; recording needs the Mac.
 
-Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
-the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
-page scored 97 accessibility; fixed the live-region role, duplicate step keys and table group headers.
-Parked (D051): Dockerfile, hosted deploy, nightly reset, Razorpay adapter.
+Still for Shivam: run the app, open a resolved case, an awaiting-approval case and the run page to check them (nothing was viewed in a browser by me). Apply migration 0005 (`npx pnpm@10.28.0 db:migrate`). Commit from the Mac, delete `docs/UI-CASE-WORKSPACE-PREVIEW.html`, remove `.git/index.lock` if git complains.
 
-Carried over, non-blocking: D049's replan-loop attribution edge case; golden set covers 7 of 9
-scenarios (D048).
+Later ideas: dev:mock fixtures with a before-state; earlier attempts inline in the story; manual notes as a PERSON entry; Lighthouse on `/` and Case; demo video.
 
 ## How to run locally
 
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
 ```
 pnpm install
-pnpm db:local        # terminal 1: PGlite on :54329 (or set DATABASE_URL to Supabase session pooler)
-pnpm seed            # migrates, seeds merchants/customers and one case per scenario
-pnpm dev             # server :4000 + web :5173
+pnpm db:local        # terminal 1: PGlite on :54329, leave it running (or set DATABASE_URL to Supabase session pooler)
+pnpm db:migrate      # terminal 2: apply migrations (needed after pulling a new migration, e.g. 0005)
+pnpm seed            # terminal 2: migrates too, then seeds merchants/customers and one case per scenario
+pnpm dev             # terminal 2 or 3: server :4000 and web :5173 together, no separate frontend command
 ```
 Open http://localhost:5173 and use a demo account on the sign-in page (password for all: `payops-demo`):
 
@@ -107,6 +105,25 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · P1 task 1: root-cause checks (D063)
+- New `grounding/root-cause-checks.ts` (+ 25 table tests, written first) and a wiring in `resolve`: an unsupported cause is downgraded to UNKNOWN and escalated. Graph test added: `captured_order_failed` with a DUPLICATE_CAPTURE claim is caught and not auto-resolved.
+- Checks: agents tsc clean; agents tests all pass (cassette replays unchanged).
+- P1 task 2 (evals for all scenarios plus adversarial variants) NOT started. It needs live Gemini/Jev recording, which only works on Shivam's Mac (D045). Next session: add `settlement_mismatch` and `suspicious_payment` golden cases and adversarial variants (misleading notes, conflicting evidence), record on the Mac, commit the report under `docs/evals/`.
+
+### 2026-09-29 · Polish plan (D062) and P0
+- Added polish phases P0 to P6 to `docs/06-phases.md` and D062.
+- P0: shared `FAST_PATH` in `packages/shared`, used by `diagnose()` and `run-detail.ts`; case verdict line (`case-verdict.ts`, 6 tests) shown under the case header.
+- Checks: tsc clean (web, agents), web 116 tests, agents 140 tests.
+
+### 2026-09-29 · Unified Case workspace (D060)
+- Slice 1: the executor now stores the source records as they were just before each action (`executions.before`, migration `0005_execution_before_state`) and exposes them as `ExecutionStep.before`. Test written first in `packages/simulator/src/resolution.test.ts`.
+- Slices 2 and 3: the Case page now shows one story (detected, investigation steps, decision with approval state, execution with before and now, verification with expected and actual, outcome). Each step is labelled CODE, JEV, GEMINI or PERSON from recorded data; evidence facts are "Confirmed by data" and findings are "Agent finding" with their grounding result. Every evidence reference and changed record opens a drawer with the record as read, the current value and links to run, audit and payment. LIVE runs refresh the story and records while active. The old run, resolution and source-record sections sit under "Technical detail".
+- New files: `features/cases/case-story.ts` (+ tests and fixtures), `CaseStory.tsx`, `RecordDrawer.tsx`; `CasePage.tsx` recomposed.
+- Validation: typecheck clean for all packages; lint clean on touched files; web tests 95 pass; agents, simulator, shared 198 pass; server 31 pass; core 178 pass. Not run: production build (this VM lacks the linux `lightningcss` binary), Playwright, Lighthouse, a real browser pass. Two environment notes: `apps/web` tests that assert relative API URLs need `VITE_API_URL` unset, and server tests need a `JWT_SECRET` of at least 16 characters (I used a temporary test-only value on the command line; `.env` was not read or changed).
+- Setup fix: an empty `JWT_SECRET=` (as in `.env.example`) made `db:migrate` fail with "Too small". `loadServerEnv` now treats empty values as not set (test in `packages/core/src/config/env.test.ts`). Docs now say plain `pnpm` does not work on this Mac: use `npx pnpm@10.28.0 <script>` or an alias.
+- Run page (D061): `/runs/:id` now shows the case it investigated (PAY-0002 style id, type, amount, status), a routing summary, and one detailed card per step (what it does, fixed or chosen, what it called, what it found, why, next). Files: `features/runs/run-detail.ts` (+ tests, fixtures), `RunSteps.tsx`, `RunDetailPage.tsx`. Web tests 110 pass, lint and typecheck clean; not yet looked at in a browser.
+- Nothing was committed. A stale `.git/index.lock` could not be removed from this environment; remove it on the Mac if git complains.
 
 ### 2026-09-29 · Case verification and source records (D059)
 - Added a visible Case verification row linking to payment detail, source records, resolution checks, audit events, and pending approval. AUTO cases explain why no manual approval appears.

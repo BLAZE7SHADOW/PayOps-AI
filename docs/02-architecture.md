@@ -1,5 +1,7 @@
 # 02 · System Architecture
 
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+
 ## 1. Shape
 
 Monorepo, TypeScript everywhere. **Two runnable apps** (web, server) and a few packages. **One database** (Postgres on Supabase) holds business data, the job queue and LangGraph checkpoints. No Redis, no separate worker process.
