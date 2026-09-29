@@ -60,11 +60,11 @@ export function LoginPage() {
 
   return (
     <main className="min-h-screen bg-paper px-4 text-ink">
-      <div className="mx-auto flex w-full max-w-[360px] flex-col pt-[18vh] pb-12">
-        <h1 className="text-20 font-semibold tracking-[-0.005em]">
+      <div className="mx-auto flex w-full max-w-[420px] flex-col pt-[12vh] pb-12">
+        <h1 className="text-28 font-semibold tracking-[-0.005em]">
           PayOps <span className="font-normal text-ink-2">AI</span>
         </h1>
-        <p className="mt-1 text-13 text-ink-2">Sign in to the payment operations console.</p>
+        <p className="mt-2 text-15 text-ink-2">Sign in to the payment operations console.</p>
 
         <form noValidate onSubmit={submit} className="mt-6 flex flex-col gap-1" aria-describedby="signin-error">
           <Field label="Email" error={show('email')}>
@@ -78,7 +78,7 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                className="h-9 w-full"
+                className="w-full"
               />
             )}
           </Field>
@@ -91,11 +91,11 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => setTouched((t) => ({ ...t, password: true }))}
-                className="h-9 w-full"
+                className="w-full"
               />
             )}
           </Field>
-          <Button type="submit" variant="primary" disabled={busy} className="mt-1 h-9 w-full">
+          <Button type="submit" variant="primary" disabled={busy} className="mt-2 w-full">
             {login.isPending ? 'Signing in…' : 'Sign in'}
           </Button>
           <p id="signin-error" role="alert" className="h-7 pt-2 text-13 text-bad">
@@ -133,10 +133,11 @@ function DemoAccounts({ busy, pendingEmail, error, onPick }: DemoAccountsProps) 
   const q = useDemoAccounts();
   if (q.data && q.data.length === 0) return null;
   return (
-    <section aria-labelledby="demo-title" className="mt-4 border-t border-rule pt-4">
-      <h2 id="demo-title" className="text-12 font-medium text-ink-2">
-        Demo accounts
+    <section aria-labelledby="demo-title" className="mt-6 border-t border-rule pt-5">
+      <h2 id="demo-title" className="text-18 font-semibold text-ink">
+        Choose a demo role
       </h2>
+      <p className="mt-1 text-13 text-ink-2">Analysts investigate and propose fixes; managers can review higher risk approvals. Viewers can inspect records.</p>
       <ul className="mt-1 flex flex-col">
         {q.data
           ? q.data.map((a) => (
@@ -145,7 +146,7 @@ function DemoAccounts({ busy, pendingEmail, error, onPick }: DemoAccountsProps) 
                   type="button"
                   disabled={busy}
                   onClick={() => onPick(a)}
-                  className="transition-color group flex h-8 w-full items-center justify-between gap-3 rounded-xs text-left text-13 text-accent hover:text-ink disabled:opacity-55"
+                  className="transition-color group flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-2 text-left text-14 text-accent hover:bg-surface-sunk hover:text-ink disabled:opacity-55"
                 >
                   <span className="truncate">
                     {pendingEmail === a.email ? 'Signing in as ' : 'Continue as '}

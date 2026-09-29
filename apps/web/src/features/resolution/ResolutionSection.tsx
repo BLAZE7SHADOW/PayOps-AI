@@ -1,53 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail, ResolutionItem } from '@payops/shared';
 import { statusLabel } from '../../lib/format';
-import { VIEW_ONLY_NOTE, can } from '../../lib/permissions';
 import { attemptLabel } from '../../lib/resolution';
-import { useUser } from '../../lib/session';
-import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { Tabs } from '../../ui/Tabs';
 import { AttemptBlock } from './AttemptBlock';
 import { Actor, Ago } from './parts';
-import { ResolveDrawer } from './ResolveDrawer';
 
-/** Full-width Resolution section under the case columns: manual path, pending approval, attempts. */
+/** Resolution history under the case workspace; the next action lives in CaseActions. */
 export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
-  const user = useUser();
-  const [open, setOpen] = useState(false);
   const view = c?.resolutionView;
   const attempts = view ? [...view.resolutions].sort((a, b) => b.attempt - a.attempt || b.createdAt.localeCompare(a.createdAt)) : [];
   const pending = view?.pendingApprovalId ? attempts.find((r) => r.approval?.id === view.pendingApprovalId) : undefined;
-  const mayResolve = can(user?.role, 'resolve');
-  const canPropose = Boolean(view?.canPropose);
-
-  // A proposal that runs immediately makes the case busy (canPropose=false). Close the drawer so it
-  // does not reappear on its own when the case becomes proposable again after verification.
-  useEffect(() => {
-    if (!canPropose) setOpen(false);
-  }, [canPropose]);
 
   return (
-    <section aria-labelledby="resolution-title" className="mt-6 border border-rule bg-surface">
-      <header className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule px-4 py-2">
-        <h2 id="resolution-title" className="text-13 font-semibold text-ink">
+    <section aria-labelledby="resolution-title" className="mt-8 overflow-hidden rounded-lg border border-rule bg-surface">
+      <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule px-5 py-3">
+        <h2 id="resolution-title" className="text-18 font-semibold text-ink">
           Resolution
         </h2>
-        <p className="text-12 text-ink-2">{c ? statusSummary(attempts) : <Skeleton width={160} />}</p>
-        <div className="ml-auto flex items-center gap-3">
-          {!c ? (
-            <Skeleton width={128} height={32} />
-          ) : !mayResolve ? (
-            <p className="text-12 text-ink-2">{VIEW_ONLY_NOTE}</p>
-          ) : view?.canPropose ? (
-            <Button variant="primary" onClick={() => setOpen(true)}>
-              Resolve manually
-            </Button>
-          ) : (
-            <p className="text-12 text-ink-2">{view?.cannotProposeReason ?? 'Manual resolution is not available right now.'}</p>
-          )}
-        </div>
+        <p className="text-13 text-ink-2">{c ? statusSummary(attempts) : <Skeleton width={160} />}</p>
       </header>
 
       {pending?.approval ? <PendingLine r={pending} /> : null}
@@ -55,9 +28,8 @@ export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
       {!c ? (
         <AttemptSkeleton />
       ) : attempts.length === 0 ? (
-        <p className="px-4 py-4 text-13 text-ink-2">
+        <p className="px-5 py-5 text-14 text-ink-2">
           No resolution proposed yet.
-          {mayResolve && view?.canPropose ? ' Use Resolve manually to pick actions from the catalog.' : ''}
         </p>
       ) : attempts.length === 1 ? (
         <AttemptBlock r={attempts[0]!} />
@@ -65,7 +37,6 @@ export function ResolutionSection({ c }: { c: CaseDetail | undefined }) {
         <Attempts attempts={attempts} />
       )}
 
-      {c && mayResolve ? <ResolveDrawer c={c} open={open && canPropose} onOpenChange={setOpen} /> : null}
     </section>
   );
 }

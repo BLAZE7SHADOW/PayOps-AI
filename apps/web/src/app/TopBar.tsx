@@ -9,9 +9,9 @@ import { Breadcrumbs } from './Breadcrumbs';
 
 export function TopBar() {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-4 border-b border-rule bg-paper px-4 min-[1360px]:px-6">
+    <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-rule bg-surface px-4 py-2 min-[1360px]:px-8 md:px-6">
       <Breadcrumbs />
-      <div className="ml-auto flex items-center gap-4">
+      <div className="ml-auto flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:w-auto sm:justify-end">
         <GlobalSearch />
         <Connection />
         <AiModeTag />
@@ -54,7 +54,7 @@ function GlobalSearch() {
   };
 
   return (
-    <form role="search" onSubmit={submit} className="relative">
+    <form role="search" onSubmit={submit} className="relative w-full sm:w-auto">
       <label htmlFor="global-search" className="sr-only">
         Search by payment, order or case id
       </label>
@@ -68,7 +68,7 @@ function GlobalSearch() {
         placeholder="pay_, ord_ or PAY-0042"
         autoComplete="off"
         spellCheck={false}
-        className="transition-color h-8 w-72 rounded-xs border border-rule bg-surface pr-8 pl-7 font-mono text-12 text-ink hover:border-rule-strong focus:border-rule-strong"
+        className="transition-color h-9 w-full rounded-md border border-control bg-surface pr-8 pl-8 font-mono text-13 text-ink hover:border-ink-2 focus:border-accent sm:w-60 xl:w-72"
       />
       <kbd
         aria-hidden="true"

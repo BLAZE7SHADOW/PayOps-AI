@@ -28,6 +28,7 @@ interface DecisionFormProps {
  */
 export function DecisionForm({ approval, role, pending, onDecide }: DecisionFormProps) {
   const [comment, setComment] = useState('');
+  const [choice, setChoice] = useState<ApprovalDecisionType | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -35,15 +36,16 @@ export function DecisionForm({ approval, role, pending, onDecide }: DecisionForm
 
   const disabled = !approval.canDecide || pending !== null;
 
-  const decide = (d: ApprovalDecisionType) => {
+  const decide = () => {
+    if (!choice) return;
     const text = comment.trim();
-    if (d !== 'APPROVE' && text.length < COMMENT_MIN) {
-      setError(`Add a comment of at least ${COMMENT_MIN} characters to ${VERB[d].need}.`);
+    if (choice !== 'APPROVE' && text.length < COMMENT_MIN) {
+      setError(`Add a comment of at least ${COMMENT_MIN} characters to ${VERB[choice].need}.`);
       ref.current?.focus();
       return;
     }
     setError(null);
-    onDecide(d, text);
+    onDecide(choice, text);
   };
 
   return (
@@ -79,18 +81,20 @@ export function DecisionForm({ approval, role, pending, onDecide }: DecisionForm
           />
         )}
       </Field>
-      <div className="flex items-center gap-2">
-        <Button variant="primary" disabled={disabled} onClick={() => decide('APPROVE')}>
-          {pending === 'APPROVE' ? VERB.APPROVE.pending : VERB.APPROVE.idle}
+      <fieldset disabled={disabled} className="space-y-3">
+        <legend className="mb-2 text-14 font-medium">Decision <span className="font-mono text-12 font-normal text-ink-2">· {approval.tier} tier</span></legend>
+        <div className="flex flex-wrap gap-2">
+          {(['APPROVE', 'REJECT', 'ESCALATE'] as const).map((option) => (
+            <label key={option} className={`inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-4 text-14 ${choice === option ? 'border-accent bg-accent-weak text-ink' : 'border-control bg-surface text-ink'} has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent`}>
+              <input type="radio" name="approval-decision" value={option} checked={choice === option} onChange={() => { setChoice(option); setError(null); }} className="accent-accent" />
+              {VERB[option].idle}
+            </label>
+          ))}
+        </div>
+        <Button variant={choice === 'REJECT' ? 'danger-solid' : 'primary'} disabled={disabled || !choice} onClick={decide}>
+          {pending ? VERB[pending].pending : choice ? `${VERB[choice].idle} decision` : 'Choose a decision'}
         </Button>
-        <Button variant="danger" disabled={disabled} onClick={() => decide('REJECT')}>
-          {pending === 'REJECT' ? VERB.REJECT.pending : VERB.REJECT.idle}
-        </Button>
-        <Button variant="secondary" disabled={disabled} onClick={() => decide('ESCALATE')}>
-          {pending === 'ESCALATE' ? VERB.ESCALATE.pending : VERB.ESCALATE.idle}
-        </Button>
-        <span className="ml-auto font-mono text-12 text-ink-2">{approval.tier} tier</span>
-      </div>
+      </fieldset>
     </div>
   );
 }

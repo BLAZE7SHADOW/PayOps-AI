@@ -57,7 +57,7 @@ Do **not** add: MongoDB, Redis, BullMQ, a separate worker service, Supabase Auth
 
 ## UI rules (summary; full spec in `docs/05-ui-design.md`)
 
-Internal ops tool, calm and dense. Warm paper background `#F5F2EA` (never pure white), ink text, single accent ledger green `#1E5A4C`, muted status colors. IBM Plex Sans + IBM Plex Mono (tabular numbers for money, ids, times). Radius 0–4px. Borders not shadows. No gradients, glass, orbs, dot grids, bento grids, emojis, sparkles, lucide, checkmark bullets, colored left stripes, neon, pastels, hover transforms, animated arrows, fake terminals, fake testimonials, pricing tiers. Skeleton loaders for every async surface. Copy: plain and specific, no em dashes, no "it's not X, it's Y", no hype words, AI features named by function ("Investigation", "Proposed resolution"). Only token colors, never raw hex in components.
+Internal ops tool, calm and dense. Warm paper background `#F5F2EA` (never pure white), ink text, single accent ledger green `#1E5A4C`, muted status colors. IBM Plex Sans + IBM Plex Mono (tabular numbers for money, ids, times). Controls use 6px radius, major panels 8px, table cells square (D055). Borders not shadows. No gradients, glass, orbs, dot grids, bento grids, emojis, sparkles, lucide, checkmark bullets, colored left stripes, neon, pastels, hover transforms, animated arrows, fake terminals, fake testimonials, pricing tiers. Skeleton loaders for every async surface. Copy: plain and specific, no em dashes, no "it's not X, it's Y", no hype words, AI features named by function ("Investigation", "Proposed resolution"). Only token colors, never raw hex in components.
 
 ## Commands
 

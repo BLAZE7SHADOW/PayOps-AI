@@ -24,7 +24,7 @@ export function Nav() {
   // Shares the overview cache; realtime events invalidate it so the counts stay current.
   const { data } = useQuery({ queryKey: qk.overview(), queryFn: ({ signal }) => api<OverviewMetrics>('/api/overview', { signal }) });
   return (
-    <nav aria-label="Primary" className="flex min-h-0 flex-col border-r border-rule bg-paper">
+    <nav aria-label="Primary" className="hidden min-h-0 flex-col border-r border-rule bg-surface-sunk md:flex">
       <div className="flex h-12 shrink-0 items-center border-b border-rule px-4">
         <span className="text-14 font-semibold tracking-[-0.005em] text-ink">PayOps</span>
         <span className="ml-1.5 text-14 text-ink-2">AI</span>
@@ -57,8 +57,8 @@ function Item({ to, label, count, countLabel }: { to: string; label: string; cou
       to={to}
       className={({ isActive }) =>
         cx(
-          'transition-color flex h-8 items-center justify-between rounded-xs px-2 text-14',
-          isActive ? 'bg-accent-weak font-medium text-ink' : 'text-ink-2 hover:bg-surface-sunk hover:text-ink',
+          'transition-color flex h-10 items-center justify-between rounded-md px-3 text-14',
+          isActive ? 'bg-accent-weak font-semibold text-accent' : 'text-ink-2 hover:bg-surface hover:text-ink',
         )
       }
     >
@@ -69,6 +69,29 @@ function Item({ to, label, count, countLabel }: { to: string; label: string; cou
         </span>
       ) : null}
     </NavLink>
+  );
+}
+
+/** All destinations remain available when the desktop rail cannot fit. */
+export function MobileNav() {
+  const user = useUser();
+  const logout = useLogout();
+  const navigate = useNavigate();
+  const items = [...MAIN, ...(can(user?.role, 'simulate') ? [{ to: '/simulator', label: 'Simulator' }] : []), { to: '/policy', label: 'Policy' }];
+  return (
+    <nav aria-label="Mobile primary" className="shrink-0 overflow-x-auto border-b border-rule bg-surface-sunk md:hidden">
+      <ul className="flex w-max items-center gap-1 px-3 py-2">
+        {items.map((item) => (
+          <li key={item.to}>
+            <NavLink to={item.to} className={({ isActive }) => cx(
+              'transition-color inline-flex h-10 items-center rounded-md px-3 text-13 whitespace-nowrap',
+              isActive ? 'bg-accent-weak font-semibold text-accent' : 'text-ink-2 hover:bg-surface',
+            )}>{item.label}</NavLink>
+          </li>
+        ))}
+        {user ? <li><button type="button" disabled={logout.isPending} onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/login', { replace: true }) })} className="h-10 rounded-md px-3 text-13 text-ink-2 whitespace-nowrap hover:bg-surface">{logout.isPending ? 'Signing out' : 'Sign out'}</button></li> : null}
+      </ul>
+    </nav>
   );
 }
 

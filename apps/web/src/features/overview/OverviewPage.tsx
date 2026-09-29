@@ -37,10 +37,10 @@ export function OverviewPage() {
       ) : (
         <>
           <Figures data={q.data} />
-          <div className="mt-6 grid grid-cols-12 gap-6">
-            <section aria-labelledby="chart-title" className="col-span-7 min-w-0">
+          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
+            <section aria-labelledby="chart-title" className="min-w-0 lg:col-span-7">
               <div className="flex h-10 items-center">
-                <h2 id="chart-title" className="text-13 font-semibold">
+                <h2 id="chart-title" className="text-18 font-semibold">
                   Exceptions by type, last 14 days
                 </h2>
               </div>
@@ -48,17 +48,17 @@ export function OverviewPage() {
                 {q.data ? <ExceptionsChart data={q.data.exceptionsByType} /> : <ExceptionsChartSkeleton />}
               </div>
             </section>
-            <section aria-labelledby="validator-title" className="col-span-5 min-w-0">
+            <section aria-labelledby="validator-title" className="min-w-0 lg:col-span-5">
               <div className="flex h-10 items-center">
-                <h2 id="validator-title" className="text-13 font-semibold">
+                <h2 id="validator-title" className="text-18 font-semibold">
                   Validator outcomes, last 7 days
                 </h2>
               </div>
               <ValidatorOutcomes data={q.data?.validatorOutcomes7d} />
             </section>
-            <section aria-labelledby="oldest-title" className="col-span-12 min-w-0">
+            <section aria-labelledby="oldest-title" className="min-w-0 lg:col-span-12">
               <div className="flex h-10 items-center justify-between">
-                <h2 id="oldest-title" className="text-13 font-semibold">
+                <h2 id="oldest-title" className="text-18 font-semibold">
                   Oldest open cases
                 </h2>
                 <Link to="/exceptions" className="link text-12">

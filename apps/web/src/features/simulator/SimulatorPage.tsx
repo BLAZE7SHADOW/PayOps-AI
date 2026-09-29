@@ -25,16 +25,7 @@ export function SimulatorPage() {
         actions={<ResetActions onDone={() => setEpoch((e) => e + 1)} />}
       />
       <div className="border border-rule bg-surface" role="list" aria-label="Scenarios">
-        <div
-          aria-hidden="true"
-          className="grid h-8 grid-cols-[minmax(0,1fr)_176px_96px_72px_96px] items-center gap-4 border-b border-rule bg-surface-sunk px-4 text-12 font-medium text-ink-2"
-        >
-          <span>Scenario</span>
-          <span>Expected case</span>
-          <span>Seed</span>
-          <span>Noise</span>
-          <span />
-        </div>
+        <p className="border-b border-rule bg-surface-sunk px-5 py-3 text-13 text-ink-2">Choose a scenario to see its inputs and generate a case.</p>
         {SCENARIOS.map((s) => (
           <ScenarioRow key={`${s.key}:${epoch}`} scenario={s} recordedSeeds={recorded.filter((r) => r.scenario === s.key).map((r) => r.seed)} replay={aiMode === 'REPLAY'} />
         ))}

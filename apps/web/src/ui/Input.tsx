@@ -10,8 +10,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ m
     <input
       ref={ref}
       className={cx(
-        'transition-color h-8 min-w-0 rounded-xs border border-rule bg-surface px-2 text-13 text-ink',
-        'hover:border-rule-strong focus:border-rule-strong',
+        'transition-color h-10 min-w-0 rounded-md border border-control bg-surface px-3 text-14 text-ink max-md:h-11',
+        'hover:border-ink-2 focus:border-accent aria-[invalid=true]:border-bad',
         mono && 'tabular font-mono',
         className,
       )}

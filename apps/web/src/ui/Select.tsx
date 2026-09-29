@@ -29,9 +29,9 @@ export function Select<T extends string>({ label, allLabel, value, options, onCh
         aria-label={label}
         style={{ width }}
         className={cx(
-          'transition-color inline-flex h-8 items-center justify-between gap-2 rounded-xs border bg-surface pr-2 pl-2.5 text-13',
-          'hover:border-rule-strong data-[state=open]:border-rule-strong',
-          active ? 'border-rule-strong text-ink' : 'border-rule text-ink-2',
+          'transition-color inline-flex h-10 max-w-full items-center justify-between gap-2 rounded-md border bg-surface pr-3 pl-3 text-14 max-md:h-11',
+          'hover:border-ink-2 data-[state=open]:border-accent',
+          active ? 'border-control text-ink' : 'border-control text-ink-2',
         )}
       >
         <span className={cx('truncate', active && mono && 'font-mono text-12')}>
@@ -45,7 +45,7 @@ export function Select<T extends string>({ label, allLabel, value, options, onCh
         <RS.Content
           position="popper"
           sideOffset={4}
-          className="z-50 max-h-80 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-sm border border-rule bg-surface shadow-pop"
+          className="z-50 max-h-80 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border border-control bg-surface shadow-pop"
         >
           <RS.Viewport className="p-1">
             <Item value={ALL} label={allLabel} />
@@ -64,7 +64,7 @@ function Item({ value, label, mono }: { value: string; label: string; mono?: boo
     <RS.Item
       value={value}
       className={cx(
-        'relative flex h-7 cursor-default items-center rounded-xs pr-2 pl-6 text-13 text-ink outline-none select-none',
+        'relative flex h-9 cursor-default items-center rounded-sm pr-2 pl-6 text-14 text-ink outline-none select-none',
         'data-[highlighted]:bg-accent-weak',
         mono && value !== ALL && 'font-mono text-12',
       )}

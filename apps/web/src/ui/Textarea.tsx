@@ -9,8 +9,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
     <textarea
       ref={ref}
       className={cx(
-        'transition-color min-h-16 w-full resize-y rounded-xs border border-rule bg-surface px-2 py-1.5 text-13 text-ink',
-        'hover:border-rule-strong focus:border-rule-strong aria-[invalid=true]:border-bad',
+        'transition-color min-h-20 w-full resize-y rounded-md border border-control bg-surface px-3 py-2 text-14 text-ink',
+        'hover:border-ink-2 focus:border-accent aria-[invalid=true]:border-bad',
         className,
       )}
       {...rest}

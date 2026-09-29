@@ -1,6 +1,6 @@
 # UI revamp plan
 
-Status: proposed design and implementation plan, 2026-09-29. This is a Phase 6 refinement requested by Shivam. Production UI has not changed. The current authority remains `docs/05-ui-design.md` until the proposed changes below are incorporated during implementation.
+Status: implemented on 2026-09-29 as a Phase 6 refinement requested by Shivam (D055). The current authority is `docs/05-ui-design.md`. This document retains the original design rationale and acceptance targets; see `docs/PROGRESS.md` for validation and remaining usability checks.
 
 ## Outcome
 

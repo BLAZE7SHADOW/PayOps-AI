@@ -13,6 +13,8 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
   const id = useId();
   const [seed, setSeed] = useState('');
   const [noise, setNoise] = useState('0');
+  const [open, setOpen] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
   const gen = useGenerateScenario();
 
   // In REPLAY, an empty seed means the first recorded one; a random seed would have no recording.
@@ -29,15 +31,21 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
 
   return (
     <div role="listitem" className="border-b border-rule last:border-b-0">
-      <form onSubmit={submit} aria-labelledby={`${id}-title`} className="grid grid-cols-[minmax(0,1fr)_176px_96px_72px_96px] items-start gap-4 px-4 py-3">
-        <div className="min-w-0">
-          <p className="flex items-baseline gap-2">
+      <button type="button" aria-expanded={open} aria-controls={`${id}-panel`} onClick={() => setOpen((value) => !value)} className="flex w-full flex-col gap-3 px-5 py-4 text-left hover:bg-surface-sunk sm:flex-row sm:items-center sm:justify-between">
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-baseline gap-2">
             <span id={`${id}-title`} className="text-14 font-medium text-ink">
               {scenario.title}
             </span>
             <span className="truncate font-mono text-12 text-ink-2">{scenario.key}</span>
-          </p>
-          <p className="mt-0.5 max-w-[72ch] text-13 text-ink-2">{scenario.description}</p>
+          </span>
+          <span className="mt-0.5 block max-w-[72ch] text-13 text-ink-2">{scenario.description}</span>
+        </span>
+        <span className="text-13 text-ink-2 sm:shrink-0">{scenario.expectedCaseType ? CASE_TYPE_LABEL[scenario.expectedCaseType] : 'No case expected'} <span aria-hidden="true">{open ? '−' : '+'}</span></span>
+      </button>
+      {open ? <form id={`${id}-panel`} onSubmit={submit} aria-labelledby={`${id}-title`} className="border-t border-rule bg-paper px-5 py-4">
+        <div className="max-w-2xl space-y-4">
+          <p className="text-13 text-ink-2">Generate this scenario, then open its case to investigate the mismatch.</p>
           {recordedSeeds.length > 0 ? (
             <p className="mt-1 flex flex-wrap items-center gap-2 text-12 text-ink-2">
               <span>Recorded seeds</span>
@@ -48,10 +56,9 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
               ))}
             </p>
           ) : null}
-        </div>
-        <p className="pt-1.5 text-13">
-          {scenario.expectedCaseType ? CASE_TYPE_LABEL[scenario.expectedCaseType] : <span className="text-ink-2">No case</span>}
-        </p>
+          <button type="button" className="link text-13" aria-expanded={advanced} onClick={() => setAdvanced((value) => !value)}>{advanced ? 'Hide seed and noise options' : 'Set seed and noise'}</button>
+          {advanced ? <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-13"><span>Seed</span>
         <Input
           mono
           inputMode="numeric"
@@ -61,7 +68,8 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
           value={seed}
           onChange={(e) => setSeed(e.target.value.replace(/[^\d]/g, ''))}
           className={seedValid ? 'w-full' : 'w-full border-bad'}
-        />
+        /></label>
+            <label className="space-y-1 text-13"><span>Noise payments</span>
         <Input
           mono
           inputMode="numeric"
@@ -70,11 +78,14 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
           value={noise}
           onChange={(e) => setNoise(e.target.value.replace(/[^\d]/g, '').slice(0, 2))}
           className={noiseValid ? 'w-full' : 'w-full border-bad'}
-        />
-        <Button type="submit" variant="secondary" disabled={gen.isPending || !seedValid || !noiseValid} className="w-full">
-          {gen.isPending ? 'Generating' : 'Generate'}
+        /></label>
+          </div> : null}
+        <Button type="submit" variant="primary" disabled={gen.isPending || !seedValid || !noiseValid}>
+          {gen.isPending ? 'Generating…' : 'Generate scenario'}
         </Button>
+        </div>
       </form>
+      : null}
       {!noiseValid ? <p className="px-4 pb-3 text-12 text-bad">Noise must be between 0 and 50.</p> : null}
       {gen.isError ? (
         <ErrorState className="border-t border-rule bg-paper py-3" title="Generation failed." error={gen.error} onRetry={() => gen.reset()} />
@@ -114,8 +125,8 @@ function Result({ r }: { r: GenerateScenarioResult }) {
           <span className="flex flex-wrap gap-x-3">
             {r.casesOpened.map((c) => (
               <span key={c.id}>
-                <Link to={`/cases/${c.id}`} className="link font-mono">
-                  {c.displayId}
+                <Link to={`/cases/${c.id}`} className="link inline-flex min-h-10 items-center font-mono text-14 font-medium">
+                  Open {c.displayId}
                 </Link>{' '}
                 <span className="text-ink-2">{CASE_TYPE_LABEL[c.type]}</span>
               </span>

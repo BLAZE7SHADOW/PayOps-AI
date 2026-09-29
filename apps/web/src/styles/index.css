@@ -10,10 +10,12 @@
   --color-surface-sunk: var(--surface-sunk);
   --color-rule: var(--rule);
   --color-rule-strong: var(--rule-strong);
+  --color-control: var(--control);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-weak: var(--accent-weak);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
@@ -38,17 +40,25 @@
   --text-13--line-height: 20px;
   --text-14: 14px;
   --text-14--line-height: 20px;
+  --text-15: 15px;
+  --text-15--line-height: 23px;
   --text-16: 16px;
   --text-16--line-height: 24px;
+  --text-18: 18px;
+  --text-18--line-height: 26px;
   --text-20: 20px;
   --text-20--line-height: 28px;
   --text-24: 24px;
   --text-24--line-height: 32px;
+  --text-28: 28px;
+  --text-28--line-height: 36px;
 
-  /* Radius 0 to 4px only (§4). */
+  /* Control and panel radii (§4). */
   --radius-*: initial;
   --radius-xs: 2px;
   --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 
   --shadow-*: initial;
   --shadow-pop: var(--shadow-pop);

@@ -98,10 +98,10 @@ export function Table<T>({
   const activeCursor = Math.min(cursor, Math.max(sorted.length - 1, 0));
 
   return (
-    <div className="border border-rule bg-surface">
+    <div className="overflow-x-auto rounded-lg border border-rule bg-surface" role="region" aria-label={`${label} table`} tabIndex={minWidth ? 0 : undefined}>
       <table
         aria-label={label}
-        className="w-full table-fixed border-separate border-spacing-0 text-13"
+        className="w-full table-fixed border-separate border-spacing-0 text-14"
         style={minWidth ? { minWidth } : undefined}
       >
         <colgroup>
@@ -120,7 +120,7 @@ export function Table<T>({
                   aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : undefined}
                   style={{ top: stickyTop }}
                   className={cx(
-                    'sticky z-10 h-8 border-b border-rule bg-surface-sunk px-2 text-12 font-medium text-ink-2 first:pl-3 last:pr-3',
+                    'sticky z-10 h-10 border-b border-rule bg-surface-sunk px-3 text-13 font-medium text-ink-2 first:pl-4 last:pr-4',
                     c.align === 'right' ? 'text-right' : 'text-left',
                     afterRight(columns, ci) && 'pl-6',
                   )}
@@ -149,7 +149,7 @@ export function Table<T>({
         <tbody ref={bodyRef} onKeyDown={onKeyDown} aria-busy={loading || undefined}>
           {loading
             ? Array.from({ length: skeletonRows }, (_, i) => (
-                <tr key={i} className="h-9">
+                <tr key={i} className="h-11">
                   {columns.map((c, ci) => (
                     <td key={c.key} className={cx('border-b border-rule px-2 first:pl-3 last:pr-3', afterRight(columns, ci) && 'pl-6')}>
                       <Skeleton
@@ -176,7 +176,7 @@ export function Table<T>({
                       onRowOpen?.(row);
                     }}
                     className={cx(
-                      'transition-color h-9 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
+                      'transition-color h-11 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
                       onRowOpen && 'cursor-pointer',
                       selected ? 'bg-accent-weak' : 'hover:bg-paper',
                     )}

@@ -910,3 +910,21 @@ cannot make one scenario answer another's prompt. No schema change and no genera
 `captured_order_failed` (seed 3201), `refund_stuck` (3202) or `refund_never_initiated` (3203) in the
 Simulator. Seeded cases and other seeds still miss and escalate, by design (D034). Verified in a browser:
 seed 3201 ends RESOLVED on the FULL path with 3 LLM and 4 Jev calls, all replayed.
+
+
+## D055 · UI hierarchy and state-aware case actions
+
+**Decision.** The Phase 6 UI revamp uses brighter warm surfaces, 6px control and 8px panel radii,
+larger controls and headings, a visible neutral control boundary, and one strong action per task
+area. The Case page presents the next permitted action in a single rail and moves findings ahead
+of trace and raw evidence. Approval review asks the reviewer to choose a decision before the
+submit button is enabled. Simulator scenarios reveal their inputs when selected, with seed and
+noise under an advanced control. The implementation follows `docs/05-ui-design.md`.
+
+**Why.** The original 32px controls and equally weighted boxed sections made the main task hard to
+locate. These changes let an operator scan the problem, evidence, action, and result in that order.
+
+**Consequences.** Client presentation remains subordinate to the existing role, case, run, and
+server authorization checks. No policy or API behavior changes. Citation links open their collapsed
+evidence panel and focus the cited item. Tables scroll locally on narrow screens, and the shell
+switches to a horizontal navigation list when the side rail no longer fits.

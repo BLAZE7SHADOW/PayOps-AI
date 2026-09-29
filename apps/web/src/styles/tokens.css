@@ -8,14 +8,16 @@
  */
 :root {
   --paper: #f5f2ea;
-  --surface: #fbf9f4;
+  --surface: #fffefb;
   --surface-sunk: #eeeae0;
   --rule: #ddd6c8;
   --rule-strong: #c4bba9;
-  --ink: #1c1b18;
-  --ink-2: #55514a;
+  --control: #748279;
+  --ink: #202923;
+  --ink-2: #536159;
   --ink-3: #8a8479;
   --accent: #1e5a4c;
+  --accent-hover: #16473c;
   --accent-weak: #dce8e2;
   --ok: #2e6b3a;
   --warn: #94660f;

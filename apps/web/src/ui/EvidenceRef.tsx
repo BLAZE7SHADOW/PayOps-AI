@@ -9,6 +9,8 @@ export function EvidenceRef({ runId, id, onHighlight }: { runId: string; id: str
       onClick={(event) => {
         event.preventDefault();
         const row = document.getElementById(evidenceAnchor(runId, id));
+        const panel = row?.closest('details');
+        if (panel) panel.open = true;
         row?.scrollIntoView({ block: 'nearest' });
         row?.focus({ preventScroll: true });
         onHighlight(id);

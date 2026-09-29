@@ -4,7 +4,7 @@
 
 PayOps is an **internal operations tool** used for hours at a time by people reconciling money. It should feel like a well-made ledger: calm, dense, precise, printed-paper warm. Reference feel: Stripe Dashboard's tables, Linear's restraint, a bank statement's typography. It should not look like a landing-page template or an "AI app".
 
-The signature of this product is the **state matrix**: one payment shown as five systems see it, side by side, with the disagreement marked. Every screen should make disagreement and evidence easy to see. That is where the design effort goes.
+The signature of this product is the **state matrix**: one payment shown as five systems see it, side by side, with the disagreement marked. Every screen should make disagreement and evidence easy to see. The user should see the problem, cited cause, and next permitted action in that order. `docs/UI-REVAMP-PLAN.md` records the Phase 6 hierarchy and workflow pass (D055).
 
 ## 2. Tokens (the only colors allowed)
 
@@ -13,14 +13,16 @@ Defined once in `apps/web/src/styles/tokens.css` as CSS variables and mapped int
 | Token | Value | Use |
 |---|---|---|
 | `--paper` | `#F5F2EA` | app background (never pure white) |
-| `--surface` | `#FBF9F4` | tables, panels |
+| `--surface` | `#FFFEFB` | tables, panels and working surfaces |
 | `--surface-sunk` | `#EEEAE0` | table header, code blocks, matrix header |
 | `--rule` | `#DDD6C8` | 1px hairlines, all borders |
 | `--rule-strong` | `#C4BBA9` | focused input border, selected row edge |
-| `--ink` | `#1C1B18` | primary text |
-| `--ink-2` | `#55514A` | secondary text |
+| `--control` | `#748279` | required input and outlined-button boundary |
+| `--ink` | `#202923` | primary text |
+| `--ink-2` | `#536159` | secondary text |
 | `--ink-3` | `#8A8479` | placeholders, separators, chart marks only (3.3:1 on paper, so never for meaningful text; use `--ink-2`) |
 | `--accent` | `#1E5A4C` | primary buttons, links, focus ring (ledger green) |
+| `--accent-hover` | `#16473C` | primary action hover and pressed feedback |
 | `--accent-weak` | `#DCE8E2` | selected row, active nav |
 | `--ok` | `#2E6B3A` | PASS, matched |
 | `--warn` | `#94660F` | PARTIAL, pending, awaiting approval |
@@ -33,17 +35,17 @@ Dark mode is out of scope for the MVP. If added later, it gets its own hand-tune
 
 ## 3. Type
 
-- **UI:** IBM Plex Sans (400, 500, 600). Base 14px, tables 13px, line-height 1.45.
+- **UI:** IBM Plex Sans (400, 500, 600). Base 15px for reading, 14px for controls and tables, line-height 1.5 for prose.
 - **Data:** IBM Plex Mono for IDs, amounts, timestamps, status codes, evidence refs. `font-variant-numeric: tabular-nums` everywhere numbers align.
-- Scale: 12 / 13 / 14 / 16 / 20 / 24. Page titles 20px 600. No display sizes, no gradient text, no letter-spaced uppercase hero headings.
+- Scale: 12 / 13 / 14 / 15 / 16 / 18 / 20 / 24 / 28. Page titles 28px 600, section headings 18–20px. Technical metadata remains 12–13px. No display sizes or gradient text.
 - Amounts right-aligned, always with `₹` and Indian grouping (`₹12,499.00`), from `formatMoney()`.
 
 ## 4. Shape, depth, motion
 
-- Radius: `2px` inputs/buttons/tags, `0` tables and the matrix, `4px` dialogs and popovers. Nothing rounder.
+- Radius: `6px` controls, `8px` major panels/dialogs, `0` table cells and the matrix. Status tags can remain compact at `2–4px`.
 - Depth: borders, not shadows. The only shadow allowed is on popovers/dialogs: `0 1px 0 var(--rule), 0 8px 24px rgb(28 27 24 / 0.08)`.
 - Motion: color/background transitions ≤ 100ms. No transforms on hover, no bouncing, no animated arrows, no parallax. Live agent steps appear by inserting a row, no slide-in.
-- Density: table rows 36px, compact mode 30px. 8px spacing grid (4px allowed inside components).
+- Density: standard table rows 44px, compact desktop rows 32px only when useful. Major controls 40px desktop and 44px on touch layouts. Spacing scale 4 / 8 / 12 / 16 / 24 / 32 / 48px.
 
 ## 5. Icons
 
@@ -54,6 +56,8 @@ Dark mode is out of scope for the MVP. If added later, it gets its own hand-tune
 ## 6. Components (in `apps/web/src/ui/`)
 
 Built on unstyled Radix primitives, styled with our tokens: `Button` (primary / secondary / quiet / danger), `Input`, `Select`, `Tag` (status), `Money`, `Mono`, `Table` (sortable headers, sticky header, keyboard row nav), `Drawer`, `Dialog`, `Tabs`, `Tooltip`, `Skeleton`, `EmptyState`, `KeyValue`, `Timeline`, `EvidenceRef`, `StateMatrix`, `Sparkline`.
+
+Action hierarchy: one filled primary action in the active task area; secondary is the alternate path; quiet is tertiary support. Destructive entry uses a danger outline and final destructive confirmation uses a filled danger treatment. A dialog or drawer owns its own primary action while open. Navigation stays a link. Approval review must present the proposed operation, amount, evidence, and policy before a person chooses a decision; never visually preselect approval.
 
 `EvidenceRef` renders `[ev_03]` in mono; hover or focus highlights the matching evidence row in the evidence panel, click scrolls to it. Findings and the root-cause statement use these inline. This is the main way we show the AI is grounded.
 
@@ -95,7 +99,7 @@ Built on unstyled Radix primitives, styled with our tokens: `Button` (primary / 
 | 16 | Checkmark bullets | Step status as text tags (`DONE`, `RUNNING`, `FAILED`) with step numbers |
 | 17 | 3 pricing tiers | No pricing page |
 | 18 | No real product demo | Landing page shows real screen recordings from the running app |
-| 19 | Soft big radius | 0–4px |
+| 19 | Soft big radius | Controlled 6–8px on interactive surfaces; square tables |
 | 20 | Purple and black | Ledger green on warm paper |
 | 21 | No skeleton loaders | Skeletons everywhere data loads |
 | 22 | Radial orbs | None |
@@ -112,7 +116,7 @@ Built on unstyled Radix primitives, styled with our tokens: `Button` (primary / 
 
 - Left nav 216px, fixed: Overview, Payments, Exceptions (count), Approvals (count), Agent runs, Audit log; bottom: Simulator, Policy, user menu.
 - Top bar 48px: breadcrumb, global search (`/` focuses, searches payment/order/case ids), an always-visible `SIMULATED DATA` tag, and `AI: REPLAY | LIVE` tag.
-- Content max width none (tables use full width); reading panels max 72ch.
+- Content max width none (tables use full width); reading panels max 72ch. On narrow screens, actions follow the case summary and wide tables scroll within their own region. A state-aware action area keeps the next permitted operation visible without inventing operations.
 
 ## 11. Screens
 

@@ -19,7 +19,7 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope). UI revamp planning is now complete.** Next: implement the foundation and Case-page pass from `docs/UI-REVAMP-PLAN.md`, incorporating the proposed spec changes in `docs/05-ui-design.md` first. The local interactive design study is `docs/UI-REVAMP-PREVIEW.html`; production UI has not changed.
+**Phase 6 is complete (parts A-D, D051 scope). The UI revamp is implemented (D055).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
 
 Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
@@ -103,6 +103,12 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Phase 6 UI revamp implementation (D055)
+- Updated UI tokens, type, radii, controls, table density, responsive shell, and the production UI spec. Case pages now show a state-aware next action beside findings; trace, evidence and lifecycle are available on demand. Citation links reveal and focus their evidence item.
+- Approval decisions require a deliberate selection before submit. Simulator scenarios reveal inputs on selection, with seed and noise tucked into an advanced control. Overview sections and demo sign-in hierarchy were adjusted for readability and narrow screens.
+- Checks: all package typechecks, lint, web production build, and 445/445 tests pass. Headless Chrome checked Simulator at 1440px and 390px: no page-wide horizontal overflow or page errors. A final first-time usability trial and Lighthouse audit remain follow-ups.
+
 
 ### 2026-09-29 · UI revamp plan and interactive design study
 - Reviewed current buttons, Case/investigation/resolution hierarchy, approval controls, Simulator flow, the saved Case screenshot, and the UI spec. Researched Carbon, NN/g, and W3C guidance.

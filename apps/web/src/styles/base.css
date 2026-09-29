@@ -8,8 +8,8 @@
     background: var(--paper);
     color: var(--ink);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.45;
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -19,7 +19,7 @@
   }
   :focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
   input::placeholder {
     color: var(--ink-3);
@@ -61,5 +61,11 @@
   }
   .link:hover {
     text-decoration-color: var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .transition-color {
+    transition-duration: 0ms;
   }
 }
