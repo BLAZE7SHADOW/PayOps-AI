@@ -103,6 +103,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-09-29 · Brother repository handoff (in progress)
+- Confirmed the working tree is clean and the repository has 26 commits on `master`; history uses two versions of Shivam's Git name/email.
+- Prepared an isolated local clone for a ZIP with rewritten author and committer metadata. Exact brother name/email is still needed before rewriting or packaging. The original history remains untouched.
+
 ### 2026-09-29 · Free deploy prep, reset undo, wider replay coverage
 - Reset now snapshots the demo data first (`packages/simulator/src/undo.ts`, schema `demo_undo`); `POST /api/simulator/undo-reset` restores it, `GET /reset-status` reports it. 10 s cooldown and a lock on reset and undo. Simulator page has "Undo last reset". Test added in `apps/server/src/app.test.ts`.
 - `record-cassettes.ts` now covers all 8 fault scenarios, two seeds each, appends by default, writes `fixtures/cassettes/manifest.json`, and auto-approves any approval as a manager. **Not yet run: Shivam must run `pnpm cassette:record` on the Mac with real keys, then commit `fixtures/cassettes/`.** Manifest currently lists only the original 3.
