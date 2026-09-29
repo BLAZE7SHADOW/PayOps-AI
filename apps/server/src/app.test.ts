@@ -14,7 +14,7 @@ import type {
   PaymentListItem,
   AuditEventItem,
 } from '@payops/shared';
-import { SCENARIOS } from '@payops/shared';
+import { SCENARIOS, type WebhookLogDetail, type HandoffSummary, type OperatorNoteItem, type SavedViewItem } from '@payops/shared';
 import { createRunRow, patchRunRow } from '@payops/agents';
 import { createCore, createLogger, loadServerEnv, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
@@ -125,7 +125,7 @@ describe('cases API', () => {
     expect(body.total).toBe(3);
     const item = body.items[0]!;
     expect(Object.keys(item).sort()).toEqual(
-      ['amountMinor', 'assignee', 'displayId', 'id', 'mismatched', 'openedAt', 'primaryRef', 'priority', 'ruleIds', 'severity', 'signals', 'status', 'type', 'updatedAt'].sort(),
+      ['amountMinor', 'assignee', 'displayId', 'dueAt', 'id', 'mismatched', 'openedAt', 'overdue', 'primaryRef', 'priority', 'ruleIds', 'severity', 'signals', 'status', 'type', 'updatedAt'].sort(),
     );
     expect(item).toMatchObject({ severity: 'CRITICAL', status: 'OPEN', mismatched: ['ORDER'], assignee: null });
   });
@@ -262,5 +262,204 @@ describe('agent runs API: grounding round-trips (Phase 4 task 8, docs/DECISIONS.
 
     const checked = (await ops.get(`/api/runs/${runId}`).expect(200)).body as AgentRunItem;
     expect(checked.grounding).toEqual(grounding);
+  });
+});
+
+describe('agent runs API: diagnosis feedback (P1 task 3, docs/DECISIONS.md D065)', () => {
+  it('records feedback, lists it, validates a WRONG verdict, and keeps viewers read-only', async () => {
+    const cases = (await ops.get('/api/cases?type=PAYMENT_MISMATCH').expect(200)).body as Page<CaseListItem>;
+    const runId = 'run_feedback_apitest';
+    await createRunRow(core, { id: runId, caseId: cases.items[0]!.id });
+
+    // No diagnosis yet: nothing to judge.
+    await ops.put(`/api/runs/${runId}/feedback`).send({ verdict: 'RIGHT' }).expect(409);
+
+    await patchRunRow(core, runId, {
+      diagnosis: { rootCause: 'WEBHOOK_PROCESSING_FAILURE', narrative: 'The webhook failed.', confidence: 0.9, supportingFindingIds: [], path: 'FAST' },
+    });
+
+    // A WRONG verdict without a reason is a validation error.
+    await ops.put(`/api/runs/${runId}/feedback`).send({ verdict: 'WRONG' }).expect(422);
+
+    const saved = (await ops.put(`/api/runs/${runId}/feedback`).send({ verdict: 'WRONG', reason: 'The consumer returned 200.', correctRootCause: 'ORDER_STATE_DIVERGED' }).expect(200)).body;
+    expect(saved).toMatchObject({ verdict: 'WRONG', diagnosedRootCause: 'WEBHOOK_PROCESSING_FAILURE', correctRootCause: 'ORDER_STATE_DIVERGED', givenByName: 'Ananya Rao' });
+
+    const listed = (await ops.get(`/api/runs/${runId}/feedback`).expect(200)).body as Page<{ verdict: string }>;
+    expect(listed.items.map((f) => f.verdict)).toEqual(['WRONG']);
+
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.get(`/api/runs/${runId}/feedback`).expect(200);
+    await viewer.put(`/api/runs/${runId}/feedback`).send({ verdict: 'RIGHT' }).expect(403);
+  });
+});
+
+describe('agent control API (P1 task 4, docs/DECISIONS.md D066)', () => {
+  it('is NORMAL by default, only managers can change it, and a pause blocks new investigations', async () => {
+    const start = (await ops.get('/api/agent-control').expect(200)).body;
+    expect(start).toMatchObject({ mode: 'NORMAL', reason: '' });
+
+    // An Ops analyst can read but not change it.
+    await ops.put('/api/agent-control').send({ mode: 'PAUSED', reason: 'Gateway outage.' }).expect(403);
+
+    const manager = request.agent(app);
+    await manager.post('/api/auth/demo-login').send({ email: 'manager@payops.dev' }).expect(200);
+    // Limiting the agent needs a reason.
+    await manager.put('/api/agent-control').send({ mode: 'PAUSED' }).expect(422);
+    const paused = (await manager.put('/api/agent-control').send({ mode: 'PAUSED', reason: 'Gateway outage.' }).expect(200)).body;
+    expect(paused).toMatchObject({ mode: 'PAUSED', reason: 'Gateway outage.', changedByName: 'Meera Iyer' });
+
+    const cases = (await ops.get('/api/cases?type=PAYMENT_MISMATCH').expect(200)).body as Page<CaseListItem>;
+    const blocked = await ops.post(`/api/cases/${cases.items[0]!.id}/runs`).send({}).expect(409);
+    expect(blocked.body.error.message).toContain('The agent is paused: Gateway outage.');
+
+    await manager.put('/api/agent-control').send({ mode: 'NORMAL' }).expect(200);
+    await ops.post(`/api/cases/${cases.items[0]!.id}/runs`).send({}).expect(202);
+  });
+});
+
+describe('case assignment API (P2 task 1, docs/DECISIONS.md D067)', () => {
+  it('lets OPS assign and clear, rejects viewers and non-OPS assignees, and filters the queue', async () => {
+    const loginId = async (email: string) => {
+      const res = await request.agent(app).post('/api/auth/demo-login').send({ email }).expect(200);
+      return ((res.body as { user?: { id: string } }).user ?? (res.body as { id: string })).id;
+    };
+    const [opsId, viewerId] = [await loginId('ops2@payops.dev'), await loginId('viewer@payops.dev')];
+    const list = (await ops.get('/api/cases?scope=open&limit=5').expect(200)).body as Page<CaseListItem>;
+    const target = list.items[0]!;
+
+    const assigned = (await ops.put(`/api/cases/${target.id}/assignee`).send({ assigneeId: opsId }).expect(200)).body as CaseListItem;
+    expect(assigned.assignee).toMatchObject({ id: opsId, name: 'Rahul Menon' });
+    const mine = (await ops.get(`/api/cases?scope=open&assigneeId=${opsId}`).expect(200)).body as Page<CaseListItem>;
+    expect(mine.items.map((c) => c.id)).toEqual([target.id]);
+
+    await ops.put(`/api/cases/${target.id}/assignee`).send({ assigneeId: viewerId }).expect(422);
+    await ops.put(`/api/cases/${target.id}/assignee`).send({}).expect(422);
+    await ops.put('/api/cases/case_missing/assignee').send({ assigneeId: opsId }).expect(404);
+
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.put(`/api/cases/${target.id}/assignee`).send({ assigneeId: null }).expect(403);
+
+    const cleared = (await ops.put(`/api/cases/${target.id}/assignee`).send({ assigneeId: null }).expect(200)).body as CaseListItem;
+    expect(cleared.assignee).toBeNull();
+    const overdue = (await ops.get('/api/cases?scope=open&overdue=true').expect(200)).body as Page<CaseListItem>;
+    expect(overdue.items).toEqual([]);
+    await ops.get('/api/cases?overdue=maybe').expect(422);
+  });
+});
+
+describe('operator workflow API (P2 task 2, docs/DECISIONS.md D068)', () => {
+  it('adds and lists case notes, OPS only for writing', async () => {
+    const list = (await ops.get('/api/cases?scope=open&limit=1').expect(200)).body as Page<CaseListItem>;
+    const id = list.items[0]!.id;
+    const note = (await ops.post(`/api/cases/${id}/notes`).send({ text: ' Called the merchant. ' }).expect(201)).body as OperatorNoteItem;
+    expect(note).toMatchObject({ caseId: id, text: 'Called the merchant.', authorName: 'Ananya Rao' });
+    const notes = (await ops.get(`/api/cases/${id}/notes`).expect(200)).body as Page<OperatorNoteItem>;
+    expect(notes.items.map((n) => n.id)).toEqual([note.id]);
+
+    await ops.post(`/api/cases/${id}/notes`).send({ text: '   ' }).expect(422);
+    await ops.post('/api/cases/case_missing/notes').send({ text: 'x' }).expect(404);
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.post(`/api/cases/${id}/notes`).send({ text: 'x' }).expect(403);
+    await viewer.get(`/api/cases/${id}/notes`).expect(200);
+  });
+
+  it('keeps saved views private to their owner', async () => {
+    const made = (await ops.post('/api/views').send({ name: 'My overdue', filters: { overdue: true, assigneeId: 'me' } }).expect(201)).body as SavedViewItem;
+    await ops.post('/api/views').send({ name: 'My overdue', filters: {} }).expect(409);
+    await ops.post('/api/views').send({ name: 'Bad', filters: { severity: 'SEVERE' } }).expect(422);
+    await ops.post('/api/views').send({ name: 'Extra', filters: { nope: 1 } }).expect(422);
+
+    const other = request.agent(app);
+    await other.post('/api/auth/demo-login').send({ email: 'ops2@payops.dev' }).expect(200);
+    expect(((await other.get('/api/views').expect(200)).body as Page<SavedViewItem>).items).toEqual([]);
+    await other.delete(`/api/views/${made.id}`).send({}).expect(404);
+
+    expect(((await ops.get('/api/views').expect(200)).body as Page<SavedViewItem>).items.map((v) => v.id)).toEqual([made.id]);
+    await ops.delete(`/api/views/${made.id}`).send({}).expect(204);
+    expect(((await ops.get('/api/views').expect(200)).body as Page<SavedViewItem>).items).toEqual([]);
+  });
+
+  it('returns the handoff summary and validates the window', async () => {
+    const h = (await ops.get('/api/handoff?hours=12').expect(200)).body as HandoffSummary;
+    expect(h.sinceHours).toBe(12);
+    expect(h.open.total).toBe(3);
+    expect(h.needsAttention.length).toBeGreaterThan(0);
+    expect(((await ops.get('/api/handoff').expect(200)).body as HandoffSummary).sinceHours).toBe(8);
+    await ops.get('/api/handoff?hours=0').expect(422);
+    await ops.get('/api/handoff?hours=100').expect(422);
+  });
+});
+
+describe('bulk approve API (D069)', () => {
+  it('is OPS-only, validates the body and approves an eligible item proposed by someone else', async () => {
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.post('/api/approvals/bulk-approve').send({ ids: ['apr_x'] }).expect(403);
+    await ops.post('/api/approvals/bulk-approve').send({ ids: [] }).expect(422);
+
+    const { casesOpened } = await generate('duplicate_capture', 9101);
+    const caseId = casesOpened[0]!.id;
+    const me = await ops.get('/api/auth/me').expect(200);
+    const opsUser = { id: me.body.id as string, email: 'ops@payops.dev', name: 'Ananya Rao', role: 'OPS' as const };
+    const detail = await core.cases.get(caseId, opsUser);
+    const actions = detail.resolutionView.actionOptions.filter((o) => o.recommended).map((o) => o.action);
+    await core.resolutions.propose(caseId, { actions, rationale: 'Refund the duplicate' }, opsUser);
+    const pending = (await core.approvals.list({ scope: 'pending', limit: 10 }, null)).items.find((a) => a.case.id === caseId)!;
+
+    // The proposer cannot bulk approve their own proposal.
+    const own = await ops.post('/api/approvals/bulk-approve').send({ ids: [pending.id] }).expect(200);
+    expect(own.body).toMatchObject({ approved: 0, skipped: 1 });
+
+    const ops2 = request.agent(app);
+    await ops2.post('/api/auth/demo-login').send({ email: 'ops2@payops.dev' }).expect(200);
+    const res = await ops2.post('/api/approvals/bulk-approve').send({ ids: [pending.id] }).expect(200);
+    expect(res.body).toMatchObject({ approved: 1, skipped: 0, failed: 0 });
+  });
+});
+
+describe('undo API (D070)', () => {
+  it('is OPS-only and refuses a resolution that posted nothing', async () => {
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.post('/api/cases/cas_x/resolutions/res_x/undo').send({}).expect(403);
+
+    const { casesOpened } = await generate('captured_order_failed', 9102);
+    const caseId = casesOpened[0]!.id;
+    const me = await ops.get('/api/auth/me').expect(200);
+    const opsUser = { id: me.body.id as string, email: 'ops@payops.dev', name: 'Ananya Rao', role: 'OPS' as const };
+    const detail = await core.cases.get(caseId, opsUser);
+    const actions = detail.resolutionView.actionOptions.filter((o) => o.recommended).map((o) => o.action);
+    const created = { body: await core.resolutions.propose(caseId, { actions, rationale: 'Replay the failed webhook' }, opsUser) };
+    await ops.post(`/api/cases/${caseId}/resolutions/${created.body.id}/undo`).send({}).expect(409);
+    await ops.post(`/api/cases/${caseId}/resolutions/res_missing/undo`).send({}).expect(404);
+  });
+});
+
+describe('webhook event log API', () => {
+  it('logs gateway deliveries, lets OPS replay one, and keeps viewers read-only', async () => {
+    await ops.post('/api/simulator/reset').send({}).expect(200);
+    await generate('captured_order_failed', 9301);
+    const list = (await ops.get('/api/webhooks').expect(200)).body as Page<{ id: string; status: string }>;
+    const failed = list.items.find((e) => e.status === 'DEAD');
+    expect(failed).toBeDefined();
+    const counts = (await ops.get('/api/webhooks/counts').expect(200)).body as { processed: number; failed: number; dead: number };
+    expect(counts.failed + counts.processed + counts.dead).toBe(list.items.length);
+
+    const detail = (await ops.get(`/api/webhooks/${failed!.id}`).expect(200)).body as WebhookLogDetail;
+    expect(detail.payload.id).toBe(failed!.id);
+    await ops.get('/api/webhooks/evt_missing').expect(404);
+    await ops.get('/api/webhooks?status=BOGUS').expect(422);
+
+    const viewer = request.agent(app);
+    await viewer.post('/api/auth/demo-login').send({ email: 'viewer@payops.dev' }).expect(200);
+    await viewer.get('/api/webhooks').expect(200);
+    await viewer.post(`/api/webhooks/${failed!.id}/replay`).send({}).expect(403);
+
+    const replayed = (await ops.post(`/api/webhooks/${failed!.id}/replay`).send({}).expect(200)).body as WebhookLogDetail;
+    expect(replayed.attempts.at(-1)?.source).toBe('MANUAL');
+    await ops.post('/api/webhooks/evt_missing/replay').send({}).expect(404);
   });
 });

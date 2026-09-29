@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { PgBoss } from 'pg-boss';
 import { pingDatabase, type Core, type Database, type ServerEnv } from '@payops/core';
 import type { SessionConfig } from '../auth/session';
+import { agentControlRoutes } from './agent-control';
 import { approvalRoutes } from './approvals';
 import { authRoutes } from './auth';
 import { policyRoutes } from './policy';
@@ -11,6 +12,8 @@ import { overviewRoutes } from './overview';
 import { paymentRoutes } from './payments';
 import { runRoutes } from './runs';
 import { simulatorRoutes } from './simulator';
+import { webhookRoutes } from './webhooks';
+import { handoffRoutes, savedViewRoutes } from './workflow';
 
 export interface RouteDeps {
   database: Database;
@@ -40,6 +43,10 @@ export function buildRouter(deps: RouterDeps): Router {
   router.use('/audit', auditRoutes(deps.core));
   router.use('/approvals', approvalRoutes(deps.core));
   router.use('/policy', policyRoutes());
+  router.use('/agent-control', agentControlRoutes(deps.core));
+  router.use('/views', savedViewRoutes(deps.core));
+  router.use('/handoff', handoffRoutes(deps.core));
+  router.use('/webhooks', webhookRoutes(deps.core));
 
   return router;
 }

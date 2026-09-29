@@ -6,9 +6,9 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 import { tables, type Core } from '@payops/core';
-import { RunListQuery, type AgentRunItem, type AgentStepItem, type Page } from '@payops/shared';
-import { requireRole } from '../auth/middleware';
-import { param, parseQuery } from '../lib/validate';
+import { DiagnosisFeedbackBody, RunListQuery, type AgentRunItem, type AgentStepItem, type DiagnosisFeedbackItem, type Page } from '@payops/shared';
+import { requireRole, sessionUser } from '../auth/middleware';
+import { param, parseBody, parseQuery } from '../lib/validate';
 
 const { agentRuns, agentSteps } = tables;
 
@@ -38,6 +38,7 @@ async function toRunItem(core: Core, row: typeof agentRuns.$inferSelect): Promis
     proposal: row.proposal,
     policy,
     approvalId: row.approvalId,
+    error: row.error,
     executions,
     validation,
     findings: row.findings,
@@ -81,6 +82,18 @@ export function runRoutes(core: Core): Router {
   router.get('/:id/steps', requireRole('VIEWER'), async (req, res) => {
     const rows = await core.db.select().from(agentSteps).where(eq(agentSteps.runId, param(req, 'id'))).orderBy(agentSteps.seq);
     const body: Page<AgentStepItem> = { items: rows.map(toStepItem), nextCursor: null, total: rows.length };
+    res.json(body);
+  });
+
+  /** Operator feedback on the run's diagnosis (P1 task 3, D065). */
+  router.get('/:id/feedback', requireRole('VIEWER'), async (req, res) => {
+    const items = await core.feedback.listForRun(param(req, 'id'));
+    const body: Page<DiagnosisFeedbackItem> = { items, nextCursor: null, total: items.length };
+    res.json(body);
+  });
+
+  router.put('/:id/feedback', requireRole('OPS'), async (req, res) => {
+    const body: DiagnosisFeedbackItem = await core.feedback.submit(param(req, 'id'), parseBody(DiagnosisFeedbackBody, req), sessionUser(req));
     res.json(body);
   });
 

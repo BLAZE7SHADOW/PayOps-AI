@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { ApprovalDecisionBody, ApprovalListQuery, type ApprovalDetail, type ApprovalItem, type Page } from '@payops/shared';
+import {
+  ApprovalDecisionBody,
+  ApprovalListQuery,
+  BulkApprovalBody,
+  type ApprovalDetail,
+  type ApprovalItem,
+  type BulkApprovalResult,
+  type Page,
+} from '@payops/shared';
 import type { Core } from '@payops/core';
 import { requireRole, sessionUser } from '../auth/middleware';
 import { param, parseBody, parseQuery } from '../lib/validate';
@@ -9,6 +17,12 @@ export function approvalRoutes(core: Core): Router {
 
   router.get('/', requireRole('VIEWER'), async (req, res) => {
     const body: Page<ApprovalItem> = await core.approvals.list(parseQuery(ApprovalListQuery, req), sessionUser(req));
+    res.json(body);
+  });
+
+  // Declared before '/:id' routes. Same rules as a single decision, per item (D069).
+  router.post('/bulk-approve', requireRole('OPS'), async (req, res) => {
+    const body: BulkApprovalResult = await core.approvals.bulkApprove(parseBody(BulkApprovalBody, req), sessionUser(req));
     res.json(body);
   });
 

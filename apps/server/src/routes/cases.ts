@@ -2,8 +2,11 @@ import { Router } from 'express';
 import type { PgBoss } from 'pg-boss';
 import { createAgentRun } from '@payops/agents';
 import {
+  AssignCaseBody,
   CaseListQuery,
   CreateRunBody,
+  OperatorNoteBody,
+  type OperatorNoteItem,
   PreviewActionsBody,
   ProposeActionsBody,
   type CaseDetail,
@@ -13,7 +16,7 @@ import {
   type PolicyPreview,
   type ResolutionItem,
 } from '@payops/shared';
-import { loadCaseState, projectCaseSourceRecords, type Core } from '@payops/core';
+import { loadCaseState, notFound, projectCaseSourceRecords, type Core } from '@payops/core';
 import type { AgentRunJobPayload } from '../jobs/agents';
 import { QUEUES } from '../jobs/boss';
 import { requireRole, sessionUser } from '../auth/middleware';
@@ -32,6 +35,24 @@ export function caseRoutes(core: Core, boss: PgBoss): Router {
     res.json(body);
   });
 
+  router.put('/:id/assignee', requireRole('OPS'), async (req, res) => {
+    const { assigneeId } = parseBody(AssignCaseBody, req);
+    const body: CaseListItem = await core.cases.assign(param(req, 'id'), assigneeId, sessionUser(req));
+    res.json(body);
+  });
+
+  /** Operator notes (P2 task 2, D068). Newest first. */
+  router.get('/:id/notes', requireRole('VIEWER'), async (req, res) => {
+    const items = await core.caseNotes.list(param(req, 'id'));
+    const body: Page<OperatorNoteItem> = { items, nextCursor: null, total: items.length };
+    res.json(body);
+  });
+
+  router.post('/:id/notes', requireRole('OPS'), async (req, res) => {
+    const body: OperatorNoteItem = await core.caseNotes.add(param(req, 'id'), parseBody(OperatorNoteBody, req), sessionUser(req));
+    res.status(201).json(body);
+  });
+
   router.get('/:id/records', requireRole('VIEWER'), async (req, res) => {
     const state = await loadCaseState(core.db, core.gateway, param(req, 'id'), core.clock.now());
     const body: CaseSourceRecords = projectCaseSourceRecords(state);
@@ -46,6 +67,15 @@ export function caseRoutes(core: Core, boss: PgBoss): Router {
 
   router.post('/:id/actions', requireRole('OPS'), async (req, res) => {
     const body: ResolutionItem = await core.resolutions.propose(param(req, 'id'), parseBody(ProposeActionsBody, req), sessionUser(req));
+    res.status(201).json(body);
+  });
+
+  /** Undo a passed resolution that posted to the ledger. Goes through the normal proposal flow (D070). */
+  router.post('/:id/resolutions/:resolutionId/undo', requireRole('OPS'), async (req, res) => {
+    const resolutionId = param(req, 'resolutionId');
+    const item = await core.resolutionQueries.item(resolutionId);
+    if (item.caseId !== param(req, 'id')) throw notFound('Resolution', resolutionId);
+    const body: ResolutionItem = await core.resolutions.undo(resolutionId, sessionUser(req));
     res.status(201).json(body);
   });
 

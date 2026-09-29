@@ -10,6 +10,7 @@ export const QUEUES = {
   reconcileSweep: 'reconcile-sweep',
   agentRun: 'agent-run',
   agentResume: 'agent-resume',
+  webhookRetry: 'webhook-retry',
 } as const;
 
 /**

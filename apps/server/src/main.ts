@@ -9,6 +9,7 @@ import {
   loadServerEnv,
   runMigrations,
   type AgentResumer,
+  type WebhookRetryScheduler,
   type EventPublisherPort,
 } from '@payops/core';
 import { createApp } from './app';
@@ -17,6 +18,7 @@ import { sessionConfig } from './auth/session';
 import { registerAgentJobs, type AgentResumeJobPayload } from './jobs/agents';
 import { startBoss, QUEUES } from './jobs/boss';
 import { registerReconcileSweep } from './jobs/reconcile';
+import { registerWebhookRetryJob } from './jobs/webhooks';
 import { createRealtime } from './realtime/socket';
 
 const env = loadServerEnv();
@@ -48,11 +50,20 @@ const agentResumer: AgentResumer = {
 // J1 signal intake uses the same Jev adapter as the agent graph, keyed to the default cassette
 // in REPLAY/RECORD (agent runs pass their own scenarioKey; this app-wide path always uses 'default').
 const decisionPort = createDecisionPort(env);
-const core = createCore({ db: database.db, events, agentResumer, decision: decisionPort });
+// Same forwarding box for webhook retries: core needs a scheduler, the scheduler needs pg-boss.
+const boxedRetry: { schedule?: WebhookRetryScheduler['schedule'] } = {};
+const webhookRetryScheduler: WebhookRetryScheduler = {
+  schedule: (eventId, delaySeconds) => {
+    if (!boxedRetry.schedule) return Promise.reject(new Error('webhook retry queue not ready yet'));
+    return boxedRetry.schedule(eventId, delaySeconds);
+  },
+};
+const core = createCore({ db: database.db, events, agentResumer, decision: decisionPort, webhookRetryScheduler });
 
 const boss = await startBoss(database.pool, log);
 await registerReconcileSweep(boss, core, env, log);
 await registerAgentJobs(boss, core, env, log);
+boxedRetry.schedule = (await registerWebhookRetryJob(boss, core, log)).schedule;
 boxedResumer.resume = async (runId, decision) => {
   const payload: AgentResumeJobPayload = { runId, decision: { approvalId: null, decision } };
   await boss.send(QUEUES.agentResume, payload);
