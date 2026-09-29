@@ -108,6 +108,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-09-29 · Local seed and clean reset for a LIVE UI walkthrough
+- Ran the server seed script against the configured local PGlite database. Existing standard scenarios were skipped; the four new critical showcase cases were generated. The seed reported 19 open exceptions, and the API listed 20 total cases before reset.
+- Used the authenticated Simulator reset endpoint, which saved an undo snapshot and returned `ok`. Verified the API case count fell from 20 to 0. Demo users and baseline world remain. The existing API process still reports `AI_MODE=REPLAY`; a LIVE walkthrough requires restarting that API with `AI_MODE=LIVE` while keeping the local database running.
+
 ### 2026-09-29 · Recorded choices and provider retries (D058)
 - Run cards now show recorded routing possibilities, follow-up record choices and reasons, verification details, and recovery decisions. Only follow-up tools with a recorded completed call are described as checked.
 - LIVE/RECORD Jev and Gemini calls retry transient provider failures twice after the first attempt, then use each decision point's existing safe fallback. Invalid requests and REPLAY misses do not retry. Retry attempts are recorded as `MODEL_RETRY` steps without raw provider errors. The README now diagrams the implemented bounded graph; the agent-system tool description was aligned with the existing code.
