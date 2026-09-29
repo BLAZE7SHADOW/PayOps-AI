@@ -14,7 +14,7 @@ export function RunFlow({ steps, status, run }: { steps: AgentStepItem[] | undef
   if (!stages.length) return <p className="rounded-lg border border-rule bg-surface px-5 py-4 text-14 text-ink-2">No run events recorded yet.</p>;
 
   return <div className="rounded-lg border border-rule bg-surface p-4 sm:p-6">
-    <p className="mb-5 text-14 text-ink-2">Follow what happened to this case. Only people, agents and checks that actually took part appear here. Open a step for evidence and details.</p>
+    <p className="mb-5 text-14 text-ink-2">Follow each choice from the first records to the verified result. Selected specialists and extra records come from this run’s recorded decisions.</p>
     <ol className="space-y-0">
       {stages.map((stage, index) => <li key={`${stage.key}-${index}`} className="relative border-l-2 border-rule pb-5 pl-5 last:border-l-0 last:pb-0 sm:pl-7">
         <span aria-hidden="true" className="absolute -left-[7px] top-1 h-3 w-3 rounded-full border-2 border-accent bg-surface" />
@@ -34,6 +34,7 @@ export function RunFlow({ steps, status, run }: { steps: AgentStepItem[] | undef
 function NodeCard({ visit, run }: { visit: NodeVisit; run?: AgentRunItem }) {
   const story = nodeStory(visit, run);
   const skipped = visit.steps.some((step) => step.kind === 'NODE_COMPLETED' && step.payload.skipped === true);
+  const retries = visit.steps.filter((step) => step.kind === 'MODEL_RETRY');
 
   return <details className="group min-w-0 rounded-md border border-rule bg-paper open:border-control">
     <summary className="cursor-pointer list-none px-4 py-2 marker:hidden hover:bg-surface-sunk">
@@ -42,9 +43,11 @@ function NodeCard({ visit, run }: { visit: NodeVisit; run?: AgentRunItem }) {
         <span className="flex items-center gap-2"><Tag tone={STATE_TONE[visit.state]}>{skipped ? 'SKIPPED' : visit.state}</Tag><span aria-hidden="true" className="text-ink-2">+</span></span>
       </span>
       <span className="mt-1 block text-14 leading-5 text-ink-2">{story.summary}</span>
+      {story.details[0] ? <span className="mt-1 block text-13 leading-5 text-ink">{story.details[0]}</span> : null}
+      {retries.length ? <span className="mt-1 block text-13 text-warn">Temporary model issue: retried {retries.length} {retries.length === 1 ? 'time' : 'times'}.</span> : null}
     </summary>
     <div className="border-t border-rule px-4 py-3">
-      {story.details.length ? <ul className="list-disc space-y-1 pl-5 text-14 text-ink">{story.details.map((detail, i) => <li key={i}>{detail}</li>)}</ul> : <p className="text-13 text-ink-2">No further explanation was recorded for this step.</p>}
+      {story.details.length > 1 ? <ul className="list-disc space-y-1 pl-5 text-14 text-ink">{story.details.slice(1).map((detail, i) => <li key={i}>{detail}</li>)}</ul> : <p className="text-13 text-ink-2">No further explanation was recorded for this step.</p>}
       <details className="mt-3 border-t border-rule pt-3">
         <summary className="cursor-pointer text-13 text-accent">Technical events</summary>
         <ol className="mt-2">
@@ -62,6 +65,7 @@ function NodeCard({ visit, run }: { visit: NodeVisit; run?: AgentRunItem }) {
 }
 
 function eventDetail(step: AgentStepItem): string {
+  if (step.kind === 'MODEL_RETRY') return `${String(step.payload.provider)} · ${String(step.payload.reason).replaceAll('_', ' ')} · retry ${Number(step.payload.attempt) + 1}/${String(step.payload.maxAttempts)}`;
   const name = stepName(step);
   if (name) return name;
   const payload = step.payload;

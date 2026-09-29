@@ -19,7 +19,7 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope). The UI revamp, readable run story, and four verified critical showcase cases are implemented (D055-D057).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
+**Phase 6 is complete (parts A-D, D051 scope). The UI revamp, recorded choice trail, bounded provider retries, and four verified critical showcase cases are implemented (D055-D058).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
 
 Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
@@ -107,6 +107,11 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Recorded choices and provider retries (D058)
+- Run cards now show recorded routing possibilities, follow-up record choices and reasons, verification details, and recovery decisions. Only follow-up tools with a recorded completed call are described as checked.
+- LIVE/RECORD Jev and Gemini calls retry transient provider failures twice after the first attempt, then use each decision point's existing safe fallback. Invalid requests and REPLAY misses do not retry. Retry attempts are recorded as `MODEL_RETRY` steps without raw provider errors. The README now diagrams the implemented bounded graph; the agent-system tool description was aligned with the existing code.
+- Validation: all 472 tests, all package typechecks, lint, and web production build pass. Headless Chrome checked the choice and retry text at desktop and phone widths with no page overflow or browser errors. The browser sample used temporary recorded steps because mock mode has no saved runs.
 
 ### 2026-09-29 · Readable agent results and critical showcase (D057)
 - Replaced internal event-count summaries in the run flow with plain-language explanations derived from recorded risk scores, findings, evidence, proposals, policy and verification. Technical events remain nested and the raw table remains below. The Case details explain note quarantine without J1 codes.

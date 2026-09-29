@@ -32,11 +32,22 @@ async function getCheckpointer(core: Core): Promise<PostgresSaver> {
 }
 
 function buildDeps(core: Core, env: AgentEnv, runId: string, caseId: string, scenarioKey?: string): AgentDeps {
+  const onEvent = createEventSink(core, runId, caseId);
+  const decisionNode: Record<string, string> = {
+    J2_PLAN: 'plan', J3_RISK: 'riskAgent', J4_GROUND: 'groundCheck', J5_REPLAN: 'replan', J6_DIAGNOSE: 'diagnose',
+  };
+  const onRetry = async (notice: { step?: string; provider: string; attempt: number; maxAttempts: number; delayMs: number; reason: string }) => {
+    const node = decisionNode[notice.step ?? ''] ?? notice.step ?? 'model';
+    await onEvent(node, 'MODEL_RETRY', {
+      provider: notice.provider, attempt: notice.attempt, maxAttempts: notice.maxAttempts,
+      delayMs: notice.delayMs, reason: notice.reason,
+    });
+  };
   return {
     core,
-    llm: createLlmPort(env, scenarioKey),
-    decision: createDecisionPort(env, scenarioKey),
-    onEvent: createEventSink(core, runId, caseId),
+    llm: createLlmPort(env, scenarioKey, onRetry),
+    decision: createDecisionPort(env, scenarioKey, onRetry),
+    onEvent,
   };
 }
 

@@ -84,6 +84,7 @@ const AGENT_STEP_EVENT: Record<AgentStepKind, string> = {
   TOOL_COMPLETED: 'tool.completed',
   DECISION_MADE: 'decision.made',
   LLM_CALLED: 'node.completed',
+  MODEL_RETRY: 'model.retry',
   FINDING_CREATED: 'finding.created',
   PROPOSAL_CREATED: 'proposal.created',
   POLICY_DECIDED: 'policy.decided',

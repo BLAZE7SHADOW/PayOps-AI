@@ -7,15 +7,21 @@
 import { TypeSafeClient } from '@typesafe-ai/sdk';
 import type { Questions, SystemOneResult } from '@typesafe-ai/sdk';
 import type { DecisionPort, DecisionRequest } from '../../ports/decision';
+import { withProviderRetry, type ProviderRetrySink } from '../provider-retry';
 
 export class JevDecisionAdapter implements DecisionPort {
   private readonly client: TypeSafeClient;
 
-  constructor(opts: { apiKey: string; model: string }) {
-    this.client = new TypeSafeClient({ apiKey: opts.apiKey, defaultModel: opts.model });
+  constructor(opts: { apiKey: string; model: string; onRetry?: ProviderRetrySink }) {
+    // The SDK retries by default. Disable that hidden layer so each attempt is bounded and audited here.
+    this.client = new TypeSafeClient({ apiKey: opts.apiKey, defaultModel: opts.model, retry: { maxRetries: 0 } });
+    this.onRetry = opts.onRetry;
   }
 
+  private readonly onRetry?: ProviderRetrySink;
+
   async ask<Q extends Questions>(req: DecisionRequest<Q>): Promise<SystemOneResult<Q>> {
-    return this.client.systemOne({ state: req.state, questions: req.questions });
+    return withProviderRetry('Jev', () => this.client.systemOne({ state: req.state, questions: req.questions }),
+      this.onRetry && ((notice) => this.onRetry?.({ ...notice, step: req.tag })));
   }
 }

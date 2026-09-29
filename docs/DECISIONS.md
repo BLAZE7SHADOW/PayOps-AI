@@ -965,3 +965,24 @@ root-cause labels. Those variants were excluded rather than presented as success
 **Consequences.** The showcase adds deterministic simulator data and cassettes but no new action,
 permission, or policy. Case severity and policy tier remain separate concepts. The excluded refund
 trials reveal a remaining causal-diagnosis quality gap; validator PASS only proves the data is fixed.
+
+
+## D058 · Recorded investigation choices and bounded provider retries
+
+**Decision.** Run cards expose recorded routing possibilities, specialist follow-up tool reasons,
+verification results and retry events. The README shows the implemented bounded graph rather than
+an open-ended tool loop. LIVE/RECORD Gemini and Jev calls get at most three total attempts for
+transient 408/429/5xx, timeout or connection failures. Invalid requests and REPLAY misses are not
+retried. The Jev SDK and LangChain Gemini adapter's own retries are disabled so attempts do not
+multiply invisibly. Each retry in an agent run writes a `MODEL_RETRY` step with provider, reason,
+attempt number and delay; the original decision-point fallback still applies after exhaustion.
+
+**Why.** A temporary provider failure should not immediately force a fallback, while a permanent
+bad request should not burn time or quota. Operators should see which choices actually happened,
+including which requested records were run, without mistaking the graph for a free-form agent.
+
+**Consequences.** Retry events contain no prompts, provider error messages, credentials or raw
+responses. Failed transport attempts are not included in successful-call token usage; provider
+billing may therefore exceed the run's reported token-based estimate. Jev signal intake outside
+an agent run gets the same retry behavior but has no `agent_steps` trail. The agent-system tool
+description was corrected to match its existing read-only projection implementation.

@@ -40,7 +40,7 @@ A healthy payment shows the same story in all five. A **case** is opened when th
 **What PayOps AI does**, in order:
 
 1. **Detects it.** A plain rule spots that the gateway says "captured" while the order says "not paid". No AI is involved in finding problems.
-2. **Investigates.** It reads the payment from every system (13 read-only lookups) and labels each fact with an evidence id such as `ev_04`.
+2. **Investigates.** Code gathers a fixed baseline from the available systems, then selected specialists may request extra records. Each fact gets an evidence id such as `ev_04`.
 3. **Explains the cause, with citations.** "The webhook to the order service failed three times with HTTP 500, so the order was never marked paid, even though the gateway captured the money." Every claim points to the evidence that supports it, and a separate check rejects any claim whose evidence does not actually say that.
 4. **Proposes a fix from a fixed menu.** Here: replay the failed message. The AI cannot invent an action, only choose from nine.
 5. **Applies the policy.** Replaying a message only corrects our own records and moves no money, so the policy allows it automatically.
@@ -131,6 +131,36 @@ apps/web (React 19, Vite, Tailwind v4)  <-- REST + Socket.IO -->  apps/server (E
 | `packages/shared` | DTOs and types shared by web and server |
 
 One database holds business data, the job queue and LangGraph checkpoints. There is no Redis and no separate worker process.
+
+The investigation has a fixed safety spine and bounded choices. This is the implemented route, not a free-form tool loop:
+
+```mermaid
+flowchart TD
+  UI[React workbench] -->|REST + Socket.IO| API[Express API and job worker]
+  API --> GRAPH[LangGraph run with Postgres checkpoints]
+  GRAPH --> BASE[Code loads case and gathers baseline evidence]
+  BASE --> FAST{Jev: known cause with enough confidence?}
+  FAST -->|yes| PROPOSE[Code builds proposal from fixed action catalog]
+  FAST -->|no or provider fallback| PLAN[Jev selects specialist branches; code bounds routing]
+  PLAN --> SPEC[Payment / reconciliation / risk specialists]
+  SPEC -->|Gemini selects limited follow-up reads within its group| READ[Read-only evidence projections]
+  READ --> SPEC
+  SPEC --> GROUND[Code + Jev check cited evidence]
+  GROUND -->|evidence gap, round available| PLAN
+  GROUND -->|enough evidence| DIAG[Gemini diagnoses; code builds proposal]
+  DIAG --> PROPOSE
+  PROPOSE --> POLICY[Policy code: auto / approval / blocked]
+  POLICY -->|approval required| HUMAN[Different authorized person reviews]
+  POLICY -->|auto| EXEC[Idempotent executor]
+  HUMAN -->|approved| EXEC
+  EXEC --> VALID[Independent validator re-reads state]
+  VALID -->|pass| DONE[Resolved]
+  VALID -->|partial or fail, attempt available| REPLAN[Jev chooses bounded recovery]
+  REPLAN --> PLAN
+  REPLAN --> PROPOSE
+```
+
+Jev and Gemini calls retry temporary rate limits, timeouts and service outages up to three total attempts before their existing safe fallback. Invalid requests and REPLAY cassette misses are not retried. Retries in an investigation are recorded in its step trail; REPLAY itself makes no provider calls.
 
 ### Record and replay
 

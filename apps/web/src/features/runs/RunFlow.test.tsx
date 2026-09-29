@@ -23,4 +23,13 @@ describe('RunFlow', () => {
     expect(screen.getByText('get_payment')).toBeVisible();
     expect(screen.getByText('Evidence ev_01')).toBeVisible();
   });
+
+  it('shows a recorded provider retry beside the decision it delayed', () => {
+    render(<RunFlow steps={[
+      { id: '1', runId: 'run_1', seq: 1, node: 'plan', kind: 'NODE_STARTED', payload: {}, at: '2026-09-29T10:00:00Z' },
+      { id: '2', runId: 'run_1', seq: 2, node: 'plan', kind: 'MODEL_RETRY', payload: { provider: 'Jev', reason: 'rate_limited', attempt: 1, maxAttempts: 3, delayMs: 250 }, at: '2026-09-29T10:00:01Z' },
+      { id: '3', runId: 'run_1', seq: 3, node: 'plan', kind: 'NODE_COMPLETED', payload: { specialists: ['payment'] }, at: '2026-09-29T10:00:02Z' },
+    ]} status="RESOLVED" />);
+    expect(screen.getByText('Temporary model issue: retried 1 time.')).toBeVisible();
+  });
 });

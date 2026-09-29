@@ -42,8 +42,8 @@ triage ─► plan (Jev) ─► fan-out specialists (parallel, bounded) ─► j
 
 Each specialist runs in two stages:
 
-1. **Baseline pass (deterministic):** code calls the specialist's standard tools and records evidence. No LLM. This guarantees the minimum evidence always exists.
-2. **Investigative pass (LLM, bounded):** the LLM reads the baseline evidence, may call up to `MAX_FOLLOWUP_TOOL_CALLS = 4` extra tools from its own subset, then emits one or more typed `Finding`s that cite evidence IDs.
+1. **Baseline pass (deterministic):** `triage` runs the standard tools and records evidence before routing. No LLM. This guarantees the minimum evidence always exists.
+2. **Investigative pass (LLM, bounded):** the LLM reads the baseline evidence, may call up to `AGENT_BUDGET_LIMITS.maxFollowupToolCalls = 6` extra tools from its own subset, then emits one or more typed `Finding`s that cite evidence IDs.
 
 This keeps the system agentic (it chooses follow-ups, forms hypotheses, replans) while staying cheap, testable and replayable.
 
@@ -288,7 +288,7 @@ Rules:
 
 ## 9. Tools
 
-Tools are LangChain `tool()` objects with Zod input schemas, grouped by agent. Each tool: validates input → calls a domain service → projects the result → writes an `EvidenceItem` → emits `agent.tool.completed`.
+Tools are typed, read-only TypeScript projections over a `CaseState` already loaded through core services. `triage` runs the baseline set; Payment and Reconciliation may choose follow-up tools from their own Zod-constrained groups. The node turns projected facts into `EvidenceItem`s and emits `TOOL_COMPLETED`; it does not give models direct database or write access.
 
 | Group | Tools |
 |---|---|

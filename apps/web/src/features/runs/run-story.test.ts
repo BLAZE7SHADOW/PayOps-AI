@@ -24,8 +24,21 @@ describe('nodeStory', () => {
   });
 
   it('names the specialists selected by the recorded plan', () => {
-    const story = nodeStory(visit('plan', [['NODE_COMPLETED', { specialists: ['payment', 'risk'] }]]));
+    const story = nodeStory(visit('plan', [['NODE_COMPLETED', { specialists: ['payment', 'risk'], primaryHypothesis: 'fraud_or_abuse', routedBy: 'JEV' }]]));
     expect(story.summary).toContain('payment records, risk signals');
+    expect(story.details).toContain('Initial possibility: suspicious payment activity.');
+  });
+
+  it('shows only extra records actually requested and checked by a specialist', () => {
+    const v = visit('paymentAgent', [
+      ['LLM_CALLED', { call: 'followUps', followUps: [{ tool: 'getOrderTimeline', reason: 'See when the order changed state.' }, { tool: 'getPaymentAttempts', reason: 'Check recent retries.' }] }],
+      ['TOOL_COMPLETED', { tools: ['getOrderTimeline'], evidenceIds: ['ev_4'] }],
+      ['FINDING_CREATED', { findingIds: ['fd_1'] }],
+    ]);
+    const run = { findings: [{ id: 'fd_1', agent: 'payment', statement: 'The order remained failed.', evidenceIds: ['ev_4'] }] } as unknown as Partial<AgentRunItem>;
+    const story = nodeStory(v, run);
+    expect(story.details[0]).toBe('Requested order history: See when the order changed state.');
+    expect(story.details.join(' ')).not.toContain('recent payment attempts');
   });
 
   it('does not attach the final diagnosis or proposal to an earlier visit', () => {

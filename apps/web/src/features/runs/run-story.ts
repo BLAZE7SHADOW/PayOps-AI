@@ -21,6 +21,29 @@ function score(answers: unknown, key: string): number | null {
   return typeof answer.score === 'number' ? answer.score : null;
 }
 
+const TOOL_LABEL: Record<string, string> = {
+  getOrderTimeline: 'order history', getPaymentAttempts: 'recent payment attempts',
+  getSettlementLines: 'settlement lines', getFeeBreakdown: 'fee breakdown',
+};
+
+const HYPOTHESIS_LABEL: Record<string, string> = {
+  webhook_or_state_sync: 'a webhook or status mismatch', duplicate_capture: 'a duplicate charge',
+  refund_lifecycle: 'a refund problem', settlement_reconciliation: 'a settlement discrepancy',
+  fraud_or_abuse: 'suspicious payment activity',
+};
+
+function followUpReasons(visit: NodeVisit): string[] {
+  const chosen = visit.steps.find((step) => step.kind === 'LLM_CALLED' && step.payload.call === 'followUps')?.payload.followUps;
+  const executed = new Set(visit.steps.filter((step) => step.kind === 'TOOL_COMPLETED')
+    .flatMap((step) => Array.isArray(step.payload.tools) ? step.payload.tools.filter((tool): tool is string => typeof tool === 'string') : []));
+  if (!Array.isArray(chosen)) return [];
+  return chosen.flatMap((choice) => {
+    if (!choice || typeof choice !== 'object' || !('tool' in choice) || !('reason' in choice)
+      || typeof choice.tool !== 'string' || typeof choice.reason !== 'string' || !executed.has(choice.tool)) return [];
+    return [`Requested ${TOOL_LABEL[choice.tool] ?? choice.tool}: ${choice.reason}`];
+  });
+}
+
 function riskStory(visit: NodeVisit, run: Partial<AgentRunItem> | undefined): NodeStory {
   if (completed(visit).skipped === true) return { summary: 'No risk records were available for this case.', details: [] };
   const decision = event(visit, 'DECISION_MADE')?.payload;
@@ -53,12 +76,12 @@ function findingsStory(visit: NodeVisit, run: Partial<AgentRunItem> | undefined,
   if (completed(visit).skipped === true) return { summary: 'No relevant records were available for this specialist.', details: [] };
   if (matching.length) return {
     summary: matching[0]!.statement,
-    details: matching.flatMap((finding, i) => i === 0 ? [`Supported by ${finding.evidenceIds.join(', ')}.`] : [finding.statement, `Supported by ${finding.evidenceIds.join(', ')}.`]),
+    details: [...followUpReasons(visit), ...matching.flatMap((finding, i) => i === 0 ? [`Supported by ${finding.evidenceIds.join(', ')}.`] : [finding.statement, `Supported by ${finding.evidenceIds.join(', ')}.`])],
   };
   const tools = visit.steps.filter((step) => step.kind === 'TOOL_COMPLETED').flatMap((step) => Array.isArray(step.payload.tools) ? step.payload.tools.filter((name): name is string => typeof name === 'string') : []);
   return {
     summary: agent === 'payment' ? 'Checked the payment and gateway records; no finding was recorded.' : 'Compared ledger, webhook and settlement records; no finding was recorded.',
-    details: tools.length ? [`Records checked: ${[...new Set(tools)].join(', ')}.`] : [],
+    details: [...followUpReasons(visit), ...(tools.length ? [`Records checked: ${[...new Set(tools)].map((tool) => TOOL_LABEL[tool] ?? tool).join(', ')}.`] : [])],
   };
 }
 
@@ -88,20 +111,31 @@ function verificationStory(visit: NodeVisit): NodeStory {
   const validation = event(visit, 'VALIDATION_COMPLETED')?.payload.validation;
   if (!validation || typeof validation !== 'object' || !('verdict' in validation)) return { summary: 'The independent verification is checking the result.', details: [] };
   const verdict = validation.verdict;
-  return { summary: verdict === 'PASS' ? 'Independent checks confirmed the fix worked.' : verdict === 'FAIL' ? 'Independent checks found that the fix did not work.' : 'Independent checks found that the result needs further review.', details: [] };
+  const checks = 'checks' in validation && Array.isArray(validation.checks) ? validation.checks : [];
+  const failed = checks.filter((check) => check && typeof check === 'object' && 'pass' in check && check.pass === false);
+  return {
+    summary: verdict === 'PASS' ? 'Independent checks confirmed the fix worked.' : verdict === 'FAIL' ? 'Independent checks found that the fix did not work.' : 'Independent checks found that the result needs further review.',
+    details: failed.length ? failed.flatMap((check) => 'description' in check && typeof check.description === 'string' ? [check.description] : [])
+      : checks.length ? [`${checks.length} recorded checks passed after the action.`] : [],
+  };
 }
 
 /** Short, factual copy for the operator view. Raw event names stay in the technical log. */
 export function nodeStory(visit: NodeVisit, run?: Partial<AgentRunItem>): NodeStory {
   switch (visit.node) {
     case 'loadCase': return { summary: 'Loaded the current case and its payment records.', details: [] };
-    case 'triage': return { summary: 'Collected the first records needed to understand the mismatch.', details: [] };
-    case 'diagnose': return { summary: completed(visit).path === 'FAST' ? 'Matched a known issue pattern using the available records.' : 'Checked for a known issue pattern before a broader investigation.', details: [] };
+    case 'triage': return { summary: 'Collected the first records needed to understand the mismatch.', details: ['The initial checks are fixed so every case starts with the same minimum evidence.'] };
+    case 'diagnose': return { summary: completed(visit).path === 'FAST' ? 'Matched a known issue pattern using the available records.' : 'Checked for a known issue pattern before a broader investigation.', details: completed(visit).fallback === true ? ['The quick decision was unavailable, so the case went to the full investigation.'] : [] };
     case 'plan': {
       const selected = completed(visit).specialists;
       const labels = { payment: 'payment records', reconciliation: 'ledger and settlement records', risk: 'risk signals' } as const;
       const names = Array.isArray(selected) ? selected.flatMap((name) => typeof name === 'string' && name in labels ? [labels[name as keyof typeof labels]] : []) : [];
-      return { summary: names.length ? `Sent the case to specialists for ${names.join(', ')}.` : 'Chose which specialists should investigate the case.', details: [] };
+      const outcome = completed(visit);
+      const hypothesis = typeof outcome.primaryHypothesis === 'string' ? HYPOTHESIS_LABEL[outcome.primaryHypothesis] : undefined;
+      const details = hypothesis ? [`Initial possibility: ${hypothesis}.`] : [];
+      if (outcome.routedBy === 'DEFAULT_ALL') details.push('The routing decision was unavailable, so all specialists were included.');
+      if (outcome.routedBy === 'GAP_TARGETED') details.push('An evidence check found a gap, so the relevant specialists were asked to investigate again.');
+      return { summary: names.length ? `Sent the case to specialists for ${names.join(', ')}.` : 'Chose which specialists should investigate the case.', details };
     }
     case 'paymentAgent': return findingsStory(visit, run, 'payment');
     case 'reconciliationAgent': return findingsStory(visit, run, 'reconciliation');
@@ -116,7 +150,14 @@ export function nodeStory(visit: NodeVisit, run?: Partial<AgentRunItem>): NodeSt
     case 'awaitApproval': return { summary: visit.state === 'WAITING' ? 'Waiting for an authorized colleague to review the proposal.' : event(visit, 'APPROVAL_RESOLVED') ? 'A colleague recorded an approval decision.' : 'The run paused for human approval.', details: [] };
     case 'execute': return { summary: visit.state === 'COMPLETED' ? 'The deterministic executor applied the permitted action.' : 'Execution of the permitted action is in progress or stopped.', details: [] };
     case 'validate': return verificationStory(visit);
-    case 'replan': return { summary: 'The previous result did not pass verification, so the run considered another approach.', details: [] };
+    case 'replan': {
+      const strategy = completed(visit).strategy;
+      const next = strategy === 'reinvestigate' ? 'The run will gather more evidence.'
+        : strategy === 'retry_same_action' ? 'The run will try the permitted action again.'
+        : strategy === 'alternative_action' ? 'The run will consider another permitted action.'
+        : strategy === 'escalate_to_human' ? 'The case needs human review.' : undefined;
+      return { summary: 'The previous result did not pass verification, so the run considered another approach.', details: next ? [next] : [] };
+    }
     case 'closeResolved': return { summary: 'The case was closed after a verified resolution.', details: [] };
     case 'closeBlocked': return { summary: 'The case stopped because policy blocked the action.', details: [] };
     case 'closeRejected': return { summary: 'The case stopped after the proposal was rejected.', details: [] };
