@@ -335,3 +335,38 @@ describe('recorded Phase 3 scenarios', () => {
     } finally { fetchSpy.mockRestore(); }
   });
 });
+
+describe('recorded critical showcase cases', () => {
+  it.each([
+    ['showcase_webhook_recovery', 3301, 'WEBHOOK_PROCESSING_FAILURE', 'AUTO'],
+    ['showcase_duplicate_capture', 3302, 'DUPLICATE_CAPTURE', 'MANAGER'],
+    ['showcase_settlement_dispute', 3304, 'SETTLEMENT_FEE_MISMATCH', 'OPS'],
+    ['showcase_ledger_gap', 3306, 'LEDGER_POSTING_MISSING', 'AUTO'],
+  ] as const)('%s resolves with the recorded diagnosis, policy and validator', async (scenario, seed, rootCause, tier) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Provider network is forbidden in REPLAY'));
+    try {
+      const generated = await generateScenario(core, { scenario, seed });
+      const caseId = generated.casesOpened[0]!.id;
+      expect((await core.cases.get(caseId)).severity).toBe('CRITICAL');
+      const runId = newId('run');
+      await createRunRow(core, { id: runId, caseId, scenarioKey: scenario });
+      const env = { AI_MODE: 'REPLAY' as const, AI_MODEL: 'unused', JEV_MODEL: 'unused', GEMINI_API_KEY: undefined, TYPESAFE_JEV_API_KEY: undefined };
+      const deps = { core, llm: createLlmPort(env, scenario), decision: createDecisionPort(env, scenario), onEvent: createEventSink(core, runId, caseId) };
+      const config = { configurable: { thread_id: runId } };
+      let result = await buildGraph(deps, saver).invoke({ caseId, runId, aiMode: 'REPLAY', scenarioKey: scenario }, config);
+      expect(result.policy?.tier).toBe(tier);
+      if (result.status === 'AWAITING_APPROVAL') {
+        const manager = { id: 'usr_showcase_manager', name: 'Showcase manager', email: 'showcase@payops.dev', role: 'MANAGER' as const };
+        await db.db.insert(tables.users).values({ ...manager, passwordHash: 'unused' }).onConflictDoNothing();
+        await core.approvals.decide(result.approvalId!, { decision: 'APPROVE', comment: '' }, manager);
+        result = await buildGraph(deps, new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' })).invoke(new Command({ resume: { approvalId: result.approvalId, decision: 'APPROVE', decidedBy: null, comment: null } }), config);
+      }
+      expect(result.diagnosis?.rootCause).toBe(rootCause);
+      expect(result.diagnosis?.path).toBe('FULL');
+      expect(result.agentsVisited.length).toBeGreaterThanOrEqual(2);
+      expect(result.status).toBe('RESOLVED');
+      expect(result.validation?.verdict).toBe('PASS');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); }
+  });
+});

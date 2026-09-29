@@ -16,6 +16,9 @@ export function SimulatorPage() {
   const [epoch, setEpoch] = useState(0);
   const aiMode = useAiMode();
   const recorded = useRecordedRuns().data ?? [];
+  const showcase = SCENARIOS.filter((scenario) => scenario.key.startsWith('showcase_'));
+  const standard = SCENARIOS.filter((scenario) => !scenario.key.startsWith('showcase_'));
+  const row = (s: (typeof SCENARIOS)[number]) => <ScenarioRow key={`${s.key}:${epoch}`} scenario={s} recordedSeeds={recorded.filter((r) => r.scenario === s.key).map((r) => r.seed)} replay={aiMode === 'REPLAY'} />;
 
   return (
     <>
@@ -24,12 +27,16 @@ export function SimulatorPage() {
         meta="Generate payments with a known fault. Detection runs right after, and any case it opens appears in Exceptions."
         actions={<ResetActions onDone={() => setEpoch((e) => e + 1)} />}
       />
-      <div className="border border-rule bg-surface" role="list" aria-label="Scenarios">
-        <p className="border-b border-rule bg-surface-sunk px-5 py-3 text-13 text-ink-2">Choose a scenario to see its inputs and generate a case.</p>
-        {SCENARIOS.map((s) => (
-          <ScenarioRow key={`${s.key}:${epoch}`} scenario={s} recordedSeeds={recorded.filter((r) => r.scenario === s.key).map((r) => r.seed)} replay={aiMode === 'REPLAY'} />
-        ))}
-      </div>
+      <section aria-labelledby="showcase-title" className="mt-6">
+        <h2 id="showcase-title" className="text-18 font-semibold">Critical case showcase</h2>
+        <p className="mt-1 mb-3 text-14 text-ink-2">Four high-value faults that were investigated with live model responses, passed policy review where required, and passed independent verification. Choose a recorded seed in replay mode.</p>
+        <div className="overflow-hidden rounded-lg border border-rule bg-surface" role="list" aria-label="Critical showcase scenarios">{showcase.map(row)}</div>
+      </section>
+      <section aria-labelledby="other-scenarios-title" className="mt-8">
+        <h2 id="other-scenarios-title" className="text-18 font-semibold">Other scenarios</h2>
+        <p className="mt-1 mb-3 text-14 text-ink-2">Explore everyday exceptions, risk review, recovery attempts and a healthy-payment control.</p>
+        <div className="overflow-hidden rounded-lg border border-rule bg-surface" role="list" aria-label="Other scenarios">{standard.map(row)}</div>
+      </section>
       <p className="mt-3 text-12 text-ink-2">
         {aiMode === 'REPLAY'
           ? 'This demo replays recorded AI responses. Pick a recorded seed under a scenario (or leave the seed empty to use the first one); other seeds still create the case, but the investigation escalates because no response was recorded for it. '

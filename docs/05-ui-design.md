@@ -170,13 +170,14 @@ Table sorted by priority: Case · Type · Amount · Systems in disagreement (min
 Table: Case · Action summary · Amount · Tier · Risk · Rules fired · Requested · By. Row opens a drawer with the proposal, cited findings with evidence refs, and Approve / Reject / Escalate with a required comment for Reject and Escalate. MANAGER-tier rows are disabled for OPS users with the reason shown.
 
 ### Agent runs
-Table: Run · Case · Status · Attempts · Duration · LLM calls · Jev calls · Tool calls · Tokens · Cost · Mode. Run detail starts with a vertical orchestration path derived from recorded `agent_steps`: actual visited stages in order, selected specialist branches grouped together, explicit approval pauses, and repeated stages when replanning occurs. Each node expands to show its real events, tool results, evidence ids, and decision/model calls. Never draw unvisited agents or suggest the model authorizes policy, execution, or verification. The full step table (seq, node, kind, name, latency, context tokens), expandable projected JSON, and per-node latency bars remain below for inspection. Case findings link to this run view.
+Table: Run · Case · Status · Attempts · Duration · LLM calls · Jev calls · Tool calls · Tokens · Cost · Mode. Run detail starts with a vertical orchestration path derived from recorded `agent_steps`: actual visited stages in order, selected specialist branches grouped together, explicit approval pauses, and repeated stages when replanning occurs. Each node states its recorded result in plain language; expanding it explains evidence and findings, with technical event names in a second disclosure. Never draw unvisited agents or suggest the model authorizes policy, execution, or verification. Show the full step table (seq, node, kind, name, latency, context tokens), expandable projected JSON, run usage and per-node latency bars after the readable story. Case findings link to this run view.
 
 ### Audit log
 Dense chronological table: time (mono), actor (user / agent / system tag), action, entity, run link. Filters by entity and actor.
 
 ### Simulator (admin/ops)
 List of scenarios with one-line descriptions, seed input, "Generate", and "Reset demo data". Shows the ids created.
+The four recorded critical showcase scenarios appear first as a distinct group. Their case severity comes from detection, and the copy explains that actual model responses were recorded for replay. Standard scenarios remain available below; do not imply every run in the catalog resolves successfully.
 
 ### Policy
 Read-only table of policy rules (id, condition in plain words, tier), version, thresholds. Shows that authority lives in code.

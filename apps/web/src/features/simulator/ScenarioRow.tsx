@@ -5,6 +5,7 @@ import { plural } from '../../lib/format';
 import { Button } from '../../ui/Button';
 import { ErrorState } from '../../ui/ErrorState';
 import { Input } from '../../ui/Input';
+import { Tag } from '../../ui/Tag';
 import { useGenerateScenario } from './api';
 
 const MAX_IDS = 4;
@@ -16,6 +17,7 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
   const [open, setOpen] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const gen = useGenerateScenario();
+  const needsRealApi = import.meta.env.DEV && import.meta.env.VITE_MOCK_API === '1' && scenario.key.startsWith('showcase_');
 
   // In REPLAY, an empty seed means the first recorded one; a random seed would have no recording.
   const seedNum = seed.trim() === '' ? (replay ? recordedSeeds[0] : undefined) : Number(seed);
@@ -37,7 +39,7 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
             <span id={`${id}-title`} className="text-14 font-medium text-ink">
               {scenario.title}
             </span>
-            <span className="truncate font-mono text-12 text-ink-2">{scenario.key}</span>
+            {scenario.key.startsWith('showcase_') ? <Tag tone="bad">CRITICAL</Tag> : null}
           </span>
           <span className="mt-0.5 block max-w-[72ch] text-13 text-ink-2">{scenario.description}</span>
         </span>
@@ -58,6 +60,7 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
           ) : null}
           <button type="button" className="link text-13" aria-expanded={advanced} onClick={() => setAdvanced((value) => !value)}>{advanced ? 'Hide seed and noise options' : 'Set seed and noise'}</button>
           {advanced ? <div className="grid gap-3 sm:grid-cols-2">
+            <p className="font-mono text-12 text-ink-2 sm:col-span-2">Scenario key: {scenario.key}</p>
             <label className="space-y-1 text-13"><span>Seed</span>
         <Input
           mono
@@ -80,7 +83,8 @@ export function ScenarioRow({ scenario, recordedSeeds = [], replay = false }: { 
           className={noiseValid ? 'w-full' : 'w-full border-bad'}
         /></label>
           </div> : null}
-        <Button type="submit" variant="primary" disabled={gen.isPending || !seedValid || !noiseValid}>
+        {needsRealApi ? <p className="text-13 text-ink-2">Run the local API to generate this recorded investigation. Mock data cannot reproduce its payment records.</p> : null}
+        <Button type="submit" variant="primary" disabled={needsRealApi || gen.isPending || !seedValid || !noiseValid}>
           {gen.isPending ? 'Generating…' : 'Generate scenario'}
         </Button>
         </div>

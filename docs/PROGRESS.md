@@ -19,7 +19,7 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**Phase 6 is complete (parts A-D, D051 scope). The UI revamp and recorded-run orchestration view are implemented (D055-D056).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
+**Phase 6 is complete (parts A-D, D051 scope). The UI revamp, readable run story, and four verified critical showcase cases are implemented (D055-D057).** Next: have a few first-time users try the Case and approval flows, address any observed friction, and run Lighthouse a11y on `/`. The local interactive design study remains `docs/UI-REVAMP-PREVIEW.html`.
 
 Other follow-ups for Shivam: run Lighthouse a11y on `/`; record
 the 2-minute demo video and link it in README.md; commit everything from the Mac. Lighthouse on the Case
@@ -89,6 +89,10 @@ Shivam's Mac directly, same as task 9 did.
   always-on rules-only tier in `core/policy/risk.ts`), not the agent's J3 `RiskAssessment`
   (`state.risk`, now genuinely populated by `riskAgent`). `state.risk` is available on the run
   and in `agent_steps` but nothing downstream reads it yet — flagged, not wired, per D040.
+- Causal diagnosis can be wrong even when the selected action passes validation. Two trial
+  high-value refund scenarios were excluded from the critical showcase because live runs
+  resolved them but labeled their root causes incorrectly (D057). Grounding verifies evidence
+  support, and the validator verifies data changes; neither proves causal labels are correct.
 - `packages/evals`'s golden set covers 7 of 9 `ScenarioKey`s. `settlement_mismatch` and
   `suspicious_payment` both take the full path (`plan` → specialists → `groundCheck`) and were
   deliberately left out rather than guessing J2/J3/J4/LLM-findings fixtures with no existing
@@ -103,6 +107,13 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · Readable agent results and critical showcase (D057)
+- Replaced internal event-count summaries in the run flow with plain-language explanations derived from recorded risk scores, findings, evidence, proposals, policy and verification. Technical events remain nested and the raw table remains below. The Case details explain note quarantine without J1 codes.
+- Added four critical showcase scenarios to Simulator: high-value webhook/order/ledger mismatch, duplicate capture, settlement shortfall, and missing ledger credit. Each uses existing deterministic domain operations and the current approval rules. Live Gemini/Jev recordings for seeds 3301, 3302, 3304, 3306 all resolved with matching root cause and validator PASS; REPLAY graph tests confirm full multi-agent participation with no network calls.
+- Two trial refund variants also passed action verification but misidentified root cause, so they were excluded. This remains a diagnosis-quality gap, separate from validator correctness.
+- Validation: all package typechecks, lint, web production build, and 466/466 tests pass. The four critical showcase REPLAY tests assert full-path runs with at least two specialists, expected diagnosis and tier, RESOLVED/PASS, and no provider network calls. Headless Chrome checked the readable Risk agent card at desktop and phone widths and the Simulator showcase at 390px; no page-wide overflow or browser errors. The browser flow sample was temporary because mock mode contains no saved runs.
+
 
 ### 2026-09-29 · Recorded multi-agent orchestration view (D056)
 - Agent run details now lead with a stage-by-stage visualization built from `agent_steps`. Only actual specialist visits appear; each node expands to its recorded actions, tool results, evidence ids, and decisions. Approval pauses and replan loops are explicit. The existing raw event table and node timings remain below.

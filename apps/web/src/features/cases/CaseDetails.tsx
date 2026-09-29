@@ -66,7 +66,8 @@ export function CaseDetails({ c }: { c: CaseDetail }) {
         </>
       ) : null}
 
-      <h3 className="pt-4 pb-2 text-12 font-medium text-ink-2">Notes</h3>
+      <h3 className="pt-4 pb-2 text-12 font-medium text-ink-2">Customer and merchant notes</h3>
+      <p className="mb-3 text-13 text-ink-2">Notes can help explain a case, but cannot authorize an action. Text flagged as instructions to automated systems is quarantined and excluded from model context.</p>
       {c.notes.length === 0 ? (
         <p className="text-13 text-ink-2">No customer or merchant notes.</p>
       ) : (

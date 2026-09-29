@@ -59,6 +59,19 @@ The AI never gets more power than an ops analyst. It gets less: it cannot approv
 
 Plus `healthy_payment` (no case should be created) as a negative control.
 
+## Critical showcase cases (Phase 6 extension)
+
+These four simulator cases are all `CRITICAL` by the amount-based detection rules. Each was run through the full multi-agent path with live Gemini/Jev responses, then recorded for deterministic REPLAY. At least two specialists participated in every run. Each diagnosis matched the generated fault and independent verification returned PASS. Approval still followed the policy tier, regardless of case severity.
+
+| Scenario | Fault | Recorded seed | Policy | Verified result |
+|---|---|---:|---|---|
+| `showcase_webhook_recovery` | ₹1,25,000 captured and settled; webhook, order and ledger disagree | 3301 | AUTO | RESOLVED / PASS |
+| `showcase_duplicate_capture` | ₹89,000 captured twice; only one capture reached internal records | 3302 | MANAGER | RESOLVED / PASS after approval |
+| `showcase_settlement_dispute` | Six-payment batch; fee and tax overcharge leave settlement ₹70,800 short | 3304 | OPS | RESOLVED / PASS after approval |
+| `showcase_ledger_gap` | ₹1,40,000 captured and order paid, but capture credit is missing from the ledger | 3306 | AUTO | RESOLVED / PASS |
+
+Two additional refund variants were trialed live but excluded from this showcase: their actions passed verification while the model's root-cause labels were inaccurate. A passed action is not sufficient to claim a correct diagnosis.
+
 ## Non-goals
 
 Banking app, wallet, UPI clone, trading, chatbot, expense tracker, real money, real cards, a general "AI assistant" panel.

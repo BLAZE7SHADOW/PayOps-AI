@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AgentStepItem } from '@payops/shared';
 import { describe, expect, it } from 'vitest';
@@ -19,6 +19,7 @@ describe('RunFlow', () => {
     expect(screen.getByText('Payment agent')).toBeInTheDocument();
     expect(screen.queryByText('Risk agent')).not.toBeInTheDocument();
     await userEvent.click(screen.getByText('Payment agent'));
+    await userEvent.click(within(screen.getByText('Payment agent').closest('details')!).getByText('Technical events'));
     expect(screen.getByText('get_payment')).toBeVisible();
     expect(screen.getByText('Evidence ev_01')).toBeVisible();
   });

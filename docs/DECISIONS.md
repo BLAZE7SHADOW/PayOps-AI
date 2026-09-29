@@ -945,3 +945,23 @@ Showing only persisted events avoids depicting planned work as completed work.
 **Consequences.** This is a read-only projection of existing data. No graph, API, policy, or database
 changes are needed. It does not infer which agents were selected from a plan payload; an agent appears
 only when its own node emitted an event. An approval pause stays visually distinct from a failure.
+
+
+## D057 · Plain-language run stories and verified critical showcase cases
+
+**Decision.** Agent-run nodes lead with a factual sentence derived from stored step payloads,
+findings and evidence. Risk review explains its recorded tier and strongest scored signals; planning
+names the specialists actually selected. Technical event codes remain available inside a second
+disclosure and in the raw table. Simulator presents four new critical-severity cases separately.
+Their first seeds (3301, 3302, 3304, 3306) have live-recorded Gemini/Jev responses, and a REPLAY
+integration test asserts full-path multi-agent participation, matching root cause, policy tier,
+RESOLVED status and PASS verdict without provider network calls.
+
+**Why.** Internal tags such as `J3_RISK` describe implementation, not what an operations user learned.
+The showcase needs to demonstrate both capable orchestration and truthful outcomes. Six high-value
+fault variants were trialed with live calls; two refund variants resolved but gave inaccurate
+root-cause labels. Those variants were excluded rather than presented as successful diagnoses.
+
+**Consequences.** The showcase adds deterministic simulator data and cassettes but no new action,
+permission, or policy. Case severity and policy tier remain separate concepts. The excluded refund
+trials reveal a remaining causal-diagnosis quality gap; validator PASS only proves the data is fixed.

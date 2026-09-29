@@ -98,6 +98,20 @@ describe('scenarios', () => {
     expect(detail.lifecycle.find((e) => e.system === 'RISK')?.title).toBe('8 failed payment attempts in 42 min');
   });
 
+  it.each([
+    ['showcase_webhook_recovery', 'PAYMENT_MISMATCH', ['ORDER', 'LEDGER', 'WEBHOOK']],
+    ['showcase_duplicate_capture', 'DUPLICATE', ['GATEWAY']],
+    ['showcase_settlement_dispute', 'SETTLEMENT_MISMATCH', ['SETTLEMENT']],
+    ['showcase_ledger_gap', 'PAYMENT_MISMATCH', ['LEDGER']],
+  ] as const)('%s opens a critical case with a real cross-system fault', async (scenario, type, mismatched) => {
+    const { casesOpened } = await generateScenario(core, { scenario, seed: 71 });
+    expect(casesOpened).toHaveLength(1);
+    const detail = await core.cases.get(casesOpened[0]!.id);
+    expect(detail).toMatchObject({ type, severity: 'CRITICAL' });
+    expect(detail.matrix.mismatched).toEqual(mismatched);
+    if (scenario === 'showcase_settlement_dispute') expect(detail.amountMinor).toBe(7_080_000);
+  });
+
   it('rejects the same scenario and seed twice', async () => {
     await generateScenario(core, { scenario: 'captured_order_failed', seed: 5 });
     await expect(generateScenario(core, { scenario: 'captured_order_failed', seed: 5 })).rejects.toMatchObject({

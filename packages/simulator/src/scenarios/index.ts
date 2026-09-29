@@ -8,6 +8,7 @@ import { refundStuck } from './refund-stuck';
 import { replayFailsThenReplan } from './replay-fails-then-replan';
 import { settlementMismatch } from './settlement-mismatch';
 import { suspiciousPayment } from './suspicious-payment';
+import { showcaseDuplicateCapture, showcaseLedgerGap, showcaseSettlementDispute, showcaseWebhookRecovery } from './showcase';
 import type { ScenarioWriter } from './types';
 
 export const SCENARIO_WRITERS: Record<ScenarioKey, ScenarioWriter> = {
@@ -20,4 +21,8 @@ export const SCENARIO_WRITERS: Record<ScenarioKey, ScenarioWriter> = {
   suspicious_payment: suspiciousPayment,
   replay_fails_then_replan: replayFailsThenReplan,
   injected_refund_request: injectedRefundRequest,
+  showcase_webhook_recovery: showcaseWebhookRecovery,
+  showcase_duplicate_capture: showcaseDuplicateCapture,
+  showcase_settlement_dispute: showcaseSettlementDispute,
+  showcase_ledger_gap: showcaseLedgerGap,
 };

@@ -38,6 +38,7 @@ interface Spec {
   /** When set, a different diagnosis is only noted. When strict, the run must end RESOLVED/PASS. */
   expectRootCause?: RootCause;
   strict: boolean;
+  strictDiagnosis?: boolean;
 }
 
 /**
@@ -63,6 +64,10 @@ const SCENARIOS: Spec[] = [
   { scenario: 'suspicious_payment', seed: 3216, strict: false },
   { scenario: 'replay_fails_then_replan', seed: 3217, strict: false },
   { scenario: 'injected_refund_request', seed: 3218, strict: false },
+  { scenario: 'showcase_webhook_recovery', seed: 3301, expectRootCause: 'WEBHOOK_PROCESSING_FAILURE', strict: true, strictDiagnosis: true },
+  { scenario: 'showcase_duplicate_capture', seed: 3302, expectRootCause: 'DUPLICATE_CAPTURE', strict: true, strictDiagnosis: true },
+  { scenario: 'showcase_settlement_dispute', seed: 3304, expectRootCause: 'SETTLEMENT_FEE_MISMATCH', strict: true, strictDiagnosis: true },
+  { scenario: 'showcase_ledger_gap', seed: 3306, expectRootCause: 'LEDGER_POSTING_MISSING', strict: true, strictDiagnosis: true },
 ];
 
 /** What the Simulator page shows for each recorded (scenario, seed). */
@@ -124,6 +129,7 @@ async function recordOne(core: Core, saver: PostgresSaver, db: Awaited<ReturnTyp
     throw new Error(`${scenario}: expected RESOLVED/PASS, got status=${result.status} verdict=${result.validation?.verdict}`);
   }
   if (spec.expectRootCause && result.diagnosis?.rootCause !== spec.expectRootCause) {
+    if (spec.strictDiagnosis) throw new Error(`${scenario}: expected root cause ${spec.expectRootCause}, got ${result.diagnosis?.rootCause}`);
     console.warn(`  NOTE: model diagnosis (${result.diagnosis?.rootCause}) differs from the expected root cause (${spec.expectRootCause}) -- same caveat fixtures/cassettes/README.md documents; grounding checks citations, not causal correctness.`);
   }
   upsertManifest({

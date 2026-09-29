@@ -13,6 +13,7 @@ import type {
   PaymentListItem,
   AuditEventItem,
 } from '@payops/shared';
+import { SCENARIOS } from '@payops/shared';
 import { createRunRow, patchRunRow } from '@payops/agents';
 import { createCore, createLogger, loadServerEnv, type Core } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
@@ -54,7 +55,8 @@ async function generate(scenario: string, seed: number, noise = 0): Promise<Gene
 describe('simulator API', () => {
   it('lists scenarios', async () => {
     const res = await ops.get('/api/simulator/scenarios').expect(200);
-    expect(res.body).toHaveLength(9);
+    expect(res.body).toHaveLength(SCENARIOS.length);
+    expect(res.body.map((scenario: { key: string }) => scenario.key)).toEqual(SCENARIOS.map((scenario) => scenario.key));
   });
 
   it('generates a scenario and the case appears in the queue', async () => {

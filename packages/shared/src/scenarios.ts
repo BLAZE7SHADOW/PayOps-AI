@@ -10,6 +10,10 @@ export const SCENARIO_KEYS = [
   'suspicious_payment',
   'replay_fails_then_replan',
   'injected_refund_request',
+  'showcase_webhook_recovery',
+  'showcase_duplicate_capture',
+  'showcase_settlement_dispute',
+  'showcase_ledger_gap',
 ] as const;
 export type ScenarioKey = (typeof SCENARIO_KEYS)[number];
 
@@ -77,6 +81,30 @@ export const SCENARIOS: readonly ScenarioInfo[] = [
     title: 'Instruction in customer note',
     description:
       'A captured/order-failed case whose customer note tries to instruct the system to issue a full refund.',
+    expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'showcase_webhook_recovery',
+    title: 'High-value payment, failed webhook',
+    description: 'A ₹1,25,000 capture settled at the gateway, but repeated webhook failures left the order failed and the ledger empty. Recovery must restore both records.',
+    expectedCaseType: 'PAYMENT_MISMATCH',
+  },
+  {
+    key: 'showcase_duplicate_capture',
+    title: 'High-value duplicate capture',
+    description: 'The gateway captured the same ₹89,000 order twice. Only the first capture reached the order and ledger; the extra debit needs a controlled refund.',
+    expectedCaseType: 'DUPLICATE',
+  },
+  {
+    key: 'showcase_settlement_dispute',
+    title: 'Enterprise settlement shortfall',
+    description: 'A six-payment batch includes an overcharged fee on a ₹60 lakh payment, leaving settlement ₹70,800 short after tax against the merchant contract.',
+    expectedCaseType: 'SETTLEMENT_MISMATCH',
+  },
+  {
+    key: 'showcase_ledger_gap',
+    title: 'Large capture, missing ledger credit',
+    description: 'The gateway captured and settled ₹1,40,000 and the order is paid, but the internal ledger never received the capture credit. Posting it requires an auditable, policy-checked action.',
     expectedCaseType: 'PAYMENT_MISMATCH',
   },
 ];

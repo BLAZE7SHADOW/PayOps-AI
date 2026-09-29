@@ -31,11 +31,12 @@ export function RunDetailPage() {
   return (
     <>
       <PageHeader
-        title={runId}
+        title="Investigation run"
         meta={
           r ? (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <Tag tone={RUN_TONE[r.status]}>{r.status.replace(/_/g, ' ')}</Tag>
+              <span className="font-mono text-12 text-ink-2">{runId}</span>
               <span>
                 Case{' '}
                 <Link to={`/cases/${r.caseId}`} className="link font-mono text-12">
@@ -56,10 +57,13 @@ export function RunDetailPage() {
           </Link>
         }
       />
-      <Figures run={r} />
-      <section aria-labelledby="flow-title" className="mt-8">
-        <h2 id="flow-title" className="mb-3 text-20 font-semibold">Run orchestration</h2>
-        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} /> : <RunFlow steps={steps.isPending ? undefined : items} status={r?.status} />}
+      <section aria-labelledby="flow-title">
+        <h2 id="flow-title" className="mb-3 text-20 font-semibold">What happened</h2>
+        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} /> : <RunFlow steps={steps.isPending ? undefined : items} status={r?.status} run={r} />}
+      </section>
+      <section aria-labelledby="usage-title" className="mt-8">
+        <h2 id="usage-title" className="mb-3 text-18 font-semibold">Run usage</h2>
+        <Figures run={r} />
       </section>
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <section aria-labelledby="latency-title" className="min-w-0 xl:col-span-5">

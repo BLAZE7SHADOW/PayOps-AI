@@ -142,5 +142,41 @@
     "verdict": "PASS",
     "rootCause": "WEBHOOK_PROCESSING_FAILURE",
     "recordedAt": "2026-09-29T05:09:17.873Z"
+  },
+  {
+    "scenario": "showcase_webhook_recovery",
+    "seed": 3301,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+    "recordedAt": "2026-09-29T11:04:07.994Z"
+  },
+  {
+    "scenario": "showcase_duplicate_capture",
+    "seed": 3302,
+    "status": "RESOLVED",
+    "tier": "MANAGER",
+    "verdict": "PASS",
+    "rootCause": "DUPLICATE_CAPTURE",
+    "recordedAt": "2026-09-29T11:04:40.725Z"
+  },
+  {
+    "scenario": "showcase_settlement_dispute",
+    "seed": 3304,
+    "status": "RESOLVED",
+    "tier": "OPS",
+    "verdict": "PASS",
+    "rootCause": "SETTLEMENT_FEE_MISMATCH",
+    "recordedAt": "2026-09-29T11:05:52.355Z"
+  },
+  {
+    "scenario": "showcase_ledger_gap",
+    "seed": 3306,
+    "status": "RESOLVED",
+    "tier": "AUTO",
+    "verdict": "PASS",
+    "rootCause": "LEDGER_POSTING_MISSING",
+    "recordedAt": "2026-09-29T11:09:37.124Z"
   }
 ]
