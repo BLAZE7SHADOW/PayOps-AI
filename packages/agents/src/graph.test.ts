@@ -73,6 +73,16 @@ describe('Phase 3 graph with real Postgres checkpoints and deterministic service
     expect(result.diagnosis?.narrative).toMatch(/\[ev_\d+\]/);
   });
 
+  it('catches a wrong root-cause label the fix would not have exposed (P1 task 1, D057 gap)', async () => {
+    // The evidence shows one failed webhook and one capture. Jev claims DUPLICATE_CAPTURE, which
+    // the evidence cannot support, so the cause is downgraded and the case is not auto-fixed.
+    const { result } = await run('captured_order_failed', 'DUPLICATE_CAPTURE', 703);
+    expect(result.diagnosis?.rootCause).toBe('UNKNOWN');
+    expect(result.diagnosis?.narrative).toMatch(/DUPLICATE_CAPTURE was not confirmed/);
+    expect(result.proposal?.actions.map((a) => a.type)).toEqual(['ESCALATE_TO_HUMAN']);
+    expect(result.status).not.toBe('RESOLVED');
+  });
+
   it('pauses a large refund and resumes a newly constructed graph without re-running investigation', async () => {
     const { result, deps, config, runId } = await run('refund_never_initiated', 'REFUND_NOT_INITIATED', 703);
     expect(isInterrupted(result)).toBe(true);

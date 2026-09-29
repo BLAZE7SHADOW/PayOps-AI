@@ -22,6 +22,7 @@ import {
   AGENT_BUDGET_LIMITS,
   AGENT_NAMES,
   estimateCallCostUsd,
+  FAST_PATH,
   zeroBudget,
   type AgentApprovalDecision,
   type AgentName,
@@ -64,6 +65,7 @@ import {
   RISK_TOOLS,
   type ToolDef,
 } from './tools';
+import { checkRootCause } from './grounding/root-cause-checks';
 import { nextEvidenceId, nextFindingId } from './run-ids';
 import { checkBudgetGuard } from './budget-guard';
 
@@ -183,7 +185,8 @@ export function buildNodes(deps: AgentDeps) {
       await onEvent('diagnose', 'DECISION_MADE', { tag: 'J6_DIAGNOSE', answers: result.answers, usage: result.usage });
       const confidence = result.answers.root_cause.confidence;
       const needsHuman = result.answers.needs_human.noul;
-      const fast = confidence >= 0.8 && needsHuman <= 0.5 && result.answers.evidence_consistent.noul > 0.5
+      const fast = confidence >= FAST_PATH.minConfidence && needsHuman <= FAST_PATH.maxNeedsHuman
+        && result.answers.evidence_consistent.noul > FAST_PATH.minConsistent
         && narrativeFor(result.answers.root_cause.choice, state.evidence).citedIds.length > 0;
       const diagnosis: Diagnosis | null = fast
         ? { rootCause: result.answers.root_cause.choice, narrative: '', confidence, supportingFindingIds: [], path: 'FAST' }
@@ -676,8 +679,23 @@ export function buildNodes(deps: AgentDeps) {
       await onEvent('resolve', 'FINDING_CREATED', { findingIds: [finding.id] });
     }
 
+    // P1 task 1 (closes D057): a fix that validates does not prove the stated cause was right.
+    // Confirm the cause against the evidence in code; if it is not supported, downgrade to
+    // UNKNOWN so the proposal becomes an escalation to a person rather than an automatic fix
+    // under a wrong label.
+    const rootCauseCheck = checkRootCause(diagnosis.rootCause, state.evidence);
+    if (!rootCauseCheck.ok) {
+      const unknown = narrativeFor('UNKNOWN', state.evidence);
+      diagnosis = {
+        ...diagnosis,
+        rootCause: 'UNKNOWN',
+        narrative: `${unknown.text} The stated cause ${diagnosis.rootCause} was not confirmed: ${rootCauseCheck.reason}`,
+        supportingFindingIds: [],
+      };
+    }
+
     const proposal = buildProposal(diagnosis, caseState, toAttemptHistory(state.history));
-    await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal });
+    await onEvent('resolve', 'PROPOSAL_CREATED', { diagnosis, proposal, rootCauseCheck });
     await onEvent('resolve', 'NODE_COMPLETED', {});
     // Still before `policyGate` creates a resolution row (docs/DECISIONS.md D049), so a trip
     // here also has nothing to close but the case itself.
