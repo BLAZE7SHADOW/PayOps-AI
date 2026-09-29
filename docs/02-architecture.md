@@ -127,6 +127,9 @@ POST /api/cases/:id/actions {actions[]} → same policy → same approval → sa
 | GET | /api/cases/:id | VIEWER | 1 |
 | GET | /api/simulator/scenarios · POST /api/simulator/scenarios · POST /api/simulator/reset | ADMIN (OPS when DEMO_MODE) | 1 |
 | GET | /api/audit?entityId&caseId&cursor | VIEWER | 1 |
+| GET | /api/webhooks?status&event&gwPaymentId&cursor | VIEWER | P3 |
+| GET | /api/webhooks/counts, /api/webhooks/:id | VIEWER | P3 |
+| POST | /api/webhooks/:id/replay | OPS | P3 |
 | POST | /api/auth/login · /logout · GET /api/auth/me · GET /api/auth/demo-accounts | – | 2 |
 | POST | /api/cases/:id/actions | OPS | 2 |
 | GET | /api/approvals?status · POST /api/approvals/:id/decision | OPS / MANAGER | 2 |

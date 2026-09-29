@@ -337,6 +337,8 @@ Actions have a class (`shared/actions.ts`): `STATE_CORRECTION`, `MONEY_MOVEMENT`
 | P8 | diagnosis confidence < 0.6 (agent only) | at least OPS |
 | P9 | any CLAIM action (settlement dispute) | OPS |
 | P10 | only CONTROL actions (hold, escalate) | AUTO |
+| P11 | default: no rule above allows automatic execution | OPS |
+| P12 | agent proposal that is more than hold or escalate, while the operator has set the agent to propose-only or paused (D066) | at least OPS |
 
 Approval rules: MANAGER tier needs role MANAGER. An approver cannot approve a run they manually started (four-eyes), enforced in the approvals service.
 

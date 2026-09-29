@@ -126,7 +126,7 @@ apps/web (React 19, Vite, Tailwind v4)  <-- REST + Socket.IO -->  apps/server (E
 | `apps/server` | REST API, realtime events, auth, job queue |
 | `packages/core` | Domain services, policy engine, executor, validator, ports and adapters |
 | `packages/agents` | LangGraph investigation graph and nodes |
-| `packages/simulator` | Seeded fault generator for the nine scenarios |
+| `packages/simulator` | Seeded fault generator for the 21 scenarios |
 | `packages/evals` | Golden-scenario eval harness |
 | `packages/shared` | DTOs and types shared by web and server |
 

@@ -19,11 +19,11 @@ report is committed at `docs/evals/2026-09-28.md` (7/7 in LIVE mode).
 
 ## Next task
 
-**P0 is done (D062). Next session: P1 · AI trust** (see `docs/06-phases.md`, "Polish track"). Open a fresh chat with "Read CLAUDE.md and docs/PROGRESS.md, then continue." and P1 task 1 is done (D063). Do P1 task 2 (evals) next; recording needs the Mac.
+**P3 tasks 1 and 2 are done (D071, D072). Next: P3 task 3, a 10,000-payment volume test with detection timings** (`docs/06-phases.md`, "Polish track"). Open a fresh chat with "Read CLAUDE.md and docs/PROGRESS.md, then continue."
 
-Still for Shivam: run the app, open a resolved case, an awaiting-approval case and the run page to check them (nothing was viewed in a browser by me). Apply migration 0005 (`npx pnpm@10.28.0 db:migrate`). Commit from the Mac, delete `docs/UI-CASE-WORKSPACE-PREVIEW.html`, remove `.git/index.lock` if git complains.
+Still for Shivam: run the app and check what nothing here has viewed in a browser: the Webhook events page (`/webhooks`: filter, open an event, Replay a DEAD one as ops@payops.dev and check it turns Processed, viewer sees no Replay button), a case's notes panel, the Exceptions saved views, `/handoff`, Approvals bulk approve, and Undo. For Undo, resolve a `replay_fails_then_replan` case (replay, then mark paid + ledger post with ops2's approval), open the resolved case as ops@payops.dev, click "Undo ledger post", confirm, approve as ops2, and check the case ends Open with the ledger cell mismatched again. Apply migrations 0005 to 0010 (`npx pnpm@10.28.0 db:migrate`). Commit from the Mac, delete `docs/UI-CASE-WORKSPACE-PREVIEW.html` and the `_to_delete/` folder at the repo root (it holds one empty stub file I created by mistake and could not delete), remove `.git/index.lock` if git complains.
 
-Later ideas: dev:mock fixtures with a before-state; earlier attempts inline in the story; manual notes as a PERSON entry; Lighthouse on `/` and Case; demo video.
+Later ideas: dev:mock fixtures with a before-state (and a mock for the undo route); earlier attempts inline in the story; manual notes as a PERSON entry; Lighthouse on `/` and Case; demo video; inverse actions for MARK_ORDER_PAID and HOLD if undo should cover them.
 
 ## How to run locally
 
@@ -72,7 +72,7 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Known gaps (deliberate, later phases)
 
-- Detection never closes a case by itself; cases close through a verified resolution.
+- Detection closes a case by itself only when the order re-reads fully consistent and the case is still OPEN and of a payment, refund or duplicate type (D069). Risk and settlement cases, and any case someone is working, close only through a verified resolution.
 - Login rate limiting is in memory (single server process).
 - Signals column is now populated by `SignalIntakeService` (J1) when a case is created, but only
   when a `DecisionPort` is wired in (`apps/server` always wires one now); it silently stays empty
@@ -105,6 +105,84 @@ Shivam's Mac directly, same as task 9 did.
 - Dockerfile, hosted deploy (frontend on Vercel, API host TBD), nightly reset (parked by D051)
 
 ## Session log
+
+### 2026-09-29 · P3 task 2: webhook event log, replay, retry queue (D072)
+- Scope confirmed with Shivam: backend, API and a small UI; retries through pg-boss with backoff.
+- Tests first: `shared/webhook-retry.test.ts` (4), `core/services/webhook-event.service.test.ts` (15: logging, backoff to DEAD, early and stale jobs skipped, manual replay, gateway-missing fallback, queue outage, list and cursor), simulator `scenarios.test.ts` (2 new), server `app.test.ts` (1 new), web `webhook-log.test.ts` (5) and `WebhookDetailView.test.tsx` (4).
+- Shared: retry policy, `dto/webhooks.ts`. Core: table `webhook_events` (migration `0010_webhook_event_log`), `WebhookEventService` as the gateway sink, `WebhookRetryScheduler` option. Server: `jobs/webhooks.ts` (queue `webhook-retry`), `routes/webhooks.ts`, wired in `main.ts` with the same forwarding-box pattern as the agent resumer. Simulator: seeded deliveries also write the log; `webhook_events` added to the reset list. Web: `/webhooks` page with filters, detail drawer, two-step Replay, nav item, `replay` capability.
+- Checks: tsc clean in shared, core, simulator, server, web; tests pass in shared (33), core (214), simulator (70), agents (176), server (40), web (180, run with `VITE_API_URL=` empty); eslint clean on touched files. Nothing was viewed in a browser by me, and the pg-boss job itself was not run (tests use a fake scheduler). Apply migration 0010.
+- Not built: signature checks (task 4), a mock-server route for `dev:mock`, a case link on each event.
+### 2026-09-29 · P3 task 1: six messy scenario variants (D071)
+- The plan's 9 to 15 target was already met by code (15 keys). Shivam chose to add six messier variants, giving 21.
+- Tests first: `simulator/scenarios.test.ts` gained a "messy variants" block (6 tests) on top of the per-scenario case-type loop.
+- Simulator: `checkout` options `webhook: 'pending'`, `staleFailureAt`, `cancelledBeforeCaptureAt`, `RefundOptions.skipInternal`; new `scenarios/messy.ts`; keys and infos in `shared/scenarios.ts`. No rule, schema or migration change.
+- Checks: tsc clean in shared, core, simulator, agents, evals, server, web; tests pass in simulator scenarios (43), shared, server (136 across those three packages). Not run: the web and agents suites, eslint, a browser pass. No agent evals or cassettes for the new scenarios (live run needed on the Mac).
+- Not built: a duplicate-webhook double-credit scenario (no detection rule flags a ledger over-credit).
+### 2026-09-29 · P2 task 4: undo a ledger post through a reversing action (D070)
+- Scope: only `POST_LEDGER_ENTRY` has an inverse in the catalog, so only that is undoable. Shivam confirmed the optional `undoOf` param on `REVERSE_LEDGER_ENTRY` (not a new action).
+- Tests first: `core/actions/actions.test.ts` (3: schema, undo postcondition expects zero credit, duplicate-journal behaviour unchanged), `simulator/resolution.test.ts` (3: undo reopens and passes and the case stays OPEN, refusal when nothing was posted, viewer forbidden), server `app.test.ts` (1), web `undo.test.ts` (3) and `UndoResolution.test.tsx` (3).
+- Shared: `undoOf`, `isUndoProposal`. Core: `ResolutionService.undo` (reopen, propose, restore on failure), validator skips case invariants for an undo, `closeValidated` leaves the case OPEN after a passing undo. Server: `POST /api/cases/:id/resolutions/:resolutionId/undo`. Web: `useUndoResolution`, `UndoResolution` (two-step confirm) under the verdict line, `undo` capability.
+- Checks: tsc clean in shared, core, agents, simulator, server, web; eslint clean on touched files; tests pass in shared (29), core (199), agents (176), simulator (56), server (26 in app.test), web (171, run with `VITE_API_URL=` empty). Nothing was viewed in a browser by me. No migration.
+- Not built: undo for anything but ledger posts, a mock-server route for `dev:mock`, an audit filter for undo.
+
+### 2026-09-29 · P2 task 3: bulk approve and verified auto-close (D069)
+- Scope confirmed with Shivam: both parts; low-risk means OPS tier, risk LOW, money moving up to INR 5,000, no repeat attempt or low confidence, no quarantined notes.
+- Tests first: `shared/bulk-approve.test.ts` (5), simulator `resolution.test.ts` bulk cases (2), `simulator/auto-close.test.ts` (3), server `app.test.ts` bulk API (1), web `bulk-approve.test.ts` (1) and `BulkApprove.test.tsx` (4).
+- Shared: `bulkApproveBlockReason`, `BulkApprovalBody`, `BulkApprovalResult`, limits. Core: `ApprovalService.bulkApprove` (each item through `decide`), `CaseService.autoCloseReconciled`, called from `ReconciliationService.checkOrderChunk` for orders with no hit and no mismatch. Server: `POST /api/approvals/bulk-approve`. Web: `BulkApprove` panel on the Approvals page (pending scope).
+- Checks: tsc clean in shared, core, simulator, server, web; eslint clean on touched folders; tests pass in core (196), simulator (53), server (38), web approvals (9, run with `VITE_API_URL=` empty). Not run: the full web suite, the agents package, a browser pass (nothing viewed in a browser by me). No migration.
+- For Shivam: open Approvals as ops@payops.dev, generate two duplicate-capture cases from the Simulator, propose the fix on both, then as ops2@payops.dev use "Approve N selected" and check the cases end RESOLVED. For auto-close, watch a case close by itself after a sweep once its data is consistent; the case history shows "Reconciliation" as the actor.
+- Not built: bulk reject or escalate, a per-item "why not bulk" hint in the list (the server reports it after the fact), and auto-close for risk and settlement cases.
+
+### 2026-09-29 · P2 task 2: case notes, saved views, shift handoff (D068)
+- Tests first: `core/services/operator-workflow.test.ts` (9: notes, views, handoff counts, ordering, window, cap), `shared/handoff-text.test.ts` (3), API tests in `server/app.test.ts` (3), web tests for `CaseNotes` (6), `saved-views` mapping (5), `SavedViews` (5), `HandoffView` (2).
+- Shared: `dto/workflow.ts` (`OperatorNoteBody/Item`, `SavedViewFilters/Body/Item`, `HandoffQuery`, `HandoffSummary`), `renderHandoffText`, id kind `savedView`.
+- Core: tables `case_notes`, `saved_views` (migration `0009_operator_notes_saved_views`, generated by drizzle-kit); `CaseNoteService`, `SavedViewService`, `HandoffService`, all wired into `Core`.
+- Server: `GET/POST /api/cases/:id/notes`, `GET/POST /api/views`, `DELETE /api/views/:id`, `GET /api/handoff`.
+- Web: Notes panel on the case page, Saved views control in the Exceptions filter bar, `/handoff` page with Copy as text, nav item, mock server support, `note` capability.
+- Checks: tsc clean in shared, core, agents, server, web; eslint clean on touched folders; tests pass in shared and core (220 together), server, web (33 files, run with `VITE_API_URL=` empty because vite loads it from `.env`). Simulator was not touched. Nothing was viewed in a browser by me.
+- Note for next session: `VITE_API_URL` comes from `.env`, so `unset` in the shell does not help; prefix the command with `VITE_API_URL=` instead.
+
+### 2026-09-29 · P2 task 1: case assignment, due times, overdue alerts (D067)
+- Tests first: `shared/sla.test.ts` (5), `shared/time.test.ts` (`dueLabel`, 3), case service tests for `dueAt`, overdue and `assign` (7), API test for `PUT /api/cases/:id/assignee` and the new filters, `CaseHeader.test.tsx` (5).
+- Shared: `SLA_HOURS`, `dueAtFor`, `isOverdue`, `dueLabel`; `CaseListItem` gains `dueAt` and `overdue`; `CaseListQuery` gains `assigneeId` and `overdue`; `AssignCaseBody`.
+- Core: `cases.due_at` (migration `0008_case_due_at`, backfilled), `CaseService.assign` (audited, no-op when unchanged, OPS-or-above assignee, open cases only), list filters. `toCaseListItem` now takes `now`.
+- Web: Due and Assignee columns, Assignee filter (me, unassigned), Overdue only toggle, overdue notice above the queue, Assign to me / Take over / Unassign in the case header, mock server support.
+- Checks: tsc clean in all seven packages; eslint clean on touched folders; tests pass in shared, core (187), agents (176), simulator (48), server (34), web (all, run with `VITE_API_URL` unset). Nothing was viewed in a browser by me.
+- For Shivam: apply migration 0008 (`npx pnpm@10.28.0 db:migrate`). In the app, open Exceptions: check the Due and Assignee columns, take a case from its header as ops@payops.dev, then filter Assigned to me. To see an overdue case, use the Simulator to make a case and move the clock, or lower `SLA_HOURS` temporarily.
+- Not built: a user picker to assign to someone else, and notifications outside the app. Both noted in D067.
+
+### 2026-09-29 · P1 task 4: agent controls and handoff messages (D066)
+- Policy rule P12 (tests first): propose-only or paused makes any agent fix beyond hold/escalate need OPS approval. `POLICY_VERSION` 2026-09-29.1; `docs/03` §11 lists P11 and P12.
+- New table `agent_controls` (migration `0007_agent_controls`), `AgentControlService` (4 tests), `GET`/`PUT /api/agent-control` (PUT is MANAGER), `createAgentRun` refuses new runs while paused, graph test for propose-only, API test for roles, reason and the 409.
+- Web: Agent controls section on the Policy page, banner on every page while limited, Start investigation replaced by a note while paused, `describeHandoff` + `HandoffCard` on the run page and the case Next step panel (10 new web tests). `AgentRunItem.error` added.
+- Checks: tsc clean (shared, core, agents, server, evals, simulator, web); 592 of 593 tests pass, the one failure is the known `ResolveDrawer.test.tsx` API base URL test; eslint clean; REPLAY eval 11/11.
+- For Shivam: apply migrations 0006 and 0007 (`npx pnpm@10.28.0 db:migrate`). As manager@payops.dev set the agent to Paused on the Policy page, then as ops@payops.dev open a case: the banner shows and Start investigation is replaced by a note. Set Propose only, start an investigation on a captured/order-failed case, and check the fix waits for approval. Nothing was viewed in a browser by me.
+- Not built: a dedicated operator review screen (see D066). P1 done-when: a wrong root-cause label is caught by a test (D063/D064), the eval report is committed, and a pause stops new runs and auto-executions (D066).
+- Next: P2 · Operator workflow (`docs/06-phases.md`), in a fresh chat.
+
+### 2026-09-29 · P1 task 3: operator feedback on a diagnosis (D065)
+- New table `diagnosis_feedback` (migration `0006_diagnosis_feedback`), `FeedbackService` (6 tests written first), `GET`/`PUT /api/runs/:id/feedback` (API test covers 409 without a diagnosis, 422 for a wrong verdict without a reason, and viewer read-only), shared DTOs and `DiagnosisFeedbackBody`.
+- Web: "Your feedback on this diagnosis" panel on the run page (`DiagnosisFeedback.tsx`, 6 tests), `judge` capability for OPS and above, `PUT` support in `api()`, mock server answers the new GET.
+- Checks: tsc clean (core, server, web, agents, evals); web and core tests pass except the known `ResolveDrawer.test.tsx` failure (API base URL); server 32 pass; eslint clean on touched files.
+- For Shivam: apply migration 0006 (`npx pnpm@10.28.0 db:migrate`), open a run page as ops@payops.dev, judge a diagnosis, then check the case audit trail shows `diagnosis.feedback`. Nothing was viewed in a browser by me.
+- Next: P1 task 4 (global pause, propose-only mode, clearer handoff messages when the agent stops). Includes the operator review path for ambiguous cases discussed after D064.
+
+### 2026-09-29 · P1 task 2b: candidate causes and code correction (D064)
+- New `grounding/candidates.ts` (+ 9 tests, written first): checks now generate candidates, one leader per causal chain. `resolve` keeps a confirmed label, replaces a downstream or rejected label when exactly one candidate remains (confidence 0.5, so OPS approves), and escalates with the candidate list when none or several remain. It also fetches `getFeeBreakdown` in code for the settlement checks.
+- Finding: the tools the checks read are already baseline tools, so the LIVE misses were wrong labels, not missing lookups.
+- Graph test for the wrong-label case rewritten: now expects the corrected label, tier OPS and an approval pause.
+- Checks: agents tsc clean; agents 175 tests pass; REPLAY eval 11/11.
+- NOT done: bounded LLM retry with the rejection reason (needs new prompt and recordings; decide after the next LIVE run), and the operator review screen (P1 task 4).
+- Next: run `npx pnpm@10.28.0 eval:live` twice on the Mac and compare with the 2026-09-29 report.
+
+### 2026-09-29 · P1 task 2 (part 1): all recorded scenarios in the eval set
+- Added golden cases `settlement_mismatch` (seed 3204, OPS approve, RESOLVED/PASS) and `suspicious_payment` (seed 3206, MANAGER, manager rejects, ends REJECTED with no execution). Both replay existing cassettes; no new recording needed.
+- Checks: `tsx packages/evals/scripts/run-eval.ts` REPLAY 9/9 pass, root-cause accuracy 100%; evals tsc clean.
+- Adversarial scenarios built: `misleading_note` (customer claims a double charge; records show one capture and a failed webhook, expected WEBHOOK_PROCESSING_FAILURE) and `conflicting_evidence` (note says a refund was sent; records show none, expected REFUND_NOT_INITIATED). Files: `simulator/src/scenarios/adversarial.ts`, keys in `shared/src/scenarios.ts`, seeds 3401/3402 in `record-cassettes.ts`. Simulator tests 48 pass; tsc clean for shared, simulator, agents, evals, core, web.
+- LIVE eval ran twice on the Mac (report `docs/evals/2026-09-29.md` is the second run, 9/11 pass, root-cause accuracy 90%). Results differ between runs because the model picks different root-cause labels. Run 1 failed `conflicting_evidence`; run 2 failed `refund_stuck` and `refund_never_initiated`. In every miss the P1 task 1 root-cause check caught a wrong label (WEBHOOK_NOT_DELIVERED, ORDER_STATE_DIVERGED) and the run escalated to a person with no automatic action. That is the safe behavior, but it lowers the resolution rate. All safety gates held (no refund on `misleading_note`, injection quarantined, suspicious payment never auto-resolved).
+- Open question for Shivam: keep the golden expectations strict (the LIVE eval is then honest about flakiness), or tune the diagnosis prompt/label hints for refund cases in a later task. Not done here, since it is agent tuning outside P1 task 2.
+- Recorded on the Mac: `misleading_note` (seed 3401, RESOLVED/AUTO/PASS, WEBHOOK_PROCESSING_FAILURE) and `conflicting_evidence` (seed 3402, MANAGER approve, RESOLVED/PASS, REFUND_NOT_INITIATED). Golden entries added; REPLAY eval 11/11 pass. LIVE report written (see above). Remaining: commit.
+- Known unrelated web test failure: `ResolveDrawer.test.tsx` "pre-checks recommended options" expects a relative `/api/...` URL but gets `http://localhost:4000/api/...` (API base URL env in this shell). Not touched by this task.
 
 ### 2026-09-29 · P1 task 1: root-cause checks (D063)
 - New `grounding/root-cause-checks.ts` (+ 25 table tests, written first) and a wiring in `resolve`: an unsupported cause is downgraded to UNKNOWN and escalated. Graph test added: `captured_order_failed` with a DUPLICATE_CAPTURE claim is caught and not auto-resolved.

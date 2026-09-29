@@ -175,13 +175,13 @@ Done when: a wrong root-cause label is caught by a test; eval report committed; 
 **P2 · Operator workflow (3 to 4 days)**
 1. Case assignment, due times, alerts for overdue cases.
 2. Saved views, case notes, shift handoff summary.
-3. Bulk approve for low-risk actions; auto-close when systems reconcile by themselves.
-4. Undo through a reversing action where the catalog allows it.
+3. Bulk approve for low-risk actions; auto-close when systems reconcile by themselves. (done, D069)
+4. Undo through a reversing action where the catalog allows it. (done, D070)
 Done when: an operator can run a shift from the Exceptions page without opening a case for routine ones.
 
 **P3 · Realistic data and adapter test kit (3 days)**
-1. Grow scenarios from 9 to about 15 with messier variants (late webhooks, partial refunds, out-of-order events, duplicates).
-2. Raw event log with replay, and a retry queue for failed webhooks.
+1. Grow scenarios from 9 to about 15 with messier variants (late webhooks, partial refunds, out-of-order events, duplicates). (done, D071: 15 existed by then; six messy variants added, 21 total)
+2. Raw event log with replay, and a retry queue for failed webhooks. (done, D072)
 3. A 10,000-payment volume test with detection timings.
 4. Adapter contract tests and a webhook signature-check helper, so Razorpay and PayPal only need an adapter.
 Done when: contract tests run against the simulator adapter; volume test result written to docs.

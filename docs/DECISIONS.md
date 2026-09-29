@@ -1118,3 +1118,122 @@ Purpose text per node is static copy in `run-detail.ts`. No new endpoint, model 
 **Why.** D057: the validator proves the data is fixed, not that the label is right. A wrong label could pass end to end.
 
 **Consequences.** A wrong label is never auto-fixed under that label; it goes to a person. `SETTLEMENT_LINE_MISSING` is as loose as `SETTLEMENT_FEE_MISMATCH` because no tool projects "this line is absent" (D041). The checks cannot prove a cause is the only possible one; they reject causes the facts contradict or do not support.
+
+## D064 · Candidate causes and code correction of wrong labels (P1 task 2b)
+
+**Decision.** The D063 checks now also generate candidates (`grounding/candidates.ts`). Causes sit in chains where an upstream cause explains the ones below it (webhook failure, then order diverged, then ledger missing; refund not initiated, refund failed at gateway, refund not synced; fee mismatch, line missing). Only the most upstream supported cause of a chain is a candidate. `resolve` compares the agent's label with the candidates:
+
+- Confirmed and already the chain leader: kept.
+- Confirmed but downstream of a supported cause, or rejected with exactly one candidate left: code replaces the label and sets confidence to 0.5. That is below the policy's low-confidence threshold (P8), so a person (OPS) approves before anything runs.
+- Rejected with none or several candidates: `UNKNOWN`, escalated, and the narrative lists the supported candidates for the reviewer.
+
+`resolve` also fetches `getFeeBreakdown` in code when the agent did not, since the settlement checks read it and a missing lookup must not look like "no evidence". All other tools the checks read are baseline tools that code already runs.
+
+**Why.** The first LIVE eval runs (docs/evals/2026-09-29.md) failed on different scenarios each time because the model picked a label the evidence did not support. D063 made those safe by escalating, but it lowered the resolution rate. Recovering the label in code keeps the safety and resolves more cases. The model still never authorizes or executes.
+
+**Not built yet.** A bounded LLM retry that feeds the rejection reason back once (planned step 3). It needs a new prompt and new recordings, so it waits until the next LIVE run shows whether steps 1 and 2 are enough. The review screen where an operator picks a cause and action from the catalog belongs to P1 task 4.
+
+**Consequences.** Recorded runs are unchanged (agents 175 tests and REPLAY eval 11/11 pass). Chain order is a judgment call, written down in `CAUSE_CHAINS`. `SETTLEMENT_LINE_MISSING` still cannot be told apart from a fee mismatch (D041).
+
+## D065 · Operator feedback on a diagnosis (P1 task 3)
+
+**Decision.** An operator can mark a run's diagnosis "right" or "wrong" on the run page. A wrong verdict needs a short reason (3 to 500 characters) and can name the cause they believe it was. Feedback lives in a new table `diagnosis_feedback` (migration `0006_diagnosis_feedback`): one row per operator per run, replaced when the same operator answers again. The row copies the agent's `diagnosedRootCause` when judged, so later runs cannot rewrite what was judged. `FeedbackService` (core) writes it and audits `diagnosis.feedback` on the case trail. API: `GET /api/runs/:id/feedback` (any signed-in role) and `PUT /api/runs/:id/feedback` (OPS and above). A run with no diagnosis yet returns 409.
+
+**Why.** The agent's accuracy so far is measured only by evals on simulated cases. Real judgments give P5 an agent-accuracy metric with a stated definition, and the wrong-with-reason rows show which root-cause checks to add (D064).
+
+**Consequences.** Feedback records a judgment only. It never changes a run, a case, a policy decision or a prompt, so it cannot become a way to steer the agent. Viewers can read feedback but not write it. Showing the metric on Overview is P5.
+
+## D066 · Agent controls and handoff messages (P1 task 4)
+
+**Decision.** A manager (MANAGER or ADMIN) can set the agent to one of three modes from the Policy page: NORMAL, PROPOSE_ONLY or PAUSED. The setting is one row in `agent_controls` (migration `0007_agent_controls`), read with `GET /api/agent-control` and changed with `PUT /api/agent-control`; a reason is required for anything but NORMAL, and every change writes an audit event `agent.control_changed`.
+
+- **PROPOSE_ONLY:** the agent still investigates and proposes, but new policy rule **P12** raises any agent proposal that does more than hold or escalate to at least OPS, so a person approves every fix.
+- **PAUSED:** `createAgentRun` refuses to start a new investigation (409 with the reason), and P12 applies to any run already in flight. Holds and escalations stay AUTO (P10), since they change no money or records and are what the agent needs to hand a case over.
+- People are never affected: manual resolutions use the same policy and executor and ignore the switch (P12 is `appliesTo: agent`). This keeps the rule that the product works with AI off.
+
+A banner on every page shows the mode, reason and who set it, and Start investigation is replaced by a note while paused. `POLICY_VERSION` moved to `2026-09-29.1`; `docs/03` §11 lists P11 and P12.
+
+**Handoff messages.** `describeHandoff` (web, pure, 7 tests) turns a stopped run (ESCALATED, REJECTED, FAILED) into a title, the recorded reason and next steps: unconfirmed cause (with the candidate causes from D064), policy block (the blocking rules), failed validation (the failed check), rejection, or a recorded error. It is shown on the run page and in the case's Next step panel. `AgentRunItem` gained `error` for this. Nothing in the message is inferred beyond what the run recorded.
+
+**Not built.** A separate review screen where an operator picks a cause and action. The existing Resolve manually drawer already lets a person choose actions from the closed catalog through the same policy, executor and validator, and the handoff card points to it with the candidate causes in front of the operator. A dedicated screen can wait for evidence from operator feedback (D065) that this is not enough.
+
+**Consequences.** The pause is enforced at run start and at the policy gate, not by killing a run mid-flight. A run that started before the pause finishes investigating and then waits for approval.
+
+## D067 · Case assignment and due times (P2 task 1)
+
+**Decision.** Every case gets a `due_at` when it opens: `openedAt` plus a window set by severity, CRITICAL 4h, HIGH 8h, MEDIUM 24h, LOW 72h (`packages/shared/src/sla.ts`, `SLA_HOURS`). Windows are wall-clock hours, not business hours, because payment problems do not pause overnight. `due_at` is set once. A repeat detection that raises severity does not move it, so a case cannot dodge its deadline by being re-detected. Migration `0008_case_due_at` backfills existing cases with the same windows.
+
+**Overdue is derived, not stored.** The server computes `overdue` (open and `dueAt` in the past) with the injected clock and returns it on every case list item. Nothing writes an "overdue" state, so there is no job to keep in sync. Closed cases are never overdue.
+
+**Assignment.** `PUT /api/cases/:id/assignee` (OPS and above) sets or clears the assignee. The assignee must exist and be OPS or above (422 otherwise), and the case must be open (409). Assigning the same person again does nothing and writes no audit row. Each change writes `case.assigned` or `case.unassigned` with who and to whom. The queue filters by `assigneeId` (a user id or `unassigned`) and `overdue=true`.
+
+**Alerts.** In-app only: the Exceptions page shows a line with the overdue count and a button to filter to them, plus a Due column and an Assignee column. No email or chat notifications, since the product has no outbound channel yet. The case header has Assign to me, Take over and Unassign. There is no user picker yet; a manager assigning to another person waits for a users endpoint.
+
+**Why these numbers.** They are a starting policy, not a measured one. If P5 metrics show most cases finishing well inside their window, tighten them. The table lives in one place so changing it is one edit plus the migration backfill.
+
+**Consequences.** Any code that builds a `CaseListItem` now needs the current time (`toCaseListItem(row, assigneeName, now)`). `dueLabel` in `shared/time.ts` formats the countdown for the UI.
+
+## D068 · Case notes, saved views and shift handoff (P2 task 2)
+
+**Case notes.** Operators write notes on a case (`POST /api/cases/:id/notes`, OPS and above; `GET` for every role). They live in a new `case_notes` table, separate from `support_notes`, which are customer messages on a payment and feed Jev J1. Notes are append-only: no edit, no delete, so the history can be trusted in a review. Each one writes a `case.note_added` audit row (the note text stays in `case_notes`, not in the audit summary). Notes are allowed on closed cases because follow-up often arrives after resolution. Notes are plain text, capped at 2000 characters, shown with `white-space: pre-wrap`, and never sent to a model.
+
+**Saved views.** A view is a name plus queue filters (`scope`, `type`, `severity`, `assigneeId`, `overdue`, `q`), stored per user in `saved_views` (unique on owner and name, at most 20 per user). Views are private. Deleting another user's view returns 404, so ids cannot be probed. `assigneeId: 'me'` is stored as `me` and resolved when applied, so it always means the viewer. The filters schema is strict, so unknown keys are rejected (422). The Exceptions page keeps its filters in the URL as before; applying a view sets the URL, and the page marks a view active when the URL matches it. Every role can keep views since they change no case data. All state-changing calls, DELETE included, still need `Content-Type: application/json` (the CSRF rule).
+
+**Shift handoff.** `GET /api/handoff?hours=8` (1 to 72) returns counts of open, overdue, waiting-for-approval and unassigned cases, open cases by severity, cases resolved in the window by who resolved them, up to 10 cases needing attention, and up to 10 recent notes. A case needs attention when it is overdue, CRITICAL, awaiting approval or escalated, ordered like the queue (priority, then oldest). The reasons are fixed phrases chosen by code. Everything is counted in code from the database; no model writes or rewords it (rule 4). `renderHandoffText` in shared turns the summary into plain text for pasting; the page shows it under "Text version" with a Copy button. The route is a read for all roles.
+
+**Limits.** The handoff reads every open case into memory to count it. That is fine at this product's size; move the counts into SQL if open cases ever reach the tens of thousands. There is no user picker, so a handoff cannot yet name a recipient. Notes have no mentions or attachments.
+
+**Consequences.** New tables `case_notes` and `saved_views` (migration `0009_operator_notes_saved_views`). New `Core` members `caseNotes`, `savedViews`, `handoff`. New web capability `note`. New route `/handoff` and a "Shift handoff" nav item.
+
+## D069 · Bulk approve and verified auto-close (P2 task 3)
+
+**Bulk approve.** `POST /api/approvals/bulk-approve` (OPS and above, 1 to 25 ids) approves several pending approvals in one call. It is a shortcut for clicking Approve on each one, not a new path: every item goes through `ApprovalService.decide`, so role, four-eyes, the executor, the validator and the audit trail are unchanged, and one item failing does not stop the others. An item is eligible only if `bulkApproveBlockReason` (`shared/bulk-approve.ts`, one rule for server and UI) allows it: tier OPS, risk LOW, money moving at most `BULK_APPROVE_MAX_MINOR` (INR 5,000), not a repeat attempt (P7), not low confidence (P8), and no quarantined notes on the case. Anything else is returned as SKIPPED with the reason, and a person opens the case. MANAGER and BLOCKED tiers never qualify. The audit comment defaults to "Bulk approved as low risk".
+
+**UI.** The Approvals page (pending scope) shows a "Low-risk approvals" panel listing the eligible items, all checked, with one button. The list cannot know about quarantined notes, so the server may skip an item the panel offered; the result line says why.
+
+**Auto-close.** This reverses the earlier rule "detection never closes a case by itself", with limits. After detection re-reads an order, if it has no rule hit and no mismatched system, `CaseService.autoCloseReconciled` closes that order's cases that are still OPEN and of type payment mismatch, refund exception or duplicate. It closes them as RESOLVED by SYSTEM ("Reconciled without action: all systems agree again."), audited as `case.resolved` by Reconciliation, and refreshes the stored matrix. It does not touch cases that are investigating, awaiting approval, executing or escalated (a person or agent owns them), and it does not touch risk cases (no current flag does not prove the risk is gone) or settlement cases (checked per batch, not per order).
+
+**Why.** The goal of P2 is running a shift from the queue without opening routine cases. Late webhooks and delayed settlements fix many cases on their own, and leaving them open is noise. The check is the same data read that opened the case, so a case cannot close while a mismatch remains.
+
+**Consequences.** New `ApprovalService.bulkApprove`, `CaseService.autoCloseReconciled`, shared `bulk-approve.ts`, web `features/approvals/BulkApprove.tsx`. No migration. If a case closed by SYSTEM is later re-detected, detection opens a new case with a new display id, as it does after any resolved case. Undo (task 4) does not cover auto-close.
+
+## D070 · Undo a ledger post through a reversing action (P2 task 4)
+
+**What.** An operator can undo a resolved case whose latest resolution passed validation and posted a capture to the ledger (`POST_LEDGER_ENTRY`). `POST /api/cases/:id/resolutions/:resolutionId/undo` (OPS and above) calls `ResolutionService.undo`, which reopens the case and proposes `REVERSE_LEDGER_ENTRY` for the journal the original step created. That proposal goes through the same policy, approval, executor and validator as any other fix, and the audit log shows `case.reopened` then the normal chain.
+
+**Scope.** Only `POST_LEDGER_ENTRY` has a reversing action in the catalog. `MARK_ORDER_PAID` and `HOLD_PAYMENT_FOR_REVIEW` have no inverse action, and refunds, disputes and replays cannot be taken back, so they show no Undo. No new catalog action was added.
+
+**Catalog change.** `REVERSE_LEDGER_ENTRY` gets an optional `undoOf` (the resolution being undone). Without it the validator still expects net capture credit to equal the gateway capture (the duplicate-journal case). With it, the postcondition expects no capture credit, and the validator skips the case-level invariants ("every system agrees", "detection finds nothing"), because the ledger disagreeing with the gateway is the intended result. `isUndoProposal` in `shared/actions.ts` is the one check for this.
+
+**Outcome.** A passing undo leaves the case OPEN (summary "Undone, case reopened"), and detection re-runs so the original mismatch shows again. If the undo cannot be proposed (blocked, preconditions fail), the case is put back to RESOLVED with its original resolution. Undo is offered only for the latest resolution, and never for an undo itself (its steps are reversals, not posts).
+
+**Why not a separate action.** A new `UNDO_LEDGER_POST` action would touch policy, agent prompts and the UI action list for the same behaviour. The optional param keeps the catalog closed and the change small. Agents do not set `undoOf`.
+
+**Consequences.** No migration. New: `ResolutionService.undo`, `isUndoProposal`, server route, web `UndoResolution` under the case verdict, `undo` capability. Auto-closed cases (D069) have no resolution to undo.
+
+## D071 · Six messy scenario variants (P3 task 1)
+
+**What.** The plan said "grow from 9 to about 15", but the simulator already had 15 keys (9 core, 2 adversarial, 4 showcase). Shivam chose to add six messy variants on top, so there are now 21. Each opens exactly one case through the existing detection rules; no rule, schema or migration changed.
+
+**New scenarios.** `late_webhook_retrying` (webhook still PENDING after two 503s, order PENDING, D1 and D3), `stale_failure_after_capture` (out-of-order event flips a paid order to FAILED, D1), `partial_refund_stuck` (D5), `refund_never_reached_gateway` (D5, no gateway refund), `partial_refund_shortfall` (D6, only the unrefunded remainder is owed), `cancel_raced_capture` (D6, order cancelled before the capture landed and the ledger was credited).
+
+**Simulator options.** `checkout` gained `webhook: 'pending'`, `staleFailureAt`, `cancelledBeforeCaptureAt` and `RefundOptions.skipInternal`.
+
+**Not covered.** Duplicate webhook delivery that double-credits the ledger: no detection rule flags a ledger over-credit, so it would open no case. Add the rule first if that fault matters. Agent evals and cassettes for the new scenarios are not recorded; they need a live run on Shivam's Mac.
+
+**Consequences.** `SCENARIO_KEYS` and `SCENARIOS` in shared grow to 21, so the simulator page lists them and `seed` creates one case for each.
+
+
+## D072 · Inbound webhook event log, replay and retry queue (P3 task 2)
+
+**What.** Every webhook the gateway sends to our consumer is now recorded in `webhook_events` (migration 0010), one row per gateway event id, with the payload as received and an `attempts` list. Each attempt says who caused it: `GATEWAY`, `RETRY` (the queue) or `MANUAL` (a person). Status is `PROCESSED`, `FAILED` (a retry is queued) or `DEAD` (out of automatic retries).
+
+**How.** `WebhookEventService.receive` is now the gateway's webhook sink: it runs `WebhookConsumer.handle`, then records the attempt in a separate step (never inside the consumer's transaction, which PGlite needs). Only a 2xx counts as success; a 409 or 5xx is a failure. The schedule is in `shared/webhook-retry.ts`: retry after 1 minute, 5 minutes, 30 minutes, 2 hours; five attempts in total, the first delivery included. The `webhook-retry` pg-boss job calls `retry(id)`, which does nothing unless the event is FAILED and due, so an early job or one that a person already made moot is harmless. If the queue is down the row keeps `nextRetryAt` and the failure is not lost.
+
+**Replay.** `POST /api/webhooks/:id/replay` (OPS) sends the event back through `gateway.replayWebhook`, so the gateway's own delivery record and our log both get the attempt. If the gateway no longer has the event, the stored payload is fed to the consumer instead. A DEAD event that fails again stays DEAD and queues nothing. Replay and DEAD both write audit events.
+
+**Seeded data.** `insertDelivery` in the simulator also writes the log row. Deliveries the gateway gave up on are seeded DEAD; ones the gateway is still retrying (late webhook scenario) are FAILED with no retry of ours queued, because those retries belong to the gateway. `webhook_events` is in the reset list.
+
+**Not covered.** Signature checking (P3 task 4), a "retry now" button distinct from replay (replay does the same), and a filter by case.
+
+**Consequences.** New `WebhookRetryScheduler` option on `createCore`; `Core.webhookEvents`; routes `GET /api/webhooks`, `/counts`, `/:id`, `POST /:id/replay`; web page `/webhooks` and `replay` capability. No change to detection or the agent.
