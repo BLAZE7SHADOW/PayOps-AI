@@ -15,7 +15,7 @@
  *      resulting gaps.
  */
 import { choice, noul, type JsonValue } from '@payops/core';
-import { AGENT_NAMES, type AgentName, type EvidenceGap, type EvidenceItem, type Finding, type GroundingViolation } from '@payops/shared';
+import { AGENT_NAMES, scrubPiiText, type AgentName, type EvidenceGap, type EvidenceItem, type Finding, type GroundingViolation } from '@payops/shared';
 import { FINDING_PREDICATES } from './grounding/predicates';
 
 /** J5 uses `MAX_ATTEMPTS = 2` for replan; J4 uses the same-shaped cap on investigation rounds
@@ -106,14 +106,19 @@ export interface GroundingClaimState {
   cited_evidence: Record<string, string | number | boolean>[];
 }
 
+/** D078: the same second-layer scrub the prompt builder applies, for what J4 sends to Jev. */
+function scrubFacts(facts: EvidenceItem['facts']): EvidenceItem['facts'] {
+  return Object.fromEntries(Object.entries(facts).map(([k, v]) => [k, typeof v === 'string' ? scrubPiiText(v) : v]));
+}
+
 export function buildGroundingRequest(
   findings: readonly Finding[],
   evidenceById: ReadonlyMap<string, EvidenceItem>,
 ): { state: JsonValue; questions: GroundingQuestions } {
   const claims: GroundingClaimState[] = findings.map((f) => ({
     id: f.id,
-    claim: f.statement,
-    cited_evidence: f.evidenceIds.map((id) => evidenceById.get(id)?.facts ?? {}),
+    claim: scrubPiiText(f.statement),
+    cited_evidence: f.evidenceIds.map((id) => scrubFacts(evidenceById.get(id)?.facts ?? {})),
   }));
   const questions: GroundingQuestions = {};
   for (const f of findings) {

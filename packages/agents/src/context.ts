@@ -18,7 +18,7 @@
  * on directly, not something nodes.ts has to get right by filtering before it calls in.
  */
 import { createHash } from 'node:crypto';
-import { formatMoney } from '@payops/shared';
+import { formatMoney, scrubPiiText } from '@payops/shared';
 import type {
   AgentName,
   AttemptSummary,
@@ -132,7 +132,8 @@ function promptFacts(facts: EvidenceItem['facts']): EvidenceItem['facts'] {
   return Object.fromEntries(Object.entries(masked).map(([key, value]) => {
     if (key === 'capturedAt' || key === 'processedAt') return [key === 'capturedAt' ? 'captured' : 'processed', typeof value === 'string' && !value.startsWith('not ')];
     if (key.endsWith('Id')) return [`${key}Present`, value !== 'none'];
-    return [key, value];
+    // Second layer (D078): the key-based masks above miss PII under an unexpected key name.
+    return [key, typeof value === 'string' ? scrubPiiText(value) : value];
   }));
 }
 
@@ -359,7 +360,7 @@ function peerSummaryLines(findings: readonly Finding[]): string {
   const byAgent = new Map<AgentName, Finding[]>();
   for (const f of findings) byAgent.set(f.agent, [...(byAgent.get(f.agent) ?? []), f]);
   const blocks = [...byAgent.entries()].map(
-    ([agent, fs]) => `${agent}:\n${fs.map((f) => `  ${f.id} (${f.code}, confidence ${f.confidence.toFixed(2)}): ${f.statement} [cites ${f.evidenceIds.join(', ')}]`).join('\n')}`,
+    ([agent, fs]) => `${agent}:\n${fs.map((f) => `  ${f.id} (${f.code}, confidence ${f.confidence.toFixed(2)}): ${scrubPiiText(f.statement)} [cites ${f.evidenceIds.join(', ')}]`).join('\n')}`,
   );
   return `Findings from each specialist:\n${blocks.join('\n')}`;
 }

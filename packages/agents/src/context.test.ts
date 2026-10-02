@@ -265,6 +265,39 @@ describe('PII masking (docs/03 §8 "Projection")', () => {
   });
 });
 
+describe('second-layer PII scrub in built prompts (D078)', () => {
+  it('removes an email or phone hiding under an unexpected fact key', () => {
+    const leaky: EvidenceItem = { ...gatewayEvidence, facts: { ...gatewayEvidence.facts, note: 'payer rahul@gmail.com 9876554321', payerRef: 'ok_ref' } };
+    const text = buildSpecialistContext({ agent: 'payment', callType: 'findings', brief, evidence: [leaky], ownTools: PAYMENT_TOOLS })
+      .messages.map((m) => m.content).join('\n');
+    expect(text).not.toContain('rahul@gmail.com');
+    expect(text).not.toContain('9876554321');
+    expect(text).toContain('[email removed]');
+    expect(text).toContain('ok_ref');
+  });
+
+  it('masks by key first, so a customerEmail value never reaches the prompt in clear', () => {
+    const leaky: EvidenceItem = { ...orderEvidence, facts: { ...orderEvidence.facts, customerEmail: 'rahul@gmail.com', customerPhone: '+919876554321' } };
+    const text = buildSpecialistContext({ agent: 'payment', callType: 'findings', brief, evidence: [leaky], ownTools: PAYMENT_TOOLS })
+      .messages.map((m) => m.content).join('\n');
+    expect(text).toContain('r****@gmail.com');
+    expect(text).toContain('+91 ******4321');
+    expect(text).not.toContain('rahul@gmail.com');
+    expect(text).not.toContain('9876554321');
+  });
+
+  it('scrubs finding statements before they reach the resolve prompt', () => {
+    const findings: Finding[] = [
+      { id: 'fd_09', agent: 'payment', code: 'OTHER', statement: 'Customer rahul@gmail.com called from +91 98765 54321 [ev_01].', evidenceIds: ['ev_01'], confidence: 0.5 },
+    ];
+    const text = buildResolveContext({ brief, findings, evidenceCount: 1, risk: null, grounding: null, history: [] })
+      .messages.map((m) => m.content).join('\n');
+    expect(text).not.toContain('rahul@gmail.com');
+    expect(text).not.toContain('98765');
+    expect(text).toContain('fd_09');
+  });
+});
+
 describe('estimateTokens (docs/DECISIONS.md D039: chars/4 heuristic)', () => {
   it('is zero for empty text', () => {
     expect(estimateTokens('')).toBe(0);

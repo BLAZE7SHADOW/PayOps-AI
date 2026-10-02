@@ -8,7 +8,7 @@
  * doc's documented J1 fallback. Screening is not retried until the case changes again.
  */
 import { asc, eq, or, type SQL } from 'drizzle-orm';
-import type { ComplaintType } from '@payops/shared';
+import { scrubPiiText, type ComplaintType } from '@payops/shared';
 import type { Db } from '../db/client';
 import { cases, supportNotes } from '../db/schema';
 import { choice, noul, type DecisionPort } from '../ports/decision';
@@ -85,7 +85,7 @@ export class SignalIntakeService {
     try {
       const result = await this.decision.ask({
         tag: 'J1_INTAKE',
-        state: { untrusted_text: text },
+        state: { untrusted_text: scrubPiiText(text) }, // D078: no emails, phones or card numbers leave for Jev
         questions: {
           complaint_type: choice('What kind of complaint is this?', COMPLAINT_TYPE_CRITERIA),
           urgency: noul('The author says they are losing money or access right now.'),
