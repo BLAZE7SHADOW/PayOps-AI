@@ -1,5 +1,5 @@
 /** Operations tables: users, cases, audit. Resolution tables live in resolution.ts. */
-import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   ACTOR_TYPES,
@@ -151,8 +151,13 @@ export const auditEvents = pgTable(
     after: jsonb(),
     runId: text(),
     caseId: text(),
+    /** Position in the hash chain (1, 2, 3 ...). Assigned under an advisory lock, see AuditService (D077). */
+    seq: bigint({ mode: 'number' }).notNull(),
+    /** `hash` of the previous row, or GENESIS_HASH for the first. Empty only on rows that predate the chain until they are sealed. */
+    prevHash: text().notNull().default(''),
+    hash: text().notNull().default(''),
   },
-  (t) => [index().on(t.at), index().on(t.entityId), index().on(t.caseId)],
+  (t) => [index().on(t.at), index().on(t.entityId), index().on(t.caseId), uniqueIndex().on(t.seq)],
 );
 
 

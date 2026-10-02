@@ -1,9 +1,12 @@
-import { and, desc, eq, lt, or, type SQL } from 'drizzle-orm';
-import { newId, type ActorType, type AuditEventItem, type AuditListQuery, type Page } from '@payops/shared';
+import { and, asc, desc, eq, gt, lt, or, type SQL } from 'drizzle-orm';
+import { newId, type ActorType, type AuditChainStatus, type AuditEventItem, type AuditListQuery, type Page } from '@payops/shared';
 import type { Db, DbOrTx } from '../db/client';
 import type { AuditEventRow } from '../db/rows';
 import { auditEvents } from '../db/schema';
 import type { ClockPort } from '../ports/clock';
+import { GENESIS_HASH, verifyAuditChain } from '../audit/chain';
+import { csvLine } from '../audit/csv';
+import { appendAuditRow, readChainPage, toChainRow } from '../audit/store';
 import { decodeCursor, encodeCursor, isRecord } from './cursor';
 
 export interface AuditInput {
@@ -53,6 +56,9 @@ export function auditFrom(
   return { ...ctx.actor, caseId: ctx.caseId ?? null, runId: ctx.runId ?? null, ...fields };
 }
 
+const VERIFY_PAGE = 1000;
+const EXPORT_COLUMNS = ['seq', 'id', 'at', 'actor_type', 'actor_id', 'actor_name', 'action', 'entity_type', 'entity_id', 'case_id', 'run_id', 'summary', 'before', 'after', 'prev_hash', 'hash'];
+
 interface AuditCursor {
   at: string;
   id: string;
@@ -68,7 +74,7 @@ export class AuditService {
   ) {}
 
   async record(input: AuditInput, tx?: DbOrTx): Promise<void> {
-    await (tx ?? this.db).insert(auditEvents).values({
+    const row = {
       id: newId('audit'),
       at: this.clock.now(),
       actorType: input.actorType,
@@ -82,7 +88,62 @@ export class AuditService {
       after: input.after ?? null,
       caseId: input.caseId ?? null,
       runId: input.runId ?? null,
-    });
+    };
+    // The chain needs a transaction for its lock. Callers already in one pass `tx`; others get their own.
+    if (tx) await appendAuditRow(tx, row);
+    else await this.db.transaction((t) => appendAuditRow(t, row));
+  }
+
+  /** Walks the whole chain in seq order and reports the first broken row (D077). */
+  async verifyChain(expectedHead?: { seq: number; hash: string }): Promise<AuditChainStatus> {
+    let after: { seq: number; hash: string } | undefined;
+    let checked = 0;
+    for (;;) {
+      const page = await readChainPage(this.db, after?.seq ?? 0, VERIFY_PAGE);
+      if (page.length === 0) break;
+      const verdict = verifyAuditChain(page.map(toChainRow), after ? { startAfter: after } : {});
+      checked += verdict.checked;
+      if (!verdict.ok) {
+        return { ok: false, checked, head: after ?? null, brokenAtSeq: verdict.seq, brokenId: verdict.id, reason: verdict.reason };
+      }
+      const last = page[page.length - 1]!;
+      after = { seq: last.seq, hash: last.hash };
+      if (page.length < VERIFY_PAGE) break;
+    }
+    if (expectedHead) {
+      const v = verifyAuditChain([], { startAfter: after ?? { seq: 0, hash: GENESIS_HASH }, expectedHead });
+      if (!v.ok) return { ok: false, checked, head: after ?? null, brokenAtSeq: null, brokenId: null, reason: v.reason };
+    }
+    return { ok: true, checked, head: after ?? null, brokenAtSeq: null, brokenId: null, reason: null };
+  }
+
+  /** CSV lines for the whole log (or one case / entity), oldest first, a page at a time so memory stays flat. */
+  async *exportCsv(filter: { caseId?: string; entityId?: string } = {}): AsyncGenerator<string> {
+    yield csvLine(EXPORT_COLUMNS);
+    let afterSeq = 0;
+    for (;;) {
+      const rows = await this.db
+        .select()
+        .from(auditEvents)
+        .where(
+          and(
+            gt(auditEvents.seq, afterSeq),
+            filter.caseId ? eq(auditEvents.caseId, filter.caseId) : undefined,
+            filter.entityId ? eq(auditEvents.entityId, filter.entityId) : undefined,
+          ),
+        )
+        .orderBy(asc(auditEvents.seq))
+        .limit(VERIFY_PAGE);
+      if (rows.length === 0) return;
+      for (const r of rows) {
+        yield csvLine([
+          r.seq, r.id, r.at.toISOString(), r.actorType, r.actorId, r.actorName, r.action, r.entityType,
+          r.entityId, r.caseId, r.runId, r.summary, r.before, r.after, r.prevHash, r.hash,
+        ]);
+      }
+      afterSeq = rows[rows.length - 1]!.seq;
+      if (rows.length < VERIFY_PAGE) return;
+    }
   }
 
   /** Newest first, keyset-paginated on (at, id). */

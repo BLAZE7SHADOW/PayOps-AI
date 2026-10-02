@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   'run.view': { role: 'VIEWER', what: 'See agent runs, steps and feedback', extra: null },
   'approval.view': { role: 'VIEWER', what: 'See the approval queue and one approval', extra: null },
   'audit.view': { role: 'VIEWER', what: 'Read the audit log', extra: null },
+  'audit.verify': { role: 'MANAGER', what: 'Check the audit log for tampering and export it as CSV', extra: null },
   'policy.view': { role: 'VIEWER', what: 'Read the policy rules', extra: null },
   'webhook.view': { role: 'VIEWER', what: 'Read the webhook event log', extra: null },
   'agent.view': { role: 'VIEWER', what: 'See agent controls', extra: null },

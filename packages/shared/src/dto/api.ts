@@ -271,3 +271,13 @@ export interface AuditEventItem {
   summary: string;
   runId: string | null;
 }
+/** Result of walking the hash chain (P4 task 3, D077). `head` is the newest verified link; keep it outside the database to detect a cut tail. */
+export interface AuditChainStatus {
+  ok: boolean;
+  checked: number;
+  head: { seq: number; hash: string } | null;
+  brokenAtSeq: number | null;
+  brokenId: string | null;
+  reason: 'HASH_MISMATCH' | 'PREV_MISMATCH' | 'SEQ_GAP' | 'TRUNCATED' | null;
+}
+
