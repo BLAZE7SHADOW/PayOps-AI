@@ -189,7 +189,7 @@ Done when: contract tests run against the simulator adapter; volume test result 
 **P4 · Security and compliance (3 to 4 days)**
 1. MFA (TOTP), session revoke, persistent rate limiting. (done, D075)
 2. Role and permission table in code and docs. (done, D076)
-3. Hash-chained tamper-evident audit, database rules blocking update and delete, CSV export.
+3. Hash-chained tamper-evident audit, database rules blocking update and delete, CSV export. (done, D077)
 4. Threat model, and a data-flow table of what goes to Gemini and Jev, with PII masking tests.
 Done when: audit chain verification passes and fails on a tampered row (tested); data-flow doc reviewed.
 

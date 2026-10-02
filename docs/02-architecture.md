@@ -127,6 +127,8 @@ POST /api/cases/:id/actions {actions[]} → same policy → same approval → sa
 | GET | /api/cases/:id | VIEWER | 1 |
 | GET | /api/simulator/scenarios · POST /api/simulator/scenarios · POST /api/simulator/reset | ADMIN (OPS when DEMO_MODE) | 1 |
 | GET | /api/audit?entityId&caseId&cursor | VIEWER | 1 |
+| GET | /api/audit/verify | MANAGER | P4 |
+| GET | /api/audit/export.csv?caseId&entityId | MANAGER | P4 |
 | GET | /api/webhooks?status&event&gwPaymentId&cursor | VIEWER | P3 |
 | GET | /api/webhooks/counts, /api/webhooks/:id | VIEWER | P3 |
 | POST | /api/webhooks/:id/replay | OPS | P3 |
@@ -164,6 +166,7 @@ Roles rank `VIEWER < OPS < MANAGER < ADMIN`; a permission names the lowest role 
 | `run.view` | VIEWER | See agent runs, steps and feedback | - |
 | `approval.view` | VIEWER | See the approval queue and one approval | - |
 | `audit.view` | VIEWER | Read the audit log | - |
+| `audit.verify` | MANAGER | Check the audit log for tampering and export it as CSV | - |
 | `policy.view` | VIEWER | Read the policy rules | - |
 | `webhook.view` | VIEWER | Read the webhook event log | - |
 | `agent.view` | VIEWER | See agent controls | - |

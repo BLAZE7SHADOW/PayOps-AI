@@ -1287,3 +1287,44 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 **Behaviour.** Unchanged. The simulator keeps its DEMO_MODE rule through `roleOverride` (OPS in demo mode, ADMIN otherwise). MANAGER-tier approvals still need MANAGER or ADMIN on top of `approval.decide`, and four-eyes stays in `cannotDecideReason`.
 
 **Adding a route.** Add a key to `PERMISSIONS`, use `requirePermission(key)`, then regenerate the docs table (`tsx -e "import {permissionTableMarkdown} from './packages/shared/src/permissions'; console.log(permissionTableMarkdown())"`) and paste it between the markers.
+
+## D077 · Hash-chained, append-only audit log with verify and CSV export (P4 task 3)
+
+**Decision.** Each `audit_events` row now has `seq` (1, 2, 3 ...), `prev_hash` and `hash`. `hash` is sha256 over the row's fields in a fixed order (sorted-key JSON for `before`/`after`) plus the previous row's hash (`packages/core/src/audit/chain.ts`). `AuditService.record` is the only writer. It takes a transaction-scoped Postgres advisory lock, reads the newest row, and inserts the next link, so the chain order is the commit order. `verifyChain()` walks the log in pages and returns the first broken row and why (`HASH_MISMATCH`, `PREV_MISMATCH`, `SEQ_GAP`, `TRUNCATED`). Migration 0012 adds two triggers that raise on UPDATE and DELETE. `GET /api/audit/verify` and `GET /api/audit/export.csv` need the new `audit.verify` permission (MANAGER). The export writes its own `audit.exported` row first.
+
+**Why triggers, not rules.** The phase text says "database rules". A Postgres `RULE ... DO INSTEAD NOTHING` swallows the statement and reports success, which hides a bug or an attack. A trigger fails loudly with `restrict_violation`. Same protection, better signal.
+
+**What it does not do.** TRUNCATE is not blocked: the demo reset and the test cleanup use it. A database owner can also disable the triggers and rewrite the whole tail, recomputing every hash. The chain proves that a change happened; it cannot stop the owner. Two mitigations exist: `verifyChain(head)` and `?headSeq=&headHash=` compare against a head saved elsewhere, which catches a cut tail, and production should revoke TRUNCATE and trigger rights from the app role. Not built: scheduled verification, alerting, storing the head off-database.
+
+**Legacy rows.** Migration 0012 numbers old rows by `(at, id)`. `runMigrations` then calls `sealLegacyAuditRows`, which hashes them in order. The append-only trigger allows exactly one UPDATE: a row whose `hash` is still empty. After sealing, that path is closed. Sealing only proves rows are unchanged from the moment of sealing, not before.
+
+**Cost.** One advisory lock means audit writes are serialised across the database. Volume here is small. Watch for a deadlock if a transaction takes row locks after its audit call while another does the reverse; the full suite (846 tests) and the 10,000-payment volume test show none so far.
+
+**Tests.** `audit/chain.test.ts` (pure), `audit/csv.test.ts`, `audit/audit-chain.db.test.ts` (numbering, 25 concurrent writes, rollback, trigger rejects UPDATE/DELETE, edit / jsonb edit / deleted middle row / cut tail / legacy sealing, CSV), `apps/server/src/audit-routes.test.ts`. CSV cells that start with `=`, `+`, `-`, `@`, tab or CR get a leading apostrophe so a spreadsheet does not run them.
+
+
+## D078 · Threat model, outbound data table and a second PII layer (P4 task 4)
+
+**Decision.** `docs/07-security.md` holds the threat model (assets, trust boundaries, 15 threats with their control, code and test) and a table of exactly what is sent to Gemini and to Jev at each call. Alongside it:
+
+- `scrubPiiText` in `shared/mask.ts` removes emails, Indian mobile numbers and 12 to 19 digit runs from free text. It now runs over the note text sent to J1, over string fact values and finding statements in every Gemini prompt, and over the claims and cited facts sent at J4.
+- `packages/agents/src/egress.test.ts` seeds canary values (customer name, email, phone, a note containing an email, a phone number and a card number), runs five scenarios through the real graph with capturing Gemini and Jev ports, and fails if a canary shows up outbound. J1 must see the note but not the contact details inside it.
+
+**Why.** The existing masking (D039) only fired for fact keys that looked like `email` or `phone`, and tools project no such field today, so it was never exercised end to end. The J1 call sent raw note text, which is where a customer would actually type an email or phone number. The scrub closes that, and the egress test checks the whitelist itself, so a future tool that adds a customer field fails a test instead of relying on review.
+
+**Checked by mutation.** Removing the J1 scrub fails five egress tests. Adding the customer name to `getOrder` facts fails them with "gemini paymentAgent#0 leaked customer name". Adding the same field to a risk tool does not fail, because risk evidence never goes to Gemini and Risk reaches Jev only as buckets. That is the scoping working, not a hole in the test.
+
+**Limits.** The scrub is pattern-based. It does not remove names, can miss a number written in words, and can remove a legitimate 12-digit reference. Evidence ids and amounts in paise still go to the providers; they identify nobody on their own. Provider retention terms are not verified in code. All listed in section 5 of the doc.
+
+**Cassettes.** Cassette keys hash the request. The scrub only changes a request that contained PII-shaped text, so no existing cassette key changed (replay tests pass).
+
+## D079 · Performance metrics on Overview, and model-call trace links (P5)
+
+**Decision.** `OverviewMetrics.performance` carries five last-7-day figures computed by pure functions in `core/metrics/performance.ts` (rows in, numbers out; `OverviewService` only fetches rows). Definitions are text in `shared/metric-definitions.ts` and render under each figure on Overview.
+
+**Definitions.** Resolution time: median of resolvedAt minus openedAt for cases resolved in 7d (includes approval waiting). Auto-resolution rate: resolved cases whose `resolution.by` is AGENT, over all resolved in 7d. Agent accuracy: RIGHT over all operator ratings updated in 7d (P1 feedback). Approval turnaround: median of decidedAt minus requestedAt for approvals decided in 7d. Cost per case: sum of `agent_runs.budget.costUsd` for runs created in 7d, over distinct cases with a run.
+
+**Choices.** Median, not mean, for durations (one stuck approval would dominate a mean). A figure with nothing to measure is `null` and shows "No data", never 0%. Cost is the run budget's recorded `costUsd`, so it is only as accurate as that estimate.
+
+**Trace.** Case to run link already existed. Run detail now has a Model calls table (every Gemini and Jev call with node, name, tokens) whose event numbers link to the matching row in Recorded events (`#step-N`, highlighted on target). No schema change.
+

@@ -42,7 +42,7 @@ Drizzle schema lives in `packages/core/src/db/schema/`. Tables use snake_case; T
 | `executions` | `idempotencyKey` unique, `resolutionId`, `caseId`, `actionIndex`, `action`, `params`, `status` (STARTED/SUCCEEDED/FAILED), `summary`, `result`, `error?`, `startedAt`, `finishedAt` |
 | `validation_results` | `resolutionId`, `caseId`, `attempt`, `verdict`, `checks[{ id, subject, description, expected, actual, pass, kind, actionIndex }]`, `at` |
 | `disputes` | `type` (SETTLEMENT), `batchId`, `gwPaymentId?`, `amountMinor`, `status` (OPEN/WON/LOST), `reason`, `resolutionId` |
-| `audit_events` | `actorType` (USER/AGENT/SYSTEM), `actorId`, `action`, `entityType`, `entityId`, `before?`, `after?`, `runId?`, `at` (append-only) |
+| `audit_events` | `actorType` (USER/AGENT/SYSTEM), `actorId`, `action`, `entityType`, `entityId`, `before?`, `after?`, `runId?`, `at`, `seq`, `prevHash`, `hash` (append-only; hash-chained, D077) |
 
 LangGraph checkpoints: `PostgresSaver` (`@langchain/langgraph-checkpoint-postgres`) manages its own tables in the same database. pg-boss manages the `pgboss` schema.
 

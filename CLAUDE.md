@@ -21,6 +21,7 @@ Owner: Shivam (fresh B.Tech graduate). This is a portfolio project that should r
 | `docs/03-agent-system.md` | Anything in `packages/agents`, policy, executor, validator, Jev, context, evidence |
 | `docs/04-data-model.md` | Models, detection rules, state machines |
 | `docs/05-ui-design.md` | **Any** UI work |
+| `docs/07-security.md` | Data sent to Gemini or Jev, masking, auth, audit, or a new threat |
 | `docs/DECISIONS.md` | Before changing an existing design choice |
 
 If code and docs disagree, stop and ask Shivam. Do not silently "fix" either.
