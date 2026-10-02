@@ -23,3 +23,4 @@ export * from './policy';
 export * from './execution/executor.service';
 export * from './validation/validator.service';
 export * from './container';
+export * from './metrics/performance';

@@ -132,6 +132,17 @@ function overview(): OverviewMetrics {
     resolvedByAgent7d: 0,
     validatorOutcomes7d: { PASS: 14, PARTIAL: 2, FAIL: 3 },
     exceptionsByType: exceptionsByType(db),
+    performance: {
+      resolutionTimeMedianMs: 14 * 60_000,
+      resolvedCount: 23,
+      autoResolutionRate: 0.61,
+      agentAccuracy: 0.88,
+      ratedCount: 8,
+      approvalTurnaroundMedianMs: 47 * 60_000,
+      decidedApprovalCount: 9,
+      costPerCaseUsd: 0.012,
+      casesWithRuns: 17,
+    },
     oldestOpen: [...open].sort((a, b) => a.openedAt.localeCompare(b.openedAt)).slice(0, 5).map(toCaseItem),
   };
 }

@@ -70,3 +70,36 @@ export function stepName(step: AgentStepItem): string {
   if (Array.isArray(p.tools)) return p.tools.join(', ');
   return '';
 }
+
+/** Anchor id of a step row in the recorded-events table; model-call links jump to it (P5 task 2). */
+export const stepAnchorId = (seq: number) => `step-${seq}`;
+
+export interface ModelCallRow {
+  seq: number;
+  node: string;
+  /** "Gemini" for an LLM call, "Jev" for a typed decision. */
+  provider: 'Gemini' | 'Jev';
+  name: string;
+  tokensIn: number | null;
+  tokensOut: number | null;
+}
+
+/** Every Gemini and Jev call in a run, in order, with the token usage the adapter reported. */
+export function modelCalls(steps: AgentStepItem[]): ModelCallRow[] {
+  const rows: ModelCallRow[] = [];
+  for (const s of steps) {
+    if (s.kind !== 'LLM_CALLED' && s.kind !== 'DECISION_MADE') continue;
+    const u = s.payload.usage;
+    const usage = u && typeof u === 'object' ? (u as Record<string, unknown>) : {};
+    const num = (v: unknown) => (typeof v === 'number' ? v : null);
+    rows.push({
+      seq: s.seq,
+      node: s.node,
+      provider: s.kind === 'LLM_CALLED' ? 'Gemini' : 'Jev',
+      name: stepName(s),
+      tokensIn: num(usage.inputTokens),
+      tokensOut: num(usage.outputTokens),
+    });
+  }
+  return rows;
+}

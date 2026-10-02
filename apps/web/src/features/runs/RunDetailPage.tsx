@@ -15,7 +15,7 @@ import { DiagnosisFeedback } from './DiagnosisFeedback';
 import { HandoffCard } from './HandoffCard';
 import { describeHandoff } from './handoff';
 import { RunSteps } from './RunSteps';
-import { RUN_TONE, contextTokens, formatCost, formatDuration, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
+import { RUN_TONE, contextTokens, formatCost, formatDuration, modelCalls, nodeLatencies, runDurationMs, stepAnchorId, stepDeltas, stepName } from './run-metrics';
 
 export function RunDetailPage() {
   const { runId = '' } = useParams();
@@ -78,6 +78,7 @@ export function RunDetailPage() {
         <h2 id="usage-title" className="mb-3 text-18 font-semibold">Run usage</h2>
         <Figures run={r} />
       </section>
+      <ModelCalls steps={steps.isPending ? undefined : items} />
       <div className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <section aria-labelledby="latency-title" className="min-w-0 xl:col-span-5">
           <h2 id="latency-title" className="flex h-10 items-center text-18 font-semibold">
@@ -219,7 +220,7 @@ function StepTable({ steps }: { steps: AgentStepItem[] | undefined }) {
             const expanded = open.has(s.seq);
             const tokens = contextTokens(s);
             return (
-              <StepRows key={s.seq} expanded={expanded} payload={s.payload}>
+              <StepRows key={s.seq} seq={s.seq} expanded={expanded} payload={s.payload}>
                 <td className="tabular px-3 py-1.5 font-mono text-ink-2">{String(s.seq).padStart(2, '0')}</td>
                 <td className="truncate px-3 py-1.5 font-mono" title={s.node}>{s.node}</td>
                 <td className="truncate px-3 py-1.5" title={s.kind}>{statusLabel(s.kind)}</td>
@@ -246,10 +247,10 @@ function StepTable({ steps }: { steps: AgentStepItem[] | undefined }) {
   );
 }
 
-function StepRows({ children, expanded, payload }: { children: React.ReactNode; expanded: boolean; payload: Record<string, unknown> }) {
+function StepRows({ children, expanded, payload, seq }: { children: React.ReactNode; expanded: boolean; payload: Record<string, unknown>; seq: number }) {
   return (
     <>
-      <tr className="border-b border-rule last:border-0">{children}</tr>
+      <tr id={stepAnchorId(seq)} tabIndex={-1} className="scroll-m-4 border-b border-rule target:bg-accent-weak last:border-0">{children}</tr>
       {expanded ? (
         <tr className="border-b border-rule bg-surface-sunk">
           <td colSpan={7} className="px-3 py-2">
@@ -260,5 +261,49 @@ function StepRows({ children, expanded, payload }: { children: React.ReactNode; 
         </tr>
       ) : null}
     </>
+  );
+}
+
+/** Case to run to model call: each Gemini or Jev call in this run, linking to its recorded event below. */
+function ModelCalls({ steps }: { steps: AgentStepItem[] | undefined }) {
+  const calls = steps ? modelCalls(steps) : [];
+  if (steps && !calls.length) return null;
+  return (
+    <section aria-labelledby="calls-title" className="mt-8">
+      <h2 id="calls-title" className="mb-3 text-18 font-semibold">Model calls</h2>
+      <div className="overflow-x-auto border border-rule bg-surface">
+        {steps ? (
+          <table className="w-full min-w-[560px] text-12">
+            <caption className="sr-only">Gemini and Jev calls made in this run</caption>
+            <thead className="border-b border-rule text-left text-ink-2">
+              <tr>
+                <th scope="col" className="px-3 py-2 font-medium">Event</th>
+                <th scope="col" className="px-3 py-2 font-medium">Provider</th>
+                <th scope="col" className="px-3 py-2 font-medium">Node</th>
+                <th scope="col" className="px-3 py-2 font-medium">Call</th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">Tokens in</th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">Tokens out</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calls.map((c) => (
+                <tr key={c.seq} className="border-b border-rule last:border-0">
+                  <td className="px-3 py-1.5">
+                    <a className="link tabular font-mono" href={`#${stepAnchorId(c.seq)}`}>#{String(c.seq).padStart(2, '0')}</a>
+                  </td>
+                  <td className="px-3 py-1.5">{c.provider}</td>
+                  <td className="px-3 py-1.5 font-mono">{c.node}</td>
+                  <td className="px-3 py-1.5 font-mono">{c.name}</td>
+                  <td className="tabular px-3 py-1.5 text-right font-mono">{c.tokensIn === null ? '-' : c.tokensIn.toLocaleString('en-IN')}</td>
+                  <td className="tabular px-3 py-1.5 text-right font-mono">{c.tokensOut === null ? '-' : c.tokensOut.toLocaleString('en-IN')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="px-3 py-3" aria-hidden="true"><Skeleton width="100%" height={10} /></div>
+        )}
+      </div>
+    </section>
   );
 }

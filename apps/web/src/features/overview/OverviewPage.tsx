@@ -10,6 +10,7 @@ import { caseColumns } from '../exceptions/case-cells';
 import { useOverview } from './api';
 import { ExceptionsChart, ExceptionsChartSkeleton } from './ExceptionsChart';
 import { Figures } from './Figures';
+import { Performance } from './Performance';
 import { ValidatorOutcomes } from './ValidatorOutcomes';
 
 const oldestColumns = [
@@ -37,6 +38,14 @@ export function OverviewPage() {
       ) : (
         <>
           <Figures data={q.data} />
+          <section aria-labelledby="perf-title" className="mt-8">
+            <div className="flex h-10 items-center">
+              <h2 id="perf-title" className="text-18 font-semibold">
+                Performance, last 7 days
+              </h2>
+            </div>
+            <Performance data={q.data?.performance} />
+          </section>
           <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
             <section aria-labelledby="chart-title" className="min-w-0 lg:col-span-7">
               <div className="flex h-10 items-center">

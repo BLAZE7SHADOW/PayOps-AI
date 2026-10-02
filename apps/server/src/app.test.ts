@@ -234,6 +234,11 @@ describe('overview and audit API', () => {
     expect(Object.keys(body.validatorOutcomes7d).sort()).toEqual(['FAIL', 'PARTIAL', 'PASS']);
     for (const n of Object.values(body.validatorOutcomes7d)) expect(n).toBeGreaterThanOrEqual(0);
     expect(body.capturedTodayCount).toBeGreaterThanOrEqual(0);
+    // Nothing resolved, rated or approved in the seed: every performance figure is null, not zero.
+    expect(body.performance.resolvedCount).toBe(0);
+    expect(body.performance.resolutionTimeMedianMs).toBeNull();
+    expect(body.performance.agentAccuracy).toBeNull();
+    expect(body.performance.costPerCaseUsd).toBeNull();
   });
 
   it('lists audit events by case', async () => {

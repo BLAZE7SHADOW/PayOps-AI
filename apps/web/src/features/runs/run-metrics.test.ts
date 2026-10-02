@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentStepItem } from '@payops/shared';
-import { contextTokens, formatCost, formatDuration, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
+import { contextTokens, formatCost, formatDuration, modelCalls, nodeLatencies, runDurationMs, stepDeltas, stepName } from './run-metrics';
 
 const T0 = Date.parse('2026-09-29T10:00:00.000Z');
 const step = (seq: number, node: string, kind: AgentStepItem['kind'], offsetMs: number, payload: Record<string, unknown> = {}): AgentStepItem => ({
@@ -67,5 +67,21 @@ describe('step labels', () => {
     expect(stepName(step(1, 'a', 'LLM_CALLED', 0, { call: 'followUps' }))).toBe('followUps');
     expect(stepName(step(1, 'a', 'TOOL_COMPLETED', 0, { tools: ['getOrder', 'getLedger'] }))).toBe('getOrder, getLedger');
     expect(stepName(step(1, 'a', 'NODE_STARTED', 0))).toBe('');
+  });
+});
+
+describe('modelCalls', () => {
+  it('lists Gemini and Jev calls with usage and skips other steps', () => {
+    const rows = modelCalls([
+      step(1, 'plan', 'NODE_STARTED', 0),
+      step(2, 'plan', 'DECISION_MADE', 10, { tag: 'J2_PLAN', usage: { inputTokens: 5, outputTokens: 2 } }),
+      step(3, 'paymentAgent', 'LLM_CALLED', 20, { call: 'findings', usage: { inputTokens: 900, outputTokens: 120 } }),
+      step(4, 'paymentAgent', 'LLM_CALLED', 30, { call: 'diagnosis' }),
+    ]);
+    expect(rows.map((r) => [r.seq, r.provider, r.name, r.tokensIn, r.tokensOut])).toEqual([
+      [2, 'Jev', 'J2_PLAN', 5, 2],
+      [3, 'Gemini', 'findings', 900, 120],
+      [4, 'Gemini', 'diagnosis', null, null],
+    ]);
   });
 });

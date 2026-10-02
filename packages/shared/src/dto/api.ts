@@ -234,6 +234,26 @@ export interface OverviewMetrics {
   validatorOutcomes7d: Record<ValidationVerdict, number>;
   exceptionsByType: Array<{ date: string } & Partial<Record<CaseType, number>>>;
   oldestOpen: CaseListItem[];
+  performance: PerformanceMetrics;
+}
+
+/**
+ * Last-7-day performance (P5 task 1, D079). A null value means there was nothing to measure,
+ * which the UI shows as "No data", never as zero. Definitions live in shared `METRIC_DEFINITIONS`
+ * and the page prints them under each figure.
+ */
+export interface PerformanceMetrics {
+  resolutionTimeMedianMs: number | null;
+  resolvedCount: number;
+  /** 0 to 1. */
+  autoResolutionRate: number | null;
+  /** 0 to 1, from operator ratings of diagnoses. */
+  agentAccuracy: number | null;
+  ratedCount: number;
+  approvalTurnaroundMedianMs: number | null;
+  decidedApprovalCount: number;
+  costPerCaseUsd: number | null;
+  casesWithRuns: number;
 }
 
 // ── Simulator ────────────────────────────────────────────────────────────────
@@ -260,6 +280,16 @@ export const AuditListQuery = z.object({
 });
 export type AuditListQuery = z.infer<typeof AuditListQuery>;
 
+/** Result of walking the hash chain (P4 task 3, D077). `head` is the newest verified link; keep it outside the database to detect a cut tail. */
+export interface AuditChainStatus {
+  ok: boolean;
+  checked: number;
+  head: { seq: number; hash: string } | null;
+  brokenAtSeq: number | null;
+  brokenId: string | null;
+  reason: 'HASH_MISMATCH' | 'PREV_MISMATCH' | 'SEQ_GAP' | 'TRUNCATED' | null;
+}
+
 export interface AuditEventItem {
   id: string;
   at: string;
@@ -271,13 +301,3 @@ export interface AuditEventItem {
   summary: string;
   runId: string | null;
 }
-/** Result of walking the hash chain (P4 task 3, D077). `head` is the newest verified link; keep it outside the database to detect a cut tail. */
-export interface AuditChainStatus {
-  ok: boolean;
-  checked: number;
-  head: { seq: number; hash: string } | null;
-  brokenAtSeq: number | null;
-  brokenId: string | null;
-  reason: 'HASH_MISMATCH' | 'PREV_MISMATCH' | 'SEQ_GAP' | 'TRUNCATED' | null;
-}
-

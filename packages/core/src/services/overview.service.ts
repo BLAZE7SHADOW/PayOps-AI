@@ -1,4 +1,4 @@
-import { and, asc, count, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import {
   CASE_TYPES,
   DAY_MS,
@@ -8,7 +8,8 @@ import {
   type ValidationVerdict,
 } from '@payops/shared';
 import type { Db } from '../db/client';
-import { approvals, cases, users, validationResults } from '../db/schema';
+import { agentRuns, approvals, cases, diagnosisFeedback, users, validationResults } from '../db/schema';
+import { computePerformance } from '../metrics/performance';
 import type { ClockPort } from '../ports/clock';
 import type { PaymentGatewayPort } from '../ports/gateway';
 import { toCaseListItem } from './case.service';
@@ -30,10 +31,11 @@ export class OverviewService {
   async metrics(): Promise<OverviewMetrics> {
     const now = this.clock.now();
     const today = startOfUtcDay(now);
+    const since7d = new Date(now.getTime() - 7 * DAY_MS);
     const trendStart = new Date(today.getTime() - (TREND_DAYS - 1) * DAY_MS);
     const day = sql<string>`to_char(${cases.openedAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
-    const [captured, openRows, resolvedRows, trendRows, oldest, pending, agentResolved, verdictRows] = await Promise.all([
+    const [captured, openRows, resolvedRows, trendRows, oldest, pending, agentResolved, verdictRows, perfCases, perfApprovals, perfFeedback, perfRuns] = await Promise.all([
       this.gateway.summarizeCaptures({ from: today, to: new Date(today.getTime() + DAY_MS) }),
       this.db
         .select({ status: cases.status, n: count() })
@@ -66,7 +68,26 @@ export class OverviewService {
         .from(validationResults)
         .where(gte(validationResults.at, new Date(now.getTime() - 7 * DAY_MS)))
         .groupBy(validationResults.verdict),
+      this.db
+        .select({ openedAt: cases.openedAt, resolvedAt: cases.resolvedAt, resolution: cases.resolution })
+        .from(cases)
+        .where(and(eq(cases.status, 'RESOLVED'), isNotNull(cases.resolvedAt), gte(cases.resolvedAt, since7d))),
+      this.db
+        .select({ requestedAt: approvals.requestedAt, decidedAt: approvals.decidedAt })
+        .from(approvals)
+        .where(and(isNotNull(approvals.decidedAt), gte(approvals.decidedAt, since7d))),
+      this.db.select({ verdict: diagnosisFeedback.verdict }).from(diagnosisFeedback).where(gte(diagnosisFeedback.updatedAt, since7d)),
+      this.db.select({ caseId: agentRuns.caseId, budget: agentRuns.budget }).from(agentRuns).where(gte(agentRuns.createdAt, since7d)),
     ]);
+
+    const performance = computePerformance({
+      resolved: perfCases.flatMap((c) =>
+        c.resolvedAt ? [{ openedAt: c.openedAt, resolvedAt: c.resolvedAt, resolvedBy: c.resolution?.by ?? null }] : [],
+      ),
+      approvals: perfApprovals.flatMap((a) => (a.decidedAt ? [{ requestedAt: a.requestedAt, decidedAt: a.decidedAt }] : [])),
+      feedback: perfFeedback,
+      runs: perfRuns.map((r) => ({ caseId: r.caseId, costUsd: r.budget.costUsd })),
+    });
 
     const validatorOutcomes7d: Record<ValidationVerdict, number> = { PASS: 0, PARTIAL: 0, FAIL: 0 };
     for (const r of verdictRows) validatorOutcomes7d[r.verdict] = r.n;
@@ -89,6 +110,7 @@ export class OverviewService {
       resolvedByAgent7d: agentResolved[0]?.n ?? 0,
       validatorOutcomes7d,
       exceptionsByType: [...byDay.entries()].map(([date, counts]) => ({ date, ...counts })),
+      performance,
       oldestOpen: oldest.map((r) => toCaseListItem(r.row, r.assigneeName, now)),
     };
   }
