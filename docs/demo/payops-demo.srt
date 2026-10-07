@@ -1,0 +1,199 @@
+1
+00:00:00,300 --> 00:00:03,694
+A customer has paid, but the order still says
+
+2
+00:00:03,694 --> 00:00:07,089
+failed. Which record should the operations team trust? PayOps
+
+3
+00:00:07,089 --> 00:00:10,483
+AI, built by Shivam Govind Rao, investigates these disagreements
+
+4
+00:00:10,483 --> 00:00:13,500
+and makes the evidence, decisions, and outcome visible.
+
+5
+00:00:14,400 --> 00:00:18,149
+The overview brings together open exceptions and operational metrics.
+
+6
+00:00:18,149 --> 00:00:21,899
+From here, an analyst can find a case and
+
+7
+00:00:21,899 --> 00:00:25,648
+follow it through resolution. This walkthrough uses simulated payments
+
+8
+00:00:25,648 --> 00:00:29,397
+and replayed AI responses. The application, policy checks, database
+
+9
+00:00:29,397 --> 00:00:31,480
+changes, and verification are running.
+
+10
+00:00:32,380 --> 00:00:36,050
+Here, the gateway captured one lakh twenty five thousand
+
+11
+00:00:36,050 --> 00:00:39,720
+rupees. But the order says failed, the ledger entry
+
+12
+00:00:39,720 --> 00:00:43,390
+is missing, and the webhook failed three times. The
+
+13
+00:00:43,390 --> 00:00:47,060
+comparison makes the disagreement visible before any investigation starts.
+
+14
+00:00:47,960 --> 00:00:51,529
+The analyst starts an investigation. Code collects the initial
+
+15
+00:00:51,529 --> 00:00:55,098
+records, and the agent workflow decides which specialists should
+
+16
+00:00:55,098 --> 00:00:58,667
+investigate. The case story identifies whether each step came
+
+17
+00:00:58,667 --> 00:01:01,840
+from fixed code, Jev, Gemini, or a person.
+
+18
+00:01:02,740 --> 00:01:06,419
+LangGraph coordinates a bounded workflow. Payment, reconciliation, and risk
+
+19
+00:01:06,419 --> 00:01:10,098
+specialists examine their selected areas using read only tools.
+
+20
+00:01:10,098 --> 00:01:13,777
+Jev supplies typed decisions, while Gemini handles the deeper
+
+21
+00:01:13,777 --> 00:01:17,456
+investigation. Findings cite evidence, and grounding checks run before
+
+22
+00:01:17,456 --> 00:01:19,500
+a resolution can be proposed.
+
+23
+00:01:20,400 --> 00:01:23,469
+An explanation needs proof. The analyst can open the
+
+24
+00:01:23,469 --> 00:01:26,538
+records behind a finding and inspect the payment, webhook,
+
+25
+00:01:26,538 --> 00:01:29,607
+or accounting entry. This connects the agent's conclusion to
+
+26
+00:01:29,607 --> 00:01:32,676
+the exact case, instead of asking the user to
+
+27
+00:01:32,676 --> 00:01:34,040
+trust a summary alone.
+
+28
+00:01:34,940 --> 00:01:38,241
+The model proposes an action from a fixed catalog.
+
+29
+00:01:38,241 --> 00:01:41,543
+Policy code decides whether it can run automatically or
+
+30
+00:01:41,543 --> 00:01:44,844
+needs approval. After execution, an independent validator reads the
+
+31
+00:01:44,844 --> 00:01:48,146
+records again. The case shows what changed and whether
+
+32
+00:01:48,146 --> 00:01:49,980
+the expected result was achieved.
+
+33
+00:01:50,880 --> 00:01:54,148
+A refund needs a different path. The proposal pauses
+
+34
+00:01:54,148 --> 00:01:57,415
+for the required approval, with the amount and reason
+
+35
+00:01:57,415 --> 00:02:00,683
+available for review. An authorized second person approves it.
+
+36
+00:02:00,683 --> 00:02:03,951
+Only then can deterministic code execute the action and
+
+37
+00:02:03,951 --> 00:02:05,040
+verify the result.
+
+38
+00:02:05,940 --> 00:02:09,235
+The audit trail records actions and actors, while run
+
+39
+00:02:09,235 --> 00:02:12,529
+details expose the investigation steps and model usage. These
+
+40
+00:02:12,529 --> 00:02:15,824
+views help an operator trace how a decision became
+
+41
+00:02:15,824 --> 00:02:18,020
+a change to the payment records.
+
+42
+00:02:18,920 --> 00:02:23,360
+The project combines a React and TypeScript workbench, a
+
+43
+00:02:23,360 --> 00:02:27,800
+Node API, Postgres, and durable agent workflows. The engineering
+
+44
+00:02:27,800 --> 00:02:32,240
+focus is controlled automation: idempotent actions, approval boundaries, bounded
+
+45
+00:02:32,240 --> 00:02:36,680
+retries, evidence checks, and recorded responses for repeatable demonstrations.
+
+46
+00:02:37,580 --> 00:02:41,024
+The central design lesson is simple: an agent's answer
+
+47
+00:02:41,024 --> 00:02:44,469
+becomes useful when a person can inspect the evidence
+
+48
+00:02:44,469 --> 00:02:47,913
+and verify the outcome. Explore the repository for the
+
+49
+00:02:47,913 --> 00:02:51,357
+architecture, evaluation reports, and instructions to run PayOps AI
+
+50
+00:02:51,357 --> 00:02:51,740
+yourself.

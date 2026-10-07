@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-07 · Narrated GitHub demo video
+- Produced `docs/demo/payops-demo.mp4`: 3:04, 1920×1080, H.264/AAC, about 7.8 MB. Includes neural English narration (Gemini Charon, replacing the rejected macOS voice), burned-in captions, separate SRT, transcript, poster, storyboard and regeneration scripts. Root README links to the video.
+- Recorded the actual app against an isolated ephemeral database in REPLAY mode: PAY-0005 recovered the webhook/order/ledger mismatch and passed independent verification; RFD-0002 paused for manager approval and then resolved. Recorded the evidence drawer, selected specialist steps, before/after records and case audit trail. Illustrative architecture cards and replay mode are disclosed.
+- Checked rendered frames, media metadata, audio peak level, script syntax and Git whitespace. No application logic changed. Deployment and GitHub media upload remain separate delivery tasks.
+
 ### 2026-10-02 · P5: performance metrics and model-call trace links (D079)
 - Tests first for the pure math (`core/metrics/performance.test.ts`: medians, null when empty, each metric from rows). Then `OverviewService` fetches rows, `OverviewMetrics.performance` added, `Performance.tsx` shows five figures with their definitions on Overview, dev:mock updated.
 - Trace: run detail has a Model calls table linking to the recorded event rows (`modelCalls()` in `run-metrics.ts`, tested). Case to run link already existed.
