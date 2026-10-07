@@ -2,11 +2,11 @@
 
 Payment reconciliation with a checked AI investigator. When a payment looks wrong in one of a company's systems, PayOps AI works out why, cites the evidence, proposes a fix, applies it only within strict rules, and verifies that the fix worked. A person approves anything risky. The product works with the AI turned off.
 
-[![Watch the narrated PayOps AI demo](docs/demo/poster.jpg)](docs/demo/payops-demo.mp4?raw=true)
+[![Watch the narrated PayOps AI demo](docs/demo/poster.jpg)](https://drive.google.com/file/d/1WClNd16uDr_qtQbfaUZBLV7UBofSl9P8/view?usp=sharing)
 
 **Watch the 3-minute product walkthrough:** the payment problem, multi-agent investigation, evidence, approval, and verification. Includes English narration and subtitles.
 
-- **On GitHub:** click the poster above, or [play the video directly](https://github.com/BLAZE7SHADOW/PayOps-AI/raw/master/docs/demo/payops-demo.mp4).
+- **Online:** click the poster above, or [watch on Google Drive](https://drive.google.com/file/d/1WClNd16uDr_qtQbfaUZBLV7UBofSl9P8/view?usp=sharing). No download needed.
 - **After cloning or unzipping:** open `docs/demo/payops-demo.mp4` in any video player (QuickTime, VLC, a browser). It is a standard H.264/AAC MP4, about 8 MB.
 - **Text version:** [transcript](docs/demo/transcript.md), [subtitles (SRT)](docs/demo/payops-demo.srt), and [how the video was made](docs/demo/README.md).
 
