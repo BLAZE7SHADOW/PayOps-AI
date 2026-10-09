@@ -7,7 +7,8 @@ import globals from 'globals';
 const restrict = (patterns) => ['error', { patterns }];
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'fixtures/**'] },
+  // scripts/demo holds one-off video recording tools (CommonJS, console output), not product code.
+  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'fixtures/**', 'scripts/demo/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

@@ -1342,3 +1342,17 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Consequences.** Every push to `master` redeploys the Render API (about 8 minutes). Still parked: Docker and the Razorpay stretch (D051).
 
+## D081 · Landing page redesign: plain-English story, demo video, departs from the §11 one-column layout
+
+**Decision.** The logged-out page now opens with the problem in plain words and the product's own state matrix, then five numbered steps, the demo video, four trust statements, two real screenshots, the architecture diagram and a three-step "Try it". Shivam asked for a premium, easy-to-understand page for people who do not know the product. It reuses `ui/StateMatrix`, so the hero is the same component as the real case screen.
+
+**What changed from §11.** The first spec said one 72ch prose column and no cards. The page now uses a 1120px container, a two-column section layout, a ruled 2x2 trust grid and a landing-only type scale (headline 44px, headings 28px, body 17px). §11 is updated to match.
+
+**What stays banned.** Gradients, shadows, blur, orbs, dot grids, emojis, testimonials, pricing, three-card rows, all-caps eyebrow labels, arrows on buttons, hover transforms. Only token colors. Ledger green is used for the one primary action. Numbering appears once, for the steps, because that content is a real sequence.
+
+**No name, no source link.** Shivam asked for neither on the page. The "Source code" footer link and `links.ts` were removed. The video itself still says who built it in its narration and closing card.
+
+**Video.** `apps/web/public/landing/payops-demo.mp4` (7.7 MB, captions burned in) with a poster and `preload="none"`, so nothing downloads until Play. `vercel.json` gives `/landing/*` a day of caching with stale-while-revalidate. Cost: about 8 MB more in the repo. Considered and rejected: a Google Drive embed (Drive branding, view throttling) and a link-only poster (visitors leave the page).
+
+**Lint.** `scripts/demo/**` is excluded from ESLint. Those are one-off recording scripts, not product code.
+

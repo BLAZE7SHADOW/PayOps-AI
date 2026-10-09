@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-09 · Landing page redesign (D081)
+- New plain-English landing page: hero with a real state matrix, the problem, five steps, self-hosted demo video (`preload="none"`), trust statements, fresh screenshots, architecture, "Try it". No name or source link on the page.
+- Removed `links.ts` and the old `case-screen.jpg` (README now points at `case.jpg`). Landing test rewritten. Web tests 197 passed, typecheck and lint clean, no horizontal overflow at 1440, 820 and 390 px.
+- Fixed a mobile overflow: the matrix's hidden screen-reader labels escaped the scroll container; the container is now `relative`.
+
 ### 2026-10-09 · Hosted demo deployed (D080)
 - Live on Vercel (web), Render (API, REPLAY mode) and Supabase (Postgres). Checked through the Vercel URL: health, demo sign-in, 20 open cases, one investigation ran to RESOLVED with a validated audit trail, and the Overview loads in a browser.
 - Fixed two production-only bugs: a blank page caused by circular manual chunks, and live updates stuck on "Reconnecting" because `/socket.io/` (trailing slash) was not rewritten to the API.

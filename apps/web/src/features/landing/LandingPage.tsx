@@ -1,79 +1,103 @@
 import { Link } from 'react-router';
 import { useDocumentTitle } from '../../lib/use-document-title';
-import { Button } from '../../ui/Button';
 import { Architecture } from './Architecture';
+import { DemoVideo } from './DemoVideo';
+import { Hero, EXAMPLE_AMOUNT } from './Hero';
 import { PublicLayout } from './PublicLayout';
+import { BODY, Section } from './Section';
+import { Steps } from './Steps';
+import { Trust } from './Trust';
+import { linkButton } from './link-button';
 
-const H2 = 'mt-10 mb-2 max-w-[72ch] text-16 font-semibold text-ink';
-const P = 'mt-3 max-w-[72ch] text-14 leading-[1.6] text-ink';
-
-/** Logged-out home page (docs/05 §11 Public pages). Prose, one real screenshot, one diagram. No cards. */
+/**
+ * Logged-out home page. It explains the problem and the product in plain words first, then shows the
+ * demo, then the evidence that the result can be trusted. D081 records why this departs from the
+ * one-column prose layout that docs/05 section 11 first described.
+ */
 export function LandingPage() {
   useDocumentTitle('Payment reconciliation with a checked AI investigator');
   return (
-    <PublicLayout>
-      <h1 className="max-w-[72ch] text-24 leading-[1.25] font-semibold text-ink">Find payments where your systems disagree, and fix them with a paper trail.</h1>
-      <p className={P}>
-        PayOps AI compares what the payment gateway, the order service, the ledger, webhook deliveries and settlement each say about a
-        payment. When they disagree it opens a case, investigates it, cites the evidence, proposes a fix, and checks the result. A person
-        approves anything risky. The product works with the AI turned off.
-      </p>
-      <p className="mt-5 flex items-center gap-3">
-        <Link to="/login">
-          <Button variant="primary">Open the demo</Button>
-        </Link>
-        <span className="text-13 text-ink-2">Runs locally with simulated data. Sign in with a demo account.</span>
-      </p>
+    <PublicLayout landing>
+      <Hero />
 
-      <figure className="mt-8">
-        <img
-          src="/landing/case-screen.jpg"
-          alt="The case screen for a resolved payment mismatch. A state matrix shows the gateway, order, ledger, webhook and settlement now agree. Below it are the investigation steps, the root cause with cited evidence references, and the evidence list."
-          width={1512}
-          height={805}
-          className="block h-auto w-full border border-rule"
-          loading="eager"
-        />
-        <figcaption className="mt-2 text-12 text-ink-2">
-          The case screen after a verified fix. The state matrix shows one payment as five systems see it, and every finding cites its evidence.
-        </figcaption>
-      </figure>
+      <Section title="The problem">
+        <div className="space-y-4">
+          <p className={BODY}>A customer pays {EXAMPLE_AMOUNT} by card. The payment gateway takes the money.</p>
+          <p className={BODY}>
+            Then something small goes wrong. A message between two systems fails. The shop&apos;s order still says failed, and the accounting
+            ledger has no entry for the payment.
+          </p>
+          <p className={BODY}>
+            Now five systems tell five different stories. Today a person opens each one, compares them, works out which is right, and fixes
+            the records by hand. It is slow, repetitive, and easy to get wrong.
+          </p>
+        </div>
+      </Section>
 
-      <h2 className={H2}>What it does</h2>
-      <p className={P}>
-        Nine kinds of fault are simulated, from a captured payment whose webhook failed to a settlement batch that is short. Detection rules
-        flag the mismatch. An investigation gathers facts through read-only tools, and every finding cites the evidence it rests on. The
-        proposed fix comes from a fixed catalog of nine actions, such as replaying a webhook or initiating a refund.
-      </p>
+      <Steps />
+      <DemoVideo />
+      <Trust />
 
-      <h2 className={H2}>How decisions are made</h2>
-      <p className={P}>
-        Models propose and code decides. A model never touches the database, never does arithmetic or date math, and never approves or runs
-        anything. Amounts are integer paise computed by code and passed in as facts.
-      </p>
-      <p className={P}>
-        Narrow, typed choices go to Jev, which returns an answer with a confidence: screening customer notes, choosing which specialists to
-        run, scoring risk, checking grounding, deciding whether to replan, and a fast diagnosis for well-known faults. Every one of those
-        has a coded fallback if Jev is slow or unsure. Open-ended reasoning over the gathered evidence goes to Gemini, and its output must
-        pass a schema check.
-      </p>
-      <p className={P}>
-        A policy engine in code then assigns a tier: automatic, ops approval, manager approval, or blocked. Approvals need a second person.
-        The executor runs each action once, using an idempotency key. Finally a separate validator re-reads the data and returns PASS,
-        PARTIAL or FAIL. On FAIL the run replans within limits, or escalates to a person.
-      </p>
+      <Section title="Inside the product" lead="Real screens from the running demo.">
+        <div className="space-y-10">
+          <figure>
+            <img
+              src="/landing/overview.jpg"
+              alt="The overview screen. It shows open exceptions, approvals waiting, performance for the last 7 days, and a chart of exceptions by type."
+              width={1440}
+              height={900}
+              loading="lazy"
+              className="block h-auto w-full rounded-lg border border-rule"
+            />
+            <figcaption className="mt-3 max-w-[62ch] text-14 leading-[1.6] text-ink-2">
+              The overview shows what is open, what is waiting for approval, and how long cases take to resolve.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="/landing/case.jpg"
+              alt="A resolved payment mismatch. The five systems now agree, a green banner says the fix was applied automatically and verified, and the investigation steps are listed below."
+              width={1440}
+              height={1100}
+              loading="lazy"
+              className="block h-auto w-full rounded-lg border border-rule"
+            />
+            <figcaption className="mt-3 max-w-[62ch] text-14 leading-[1.6] text-ink-2">
+              A case lists the five systems side by side, then each investigation step and the evidence behind every finding.
+            </figcaption>
+          </figure>
+        </div>
+      </Section>
 
-      <h2 className={H2}>Architecture</h2>
-      <div className="mt-3 border border-rule bg-surface p-3">
-        <Architecture />
-      </div>
+      <Section title="How it is built" lead="Plain code makes the decisions. The AI only proposes.">
+        <p className={BODY}>
+          A web app and an API sit on top of Postgres. Detection, approvals, execution and checking are ordinary tested code. A LangGraph
+          workflow investigates each case and can only propose a fix from the fixed list.
+        </p>
+        <div className="mt-6 rounded-lg border border-rule bg-surface p-4">
+          <Architecture />
+        </div>
+        <p className="mt-4 max-w-[62ch] text-14 leading-[1.6] text-ink-2">
+          Built with React, Node, Postgres and LangGraph. Gemini does the open-ended reasoning, and Jev makes six small typed decisions, each
+          with a coded fallback.
+        </p>
+      </Section>
 
-      <h2 className={H2}>Try it</h2>
-      <p className={P}>
-        Sign in as an ops analyst, open the Simulator, generate the scenario named captured, order failed with seed 3201, and open the case
-        it creates. Start an investigation and watch the steps, findings and evidence arrive. Then look at the Agent runs page for the
-        counts, tokens and cost of that run. In this demo the AI answers are replayed from recordings, so no model calls are made.
-      </p>
+      <Section title="Try it yourself">
+        <ol className="max-w-[62ch] space-y-3 text-[17px] leading-[1.65] text-ink">
+          <li>Open the demo and choose a demo account.</li>
+          <li>Open any case on the Exceptions page and press Start investigation.</li>
+          <li>Watch the steps and evidence arrive, then read the verified result.</li>
+        </ol>
+        <p className="mt-4 max-w-[62ch] text-14 leading-[1.6] text-ink-2">
+          The AI answers in the demo are replayed from recordings, so no AI provider is called.
+        </p>
+        <p className="mt-6">
+          <Link to="/login" className={linkButton('primary')}>
+            Open the demo
+          </Link>
+        </p>
+      </Section>
     </PublicLayout>
   );
 }

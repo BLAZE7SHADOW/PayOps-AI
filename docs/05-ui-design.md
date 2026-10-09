@@ -184,7 +184,7 @@ The four recorded critical showcase scenarios appear first as a distinct group. 
 Read-only table of policy rules (id, condition in plain words, tier), version, thresholds. Shows that authority lives in code.
 
 ### Public pages
-- `/` landing (logged out): one column, 72ch. Product sentence, a real screen recording of the case screen, a real architecture diagram (SVG, same tokens), "How decisions are made" section in prose, link to GitHub and "Open the demo". No cards, no pricing, no testimonials.
+- `/` landing (logged out): plain-English product page, 1120px container, hairline sections, no cards in a row, no pricing, no testimonials, no name or source link (D081). Order: product sentence with a real state matrix, the problem, five numbered steps, the demo video (self-hosted, `preload="none"`), why the result can be trusted, two real screenshots, architecture SVG, "Try it". Landing-only type scale: headline 44px, section headings 28px, body 17px.
 - `/terms`, `/privacy`: plain text pages.
 
 ## 12. Accessibility
