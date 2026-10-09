@@ -1328,3 +1328,17 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Trace.** Case to run link already existed. Run detail now has a Model calls table (every Gemini and Jev call with node, name, tokens) whose event numbers link to the matching row in Recorded events (`#step-N`, highlighted on target). No schema change.
 
+## D080 · Hosted demo on free tiers (reverses the "no hosted deploy" part of D051)
+
+**Decision.** The demo is hosted on three free services, as `docs/DEPLOY.md` describes: Supabase Postgres (Session pooler, port 5432), the API on Render (`render.yaml` Blueprint, `AI_MODE=REPLAY`, `DEMO_MODE=true`), and the web app on Vercel. `vercel.json` proxies `/api` and `/socket.io` to Render so the browser sees one origin and the session cookie works. Shivam chose this on 2026-10-09.
+
+**Cold starts.** The free Render service sleeps after 15 minutes idle. Two layers handle it: a free uptime monitor pings `/api/health` every 5 minutes (that route also queries the database, which keeps the Supabase project from pausing), and `ServerWakeNotice` explains the wait with a running timer if the API is slow. The notice already existed from Phase 6; no new UI was needed.
+
+**Two deploy bugs, both invisible in local dev.**
+- Blank page in production: `vite.config.ts` split `react`, `radix` and a catch-all `vendor` chunk by hand. They imported each other in a cycle, so `vendor` ran before React existed (`Cannot read properties of undefined (reading 'createContext')`). Fixed by removing `manualChunks`. Cost: one larger main bundle.
+- Live updates stuck on "Reconnecting": the socket client requests `/socket.io/` with a trailing slash, which the rewrite `/socket.io/:path*` does not match, so Vercel served `index.html`. Fixed with an explicit `/socket.io/` rewrite.
+
+**Vercel setup.** Vercel detects two apps and offers "Services" mode, which would deploy the Express server as functions. Do not use it: the API is a long-lived process (Socket.IO, pg-boss, agent runs). Choose preset "Other", root `./`, and let the repo's `vercel.json` drive the build.
+
+**Consequences.** Every push to `master` redeploys the Render API (about 8 minutes). Still parked: Docker and the Razorpay stretch (D051).
+

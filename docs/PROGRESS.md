@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-09 · Hosted demo deployed (D080)
+- Live on Vercel (web), Render (API, REPLAY mode) and Supabase (Postgres). Checked through the Vercel URL: health, demo sign-in, 20 open cases, one investigation ran to RESOLVED with a validated audit trail, and the Overview loads in a browser.
+- Fixed two production-only bugs: a blank page caused by circular manual chunks, and live updates stuck on "Reconnecting" because `/socket.io/` (trailing slash) was not rewritten to the API.
+- Cold starts: `ServerWakeNotice` already explains the wait. Still to do by hand: create the uptime monitor on `/api/health` (every 5 minutes).
+- Note: the check run resolved PAY-0006 on the hosted data; the Simulator's Reset demo data button restores it.
+
 ### 2026-10-07 · Narrated GitHub demo video
 - Produced `docs/demo/payops-demo.mp4`: 3:04, 1920×1080, H.264/AAC, about 7.8 MB. Includes neural English narration (Gemini Charon, replacing the rejected macOS voice), burned-in captions, separate SRT, transcript, poster, storyboard and regeneration scripts. Root README links to the video.
 - Recorded the actual app against an isolated ephemeral database in REPLAY mode: PAY-0005 recovered the webhook/order/ledger mismatch and passed independent verification; RFD-0002 paused for manager approval and then resolved. Recorded the evidence drawer, selected specialist steps, before/after records and case audit trail. Illustrative architecture cards and replay mode are disclosed.
