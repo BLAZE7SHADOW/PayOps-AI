@@ -105,6 +105,13 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-09 · Product demo revised with female narration
+- Rebuilt the 1080p demo around a payment problem, a PayOps AI reveal, and a complete case with linked evidence and before/after verification. Added a manager-approved refund, audit trail, architecture explanation, and chapter markers. The new cut runs about 3:24.
+- Generated female neural narration with deliberate cadence. Removed personal credits from the script, voice, title cards, captions, transcript and poster. Fresh UI recordings present seeded account names as role labels while preserving business facts and outcomes.
+- Updated the MP4, separate narration, SRT, transcript, storyboard, voice preview and README links. Speech caching now accounts for voice, delivery instructions and changed text. Recording scripts use one fresh isolated REPLAY database and capture the full workflow.
+- Verification: payment and refund both reached RESOLVED; payment independent checks passed; the refund continued after manager approval. Checked visible screen text and demo copy for personal names, subtitle ordering, media decoding, audio headroom and script syntax. Temporary recording services were closed after capture. The revised video is a local asset; the older hosted upload must be replaced separately.
+
+
 ### 2026-10-09 · Landing page redesign (D081)
 - New plain-English landing page: hero with a real state matrix, the problem, five steps, self-hosted demo video (`preload="none"`), trust statements, fresh screenshots, architecture, "Try it". No name or source link on the page.
 - Removed `links.ts` and the old `case-screen.jpg` (README now points at `case.jpg`). Landing test rewritten. Web tests 197 passed, typecheck and lint clean, no horizontal overflow at 1440, 820 and 390 px.

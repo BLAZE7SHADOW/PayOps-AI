@@ -2,12 +2,12 @@
 
 Payment reconciliation with a checked AI investigator. When a payment looks wrong in one of a company's systems, PayOps AI works out why, cites the evidence, proposes a fix, applies it only within strict rules, and verifies that the fix worked. A person approves anything risky. The product works with the AI turned off.
 
-[![Watch the narrated PayOps AI demo](docs/demo/poster.jpg)](https://drive.google.com/file/d/1WClNd16uDr_qtQbfaUZBLV7UBofSl9P8/view?usp=sharing)
+[![Watch the narrated PayOps AI demo](docs/demo/poster.jpg)](docs/demo/payops-demo.mp4?raw=true)
 
-**Watch the 3-minute product walkthrough:** the payment problem, multi-agent investigation, evidence, approval, and verification. Includes English narration and subtitles.
+**Watch the product walkthrough:** a payment problem, the PayOps AI reveal, a complete example, evidence, approval, and verification. Includes female English narration and subtitles.
 
-- **Online:** click the poster above, or [watch on Google Drive](https://drive.google.com/file/d/1WClNd16uDr_qtQbfaUZBLV7UBofSl9P8/view?usp=sharing). No download needed.
-- **After cloning or unzipping:** open `docs/demo/payops-demo.mp4` in any video player (QuickTime, VLC, a browser). It is a standard H.264/AAC MP4, about 8 MB.
+- **Video:** click the poster above to open the current MP4. See [publishing instructions](docs/demo/README.md#share-on-github) for inline playback or a hosted video link.
+- **After cloning or unzipping:** open `docs/demo/payops-demo.mp4` in any video player (QuickTime, VLC, a browser). It is a standard H.264/AAC MP4, with English narration and subtitles.
 - **Text version:** [transcript](docs/demo/transcript.md), [subtitles (SRT)](docs/demo/payops-demo.srt), and [how the video was made](docs/demo/README.md).
 
 **New to the project?** Start with the [guide](docs/guide/README.md): product, architecture, the agents and how they are orchestrated, safety, replay, a file map, and interview prep, in plain English.
