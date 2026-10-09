@@ -6,6 +6,7 @@
   "build": { "env": { "VITE_SOCKET_POLLING_ONLY": "1" } },
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://payops-api-dxwg.onrender.com/api/:path*" },
+    { "source": "/socket.io/", "destination": "https://payops-api-dxwg.onrender.com/socket.io/" },
     { "source": "/socket.io/:path*", "destination": "https://payops-api-dxwg.onrender.com/socket.io/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
