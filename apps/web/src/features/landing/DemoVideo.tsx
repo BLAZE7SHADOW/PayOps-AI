@@ -9,7 +9,7 @@ export function DemoVideo() {
     <Section
       id="demo"
       title="See it work"
-      lead="A 3-minute walkthrough of one case, from the mismatch to a checked fix, and a refund that waits for a manager."
+      lead="A walkthrough of one case, from the mismatch to a checked fix, then a refund that a manager approves."
     >
       <div className="overflow-hidden rounded-lg border border-rule bg-surface-sunk">
         <video
@@ -20,7 +20,7 @@ export function DemoVideo() {
           width={1920}
           height={1080}
           className="block aspect-video h-auto w-full"
-          aria-label="PayOps AI walkthrough, 3 minutes, narrated and captioned"
+          aria-label="PayOps AI walkthrough, narrated and captioned"
         >
           <source src="/landing/payops-demo.mp4" type="video/mp4" />
           Your browser cannot play this video.

@@ -13,7 +13,7 @@ describe('LandingRoute', () => {
     const { container } = renderApp(<LandingRoute />, { route: '/' });
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('When a customer has paid but your records disagree');
     expect(screen.getAllByRole('link', { name: 'Open the demo' }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Watch the 3-minute video' })).toHaveAttribute('href', '#demo');
+    expect(screen.getByRole('link', { name: 'Watch the demo video' })).toHaveAttribute('href', '#demo');
     expect(screen.getByRole('table', { name: 'State matrix' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'What PayOps AI does' })).toBeInTheDocument();
     expect(screen.getAllByRole('listitem').length).toBeGreaterThanOrEqual(5);

@@ -45,7 +45,7 @@ export function Hero() {
           Open the demo
         </Link>
         <a href="#demo" className={linkButton('secondary')}>
-          Watch the 3-minute video
+          Watch the demo video
         </a>
       </div>
       <p className="mt-3 text-13 text-ink-2">No sign-up. Choose a demo account on the next screen. All payments are simulated.</p>
