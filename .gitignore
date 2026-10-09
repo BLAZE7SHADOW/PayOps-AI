@@ -23,3 +23,7 @@ test-results/
 
 # Cowork app output folder
 Claude outputs/
+
+# Local scratch and handoff archives (not project source)
+_to_delete/
+*.zip
