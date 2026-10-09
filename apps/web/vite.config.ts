@@ -34,17 +34,7 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
-    rollupOptions: {
-      output: {
-        // Long-lived vendor chunks so app changes do not bust the framework cache.
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined;
-          if (/[\\/](recharts|d3-|victory-vendor)/.test(id)) return 'charts';
-          if (/[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) return 'react';
-          if (id.includes('@radix-ui') || id.includes('@floating-ui')) return 'radix';
-          return 'vendor';
-        },
-      },
-    },
+    // No manualChunks: splitting react, radix and a catch-all "vendor" chunk made them import each
+    // other in a cycle, so vendor ran before React existed and the page was blank in production.
   },
 });
