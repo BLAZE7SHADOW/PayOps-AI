@@ -1,7 +1,8 @@
 import { afterAll, beforeAll } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { createCore, tables, type Core } from '@payops/core';
-import { describeGatewayContract, fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
+import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
+import { describeGatewayContract } from '@payops/core/testing/gateway-contract';
 import { generateScenario, resetDemoData } from './index';
 
 // The simulator adapter must satisfy the same contract a real gateway adapter will.
