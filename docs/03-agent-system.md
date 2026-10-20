@@ -389,6 +389,6 @@ Payload always includes `{ runId, caseId, node, at, seq }`. The UI orders by `se
 
 ## 17. Evals
 
-`packages/evals`. Each golden scenario defines expected `rootCause`, allowed action sets, expected policy tier, expected final verdict, max tool calls.
+`packages/evals`. Each golden scenario defines expected `rootCause`, allowed action sets, expected policy tier, expected final verdict, max tool calls, and optionally `expectedTools` (soft) and `forbiddenTools` (hard gate). A tool counts as used when it produced an evidence item (the item's `source`).
 
-Metrics reported per run: root-cause accuracy, action-set match, policy-tier match, grounding violation rate, replan success rate, mean tool calls, mean latency, cost per case. `pnpm eval` runs in REPLAY (CI), `pnpm eval:live` runs LIVE and writes `docs/evals/<date>.md`.
+Metrics reported per run: root-cause accuracy, action-set match, tool-set match, policy-tier match, share of full-path runs that dropped a finding, findings dropped per full-path run, replan success rate, mean tool calls, mean latency, cost per case. Per-scenario hard gates (status, verdict, tier, forbidden actions, forbidden tools, quarantine, max tool calls) fail the run. Aggregate limits (`EVAL_THRESHOLDS` in `packages/evals/src/types.ts`: root-cause accuracy, action-set match and tool-set match at least 80%, total cost at most $0.10) also fail it. The report starts with the commit, model names and the number of recorded scenarios, so two reports can be compared fairly. `pnpm eval` runs in REPLAY (CI), `pnpm eval:live` runs LIVE and writes `docs/evals/<date>.md`.

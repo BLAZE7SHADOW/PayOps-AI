@@ -21,6 +21,10 @@ export interface RunOutcome {
   knownRootCauseCaveat?: string;
   actionTypes: ActionType[];
   actionSetMatch: boolean | null; // null when the golden scenario declares no allowedActionSets
+  /** Distinct tool names that produced evidence in this run (evidence `source`). */
+  toolsUsed: string[];
+  /** Every `expectedTools` entry was used; null when the golden scenario declares none. Soft. */
+  toolSetMatch: boolean | null;
   attempt: number;
   replanned: boolean;
   toolCalls: number;
@@ -39,7 +43,11 @@ export interface EvalSummary {
   rootCauseAccuracy: number; // 0..1, excludes runs with a knownRootCauseCaveat
   actionSetMatchRate: number | null;
   replanSuccessRate: number | null; // resolved / (replanned scenarios), null if none replanned
-  groundingViolationRate: number | null; // mean violations among runs where grounding ran
+  toolSetMatchRate: number | null;
+  /** Share of runs where groundCheck ran (full path) and dropped at least one finding. */
+  runsWithDroppedFindingsRate: number | null;
+  /** Mean findings dropped per run, over the runs where groundCheck ran. */
+  droppedFindingsPerRun: number | null;
   meanToolCalls: number;
   meanLatencyMs: number;
   totalCostUsd: number;
@@ -60,8 +68,15 @@ export function summarize(outcomes: readonly RunOutcome[]): EvalSummary {
   const replanSuccessRate = replanned.length
     ? replanned.filter((o) => o.status === 'RESOLVED').length / replanned.length
     : null;
+  const toolSetScored = outcomes.filter((o) => o.toolSetMatch !== null);
+  const toolSetMatchRate = toolSetScored.length
+    ? toolSetScored.filter((o) => o.toolSetMatch).length / toolSetScored.length
+    : null;
   const grounded = outcomes.filter((o) => o.groundingViolations !== null);
-  const groundingViolationRate = grounded.length
+  const runsWithDroppedFindingsRate = grounded.length
+    ? grounded.filter((o) => (o.groundingViolations ?? 0) > 0).length / grounded.length
+    : null;
+  const droppedFindingsPerRun = grounded.length
     ? grounded.reduce((sum, o) => sum + (o.groundingViolations ?? 0), 0) / grounded.length
     : null;
   return {
@@ -71,9 +86,49 @@ export function summarize(outcomes: readonly RunOutcome[]): EvalSummary {
     rootCauseAccuracy,
     actionSetMatchRate,
     replanSuccessRate,
-    groundingViolationRate,
+    toolSetMatchRate,
+    runsWithDroppedFindingsRate,
+    droppedFindingsPerRun,
     meanToolCalls: total ? outcomes.reduce((s, o) => s + o.toolCalls, 0) / total : 0,
     meanLatencyMs: total ? outcomes.reduce((s, o) => s + o.latencyMs, 0) / total : 0,
     totalCostUsd: outcomes.reduce((s, o) => s + o.costUsd, 0),
   };
+}
+
+/**
+ * Aggregate limits for a whole eval run. Per-scenario hard gates (status, verdict, tier, forbidden
+ * actions) already fail a run; these catch a slow slide that no single scenario trips, such as
+ * accuracy drifting down or cost creeping up. Latency is not limited because REPLAY latency is
+ * not a real measurement.
+ */
+export const EVAL_THRESHOLDS = {
+  minRootCauseAccuracy: 0.8,
+  minActionSetMatchRate: 0.8,
+  minToolSetMatchRate: 0.8,
+  maxTotalCostUsd: 0.1,
+} as const;
+
+const pct1 = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+/** Returns one plain message per aggregate that crosses its limit. Empty means the run is healthy.
+ * A rate with nothing to measure (null) is skipped, never failed. */
+export function checkThresholds(summary: EvalSummary, limits = EVAL_THRESHOLDS): string[] {
+  const messages: string[] = [];
+  if (summary.rootCauseAccuracy < limits.minRootCauseAccuracy)
+    messages.push(
+      `root-cause accuracy ${pct1(summary.rootCauseAccuracy)} is below the ${pct1(limits.minRootCauseAccuracy)} minimum`,
+    );
+  if (summary.actionSetMatchRate !== null && summary.actionSetMatchRate < limits.minActionSetMatchRate)
+    messages.push(
+      `action-set match ${pct1(summary.actionSetMatchRate)} is below the ${pct1(limits.minActionSetMatchRate)} minimum`,
+    );
+  if (summary.toolSetMatchRate !== null && summary.toolSetMatchRate < limits.minToolSetMatchRate)
+    messages.push(
+      `tool-set match ${pct1(summary.toolSetMatchRate)} is below the ${pct1(limits.minToolSetMatchRate)} minimum`,
+    );
+  if (summary.totalCostUsd > limits.maxTotalCostUsd)
+    messages.push(
+      `total cost $${summary.totalCostUsd.toFixed(4)} is above the $${limits.maxTotalCostUsd.toFixed(2)} cap`,
+    );
+  return messages;
 }

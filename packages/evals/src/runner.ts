@@ -92,6 +92,8 @@ async function runOne(
       knownRootCauseCaveat: golden.knownRootCauseCaveat,
       actionTypes: [],
       actionSetMatch: null,
+      toolsUsed: [],
+      toolSetMatch: null,
       attempt: 0,
       replanned: false,
       toolCalls: 0,
@@ -185,6 +187,12 @@ async function runOne(
     const found = actionTypes.filter((t) => golden.forbiddenActionTypes!.includes(t));
     if (found.length > 0) failures.push(`forbidden action(s) proposed: ${found.join(', ')}`);
   }
+  // Each evidence item's `source` is the tool that produced it, so this is the set of tools the run used.
+  const toolsUsed = [...new Set((result.evidence ?? []).map((e: { source: string }) => e.source))].sort();
+  if (golden.forbiddenTools) {
+    const found = toolsUsed.filter((t) => golden.forbiddenTools!.includes(t));
+    if (found.length > 0) failures.push(`forbidden tool(s) used: ${found.join(', ')}`);
+  }
   if (golden.maxToolCalls != null && result.budget.toolCalls > golden.maxToolCalls) {
     failures.push(`toolCalls ${result.budget.toolCalls} exceeds max ${golden.maxToolCalls}`);
   }
@@ -233,6 +241,8 @@ async function runOne(
     knownRootCauseCaveat: golden.knownRootCauseCaveat,
     actionTypes,
     actionSetMatch,
+    toolsUsed,
+    toolSetMatch: golden.expectedTools ? golden.expectedTools.every((t) => toolsUsed.includes(t)) : null,
     attempt: result.attempt,
     replanned: (result.history?.length ?? 0) > 0,
     toolCalls: result.budget.toolCalls,

@@ -1,4 +1,12 @@
-import type { EvalSummary, RunOutcome } from './types';
+import { EVAL_THRESHOLDS, checkThresholds, type EvalSummary, type RunOutcome } from './types';
+
+/** What was run, so two reports can be compared fairly. Models and prompts change results. */
+export interface ReportMeta {
+  gitCommit: string;
+  llmModel: string;
+  decisionModel: string;
+  cassetteScenarios: number;
+}
 
 function pct(x: number | null): string {
   return x === null ? 'n/a' : `${(x * 100).toFixed(1)}%`;
@@ -18,13 +26,27 @@ function usd(x: number): string {
 export function renderMarkdownReport(
   outcomes: readonly RunOutcome[],
   summary: EvalSummary,
-  opts: { generatedAt: string; mode: 'REPLAY' | 'LIVE' },
+  opts: { generatedAt: string; mode: 'REPLAY' | 'LIVE'; meta?: ReportMeta },
 ): string {
   const lines: string[] = [];
   lines.push(`# Eval report — ${opts.generatedAt}`);
   lines.push('');
   lines.push(`Mode: ${opts.mode}. ${summary.passed}/${summary.total} golden scenarios passed.`);
   lines.push('');
+  if (opts.meta) {
+    lines.push('## Run details');
+    lines.push('');
+    lines.push('| Item | Value |');
+    lines.push('|---|---|');
+    lines.push(`| Commit | ${opts.meta.gitCommit} |`);
+    lines.push(`| Gemini model | ${opts.meta.llmModel} |`);
+    lines.push(`| Jev model | ${opts.meta.decisionModel} |`);
+    lines.push(`| Recorded scenarios (cassette manifest) | ${opts.meta.cassetteScenarios} |`);
+    lines.push(
+      `| Limits | root-cause accuracy >= ${pct(EVAL_THRESHOLDS.minRootCauseAccuracy)}, action-set match >= ${pct(EVAL_THRESHOLDS.minActionSetMatchRate)}, tool-set match >= ${pct(EVAL_THRESHOLDS.minToolSetMatchRate)}, total cost <= $${EVAL_THRESHOLDS.maxTotalCostUsd.toFixed(2)} |`,
+    );
+    lines.push('');
+  }
   lines.push('## Summary metrics (docs/03 §17)');
   lines.push('');
   lines.push('| Metric | Value |');
@@ -34,27 +56,34 @@ export function renderMarkdownReport(
   lines.push(
     `| Policy-tier match | ${pct(summary.total ? summary.passed / summary.total : null)} (folded into pass/fail — tier is a hard gate) |`,
   );
+  lines.push(`| Tool-set match | ${pct(summary.toolSetMatchRate)} |`);
   lines.push(
-    `| Grounding violation rate (mean, among full-path runs) | ${summary.groundingViolationRate === null ? 'n/a (no full-path golden scenario yet)' : summary.groundingViolationRate.toFixed(2)} |`,
+    `| Full-path runs that dropped a finding | ${pct(summary.runsWithDroppedFindingsRate)} (n/a means no full-path run) |`,
+  );
+  lines.push(
+    `| Findings dropped per full-path run | ${summary.droppedFindingsPerRun === null ? 'n/a' : summary.droppedFindingsPerRun.toFixed(2)} |`,
   );
   lines.push(`| Replan success rate | ${pct(summary.replanSuccessRate)} |`);
   lines.push(`| Mean tool calls | ${summary.meanToolCalls.toFixed(1)} |`);
   lines.push(`| Mean latency | ${ms(summary.meanLatencyMs)} |`);
   lines.push(`| Total cost | ${usd(summary.totalCostUsd)} |`);
   lines.push('');
+  const breaches = checkThresholds(summary);
+  lines.push(breaches.length === 0 ? 'All aggregate limits met.' : `Aggregate limits breached: ${breaches.join('; ')}.`);
+  lines.push('');
   lines.push('## Per-scenario results');
   lines.push('');
   lines.push(
-    '| Scenario | Result | Status | Tier | Verdict | Root cause (expected → got) | Actions | Attempt | Tool calls | Latency | Cost |',
+    '| Scenario | Result | Status | Tier | Verdict | Root cause (expected → got) | Actions | Tool set | Attempt | Tool calls | Latency | Cost |',
   );
-  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|');
   for (const o of outcomes) {
     const result = o.ok ? 'PASS' : 'FAIL';
     const rc = o.rootCauseMatch
       ? `${o.rootCause}`
       : `${o.expectedRootCause} → ${o.rootCause ?? 'null'}${o.knownRootCauseCaveat ? ' *' : ''}`;
     lines.push(
-      `| ${o.key} | ${result} | ${o.status} | ${o.tier ?? '—'} | ${o.verdict ?? '—'} | ${rc} | ${o.actionTypes.join(', ') || '—'} | ${o.attempt} | ${o.toolCalls} | ${ms(o.latencyMs)} | ${usd(o.costUsd)} |`,
+      `| ${o.key} | ${result} | ${o.status} | ${o.tier ?? '—'} | ${o.verdict ?? '—'} | ${rc} | ${o.actionTypes.join(', ') || '—'} | ${o.toolSetMatch === null ? '—' : o.toolSetMatch ? 'MATCH' : 'MISS'} | ${o.attempt} | ${o.toolCalls} | ${ms(o.latencyMs)} | ${usd(o.costUsd)} |`,
     );
   }
   lines.push('');

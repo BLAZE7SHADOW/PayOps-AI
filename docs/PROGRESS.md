@@ -105,6 +105,19 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-20 · Eval improvements (D082)
+- Added tool-set match (`expectedTools` soft, `forbiddenTools` hard), aggregate limits that fail `pnpm eval`, run details in the report, two clearer grounding figures, and four more goldens (15 in total, 15/15 passing in REPLAY). Logic written test first (`types.test.ts`), and the new gates were checked with deliberately wrong expectations.
+- Fixed `pnpm eval`, `record-cassettes.ts` and `volume-test.ts`, broken since D074 because the `@payops/core/testing` barrel pulled in `vitest`. The contract suite now imports from `@payops/core/testing/gateway-contract`.
+- Open question for Shivam: `partial_refund_shortfall` escalates instead of proposing the owed ₹9,000 refund. Decide whether that is intended before it becomes a golden.
+- Known issue, not mine: `pnpm test` from the repo root fails one Phase 2 web test (`ResolveDrawer.test.tsx`) because the root `.env` sets `VITE_API_URL`, so the test sees an absolute URL. It passes with the variable blank or when run from `apps/web`.
+- Later: `--repeat N` for LIVE runs to report variance; record a cassette for `refund_never_reached_gateway`.
+
+### 2026-10-10 · Rebuilt Satyam handoff archive
+- Rebuilt the supplied October 9 ZIP in an isolated repository. All 56 existing commits now use Satyam Govind Rao <satyamgrao007@gmail.com> for both author and committer; added one handoff cleanup commit with the same identity. Preserved the existing commit parent graph and dates.
+- Removed Claude co-author/session trailers and personal references throughout historical text. Renamed the archive's session guide to CONTRIBUTING.md, used YOUR-GITHUB-USERNAME placeholders for the previous owner's repository links, normalized historical demo media to the current credit-free assets, and removed embedded assistant metadata from an old screenshot without changing image data.
+- Verified all 1,931 Git objects, all 57 commit identities, clean Git status, strict Git integrity, and current tracked-file differences. The archive has no remote, original-history backups, environment secrets, dependencies or generated builds. Application logic is unchanged; differences are documentation, comments and a landing-page name assertion.
+- Delivery: `PayOps-AI-Satyam-2026-10-10.zip`. The source repository history and October 9 ZIP are retained.
+
 ### 2026-10-09 · Product demo revised with female narration
 - Rebuilt the 1080p demo around a payment problem, a PayOps AI reveal, and a complete case with linked evidence and before/after verification. Added a manager-approved refund, audit trail, architecture explanation, and chapter markers. The new cut runs about 3:24.
 - Generated female neural narration with deliberate cadence. Removed personal credits from the script, voice, title cards, captions, transcript and poster. Fresh UI recordings present seeded account names as role labels while preserving business facts and outcomes.

@@ -1356,3 +1356,22 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Lint.** `scripts/demo/**` is excluded from ESLint. Those are one-off recording scripts, not product code.
 
+## D082 · Eval improvements: tool-set match, aggregate limits, clearer grounding figures, four more goldens
+
+**Why.** Shivam asked what could be learned from a public LangChain/DeepEval agent-evaluation lab. Our evals were already stricter on the parts that matter (code-decided hard gates, injection, replan, recorded replay, no LLM judge). Five small ideas were worth taking, all deterministic and with no new dependency.
+
+**Decision.**
+- **Tool-set match.** `GoldenScenario.expectedTools` (soft, reported as a match rate) and `forbiddenTools` (hard gate). A run's tools are the distinct evidence `source` values. The injection scenario forbids `getRefund` and `getRefundGatewayStatus`, so a clean run never goes looking at refund records. Expected tools were taken from what the recorded runs really used, so they guard against regressions and are not guesses.
+- **Aggregate limits.** `EVAL_THRESHOLDS`: root-cause accuracy, action-set match and tool-set match at least 80%, total cost at most $0.10. `pnpm eval` exits non-zero on a breach, and `docs/evals/` reports say whether the limits held. Latency has no limit because REPLAY latency is not real.
+- **Run details in the report.** Commit, Gemini and Jev model names and the cassette manifest count, so reports can be compared.
+- **Grounding figures.** The old "grounding violation rate" was the mean dropped findings per run (it read 1.00 in the 2026-09-29 report, which looked like 100%). It is now two figures: share of full-path runs that dropped a finding, and findings dropped per full-path run.
+- **Four more goldens** from the D071 messy variants, fixture-driven so only deterministic gates are pinned: `late_webhook_retrying`, `stale_failure_after_capture`, `partial_refund_stuck`, `cancel_raced_capture`. The eval now has 15 goldens.
+
+**Found while testing.**
+- `pnpm eval`, `record-cassettes.ts` and `volume-test.ts` had been crashing since D074: it exported the gateway contract suite from the `@payops/core/testing` barrel, and that file imports `vitest`, which cannot load outside a test run. The suite now has its own path, `@payops/core/testing/gateway-contract` (amends D074: the contract is no longer exported from `@payops/core/testing`). Only `simulator/src/gateway-contract.test.ts` imports it.
+- `late_webhook_retrying` is two HTTP 503s from our consumer, so the true cause is a processing failure and the fix is the same automatic replay as `captured_order_failed`. D064 corrects a "not delivered" label when the evidence shows HTTP errors.
+
+**Not pinned, and why.** `refund_never_reached_gateway` takes the full path and needs a recorded cassette (live keys). `partial_refund_shortfall` escalates to a person instead of proposing the owed refund (INITIATE_REFUND for the unrefunded remainder); whether that is right needs a decision before it becomes a golden. Both stay in the demo seed.
+
+**Not done.** An LLM judge for explanation quality (needs a judge model, billed calls, breaks the REPLAY rule) and repeat runs for variance in LIVE (added to PROGRESS Later).
+
