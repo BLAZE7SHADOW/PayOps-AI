@@ -18,6 +18,8 @@ Gemini and Jev responses in `fixtures/cassettes/` and never calls a provider. No
 
 Free Render services sleep after 15 minutes idle; the first request then takes about 50 seconds. A free uptime monitor that pings `/api/health` every 10 minutes avoids that.
 
+**Bandwidth.** Render's free plan includes 5 GB of outbound traffic a month for the whole workspace, and the API's database round trips count as "service-initiated" traffic. An always-awake API that sweeps every minute and polls four job queues every 2 seconds used 5.45 GB in about two weeks and the workspace was suspended (D083). `render.yaml` therefore sets `RECONCILE_SWEEP_MS=0` and `JOB_POLL_SECONDS=10`. Check Render, Billing, Included Usage after a few days. A queued job (such as Start investigation) can now wait up to 10 seconds to begin; set `JOB_POLL_SECONDS` lower if that feels slow.
+
 ## What visitors can do
 
 - Sign in with a demo account (password `payops-demo`), open a pre-loaded case, and start an investigation. Every pre-loaded case uses a recorded seed, so it resolves from replay.

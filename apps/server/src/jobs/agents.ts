@@ -33,7 +33,9 @@ function agentEnv(env: ServerEnv): AgentEnv {
 export async function registerAgentJobs(boss: PgBoss, core: Core, env: ServerEnv, log: Logger): Promise<void> {
   const aiEnv = agentEnv(env);
 
-  await boss.work<AgentRunJobPayload>(QUEUES.agentRun, async ([job]) => {
+  const polling = { pollingIntervalSeconds: env.JOB_POLL_SECONDS };
+
+  await boss.work<AgentRunJobPayload>(QUEUES.agentRun, polling, async ([job]) => {
     if (!job) return;
     const { runId, caseId, scenarioKey } = job.data;
     log.info({ runId, caseId }, 'agent run starting');
@@ -41,7 +43,7 @@ export async function registerAgentJobs(boss: PgBoss, core: Core, env: ServerEnv
     log.info({ runId }, 'agent run job done');
   });
 
-  await boss.work<AgentResumeJobPayload>(QUEUES.agentResume, async ([job]) => {
+  await boss.work<AgentResumeJobPayload>(QUEUES.agentResume, polling, async ([job]) => {
     if (!job) return;
     const { runId, decision } = job.data;
     log.info({ runId, decision: decision.decision }, 'agent run resuming');

@@ -105,6 +105,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-22 · Render bandwidth suspension, fix written (D083)
+- Render suspended the workspace for using 5.46 GB of 5 GB, almost all of it the API's own database traffic. Added `JOB_POLL_SECONDS` (queue check interval) and set it to 10 and the sweep to off in `render.yaml`. Tests first (`env.test.ts`). Not yet committed or deployed: the service stays suspended until the owner adds a card or the monthly limit resets.
+- Correction: the earlier plan to move the demo video to YouTube was based on a wrong diagnosis (Vercel was fine) and was dropped.
+
 ### 2026-10-20 · Eval improvements (D082)
 - Added tool-set match (`expectedTools` soft, `forbiddenTools` hard), aggregate limits that fail `pnpm eval`, run details in the report, two clearer grounding figures, and four more goldens (15 in total, 15/15 passing in REPLAY). Logic written test first (`types.test.ts`), and the new gates were checked with deliberately wrong expectations.
 - Fixed `pnpm eval`, `record-cassettes.ts` and `volume-test.ts`, broken since D074 because the `@payops/core/testing` barrel pulled in `vitest`. The contract suite now imports from `@payops/core/testing/gateway-contract`.

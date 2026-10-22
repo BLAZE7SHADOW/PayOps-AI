@@ -18,6 +18,13 @@ services:
         value: REPLAY          # recorded responses only: no Gemini or Jev keys needed
       - key: DEMO_MODE
         value: true
+      # Bandwidth (D083): Render's free plan includes 5 GB of outbound traffic a month, and the API's
+      # database round trips count. The minute-by-minute sweep is not needed on the hosted demo (cases
+      # open when scenarios are generated), and the job queue only has to check every 10 seconds.
+      - key: RECONCILE_SWEEP_MS
+        value: 0
+      - key: JOB_POLL_SECONDS
+        value: 10
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL

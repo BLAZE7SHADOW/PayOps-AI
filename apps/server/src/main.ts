@@ -64,7 +64,7 @@ const core = createCore({ db: database.db, events, agentResumer, decision: decis
 const boss = await startBoss(database.pool, log);
 await registerReconcileSweep(boss, core, env, log);
 await registerAgentJobs(boss, core, env, log);
-boxedRetry.schedule = (await registerWebhookRetryJob(boss, core, log)).schedule;
+boxedRetry.schedule = (await registerWebhookRetryJob(boss, core, env, log)).schedule;
 boxedResumer.resume = async (runId, decision) => {
   const payload: AgentResumeJobPayload = { runId, decision: { approvalId: null, decision } };
   await boss.send(QUEUES.agentResume, payload);

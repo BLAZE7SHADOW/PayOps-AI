@@ -10,7 +10,7 @@ import { QUEUES } from './boss';
 export async function registerReconcileSweep(
   boss: PgBoss,
   core: Core,
-  env: Pick<ServerEnv, 'RECONCILE_SWEEP_MS'>,
+  env: Pick<ServerEnv, 'RECONCILE_SWEEP_MS' | 'JOB_POLL_SECONDS'>,
   log: Logger,
 ): Promise<void> {
   if (env.RECONCILE_SWEEP_MS === 0) {
@@ -18,7 +18,7 @@ export async function registerReconcileSweep(
     log.info('reconcile sweep disabled');
     return;
   }
-  await boss.work(QUEUES.reconcileSweep, async ([job]) => {
+  await boss.work(QUEUES.reconcileSweep, { pollingIntervalSeconds: env.JOB_POLL_SECONDS }, async ([job]) => {
     const started = Date.now();
     const summary = await core.reconciliation.sweep();
     log.info(

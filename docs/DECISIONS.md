@@ -1375,3 +1375,15 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Not done.** An LLM judge for explanation quality (needs a judge model, billed calls, breaks the REPLAY rule) and repeat runs for variance in LIVE (added to PROGRESS Later).
 
+## D083 · Cut the hosted API's database traffic after Render suspended the workspace
+
+**What happened.** On 2026-10-22 Render suspended the workspace: 5.46 GB used of the 5 GB included bandwidth. 5.45 GB of it was "Service-Initiated" (the API calling out), only 8 MB was HTTP responses to visitors, and 0 MB WebSocket. The uptime monitor (D080) keeps the API awake all day, so its database chatter never stopped: about 283 awake hours for 5.45 GB is roughly 19 MB an hour. I first blamed Vercel and the 12 MB demo video. That was wrong; Vercel was never over its limit.
+
+**Likely sources (read from the code, not measured).** The reconcile sweep re-checks recent orders and batches every minute (`jobs/reconcile.ts`, cron `* * * * *`). Four pg-boss queues each poll Postgres every 2 seconds (pg-boss's default). Both run for as long as the API is awake. The Supabase connection is over the public internet, so each round trip counts.
+
+**Decision.** New setting `JOB_POLL_SECONDS` (default 2, minimum 0.5) is passed as `pollingIntervalSeconds` to all four queue workers. `render.yaml` sets it to 10 and sets `RECONCILE_SWEEP_MS=0`, which disables the sweep on the hosted demo only. Local development keeps the 2-second queue check and the one-minute sweep. The sweep is not needed on the demo because detection runs when a scenario is generated (D036).
+
+**Cost.** A queued job, such as Start investigation, can wait up to 10 seconds before it starts. Faults whose grace period passes later no longer open cases by themselves on the hosted demo.
+
+**Not measured.** The expected cut is about 90% or more, from reading the code. Confirm in Render, Billing, Included Usage after a few days, and lower the interval or re-enable the sweep if the demo feels slow.
+

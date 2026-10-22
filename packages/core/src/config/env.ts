@@ -52,6 +52,12 @@ export const ServerEnvSchema = z.object({
   GATEWAY_ADAPTER: z.enum(['simulator', 'razorpay']).default('simulator'),
   /** Background reconciliation sweep interval. 0 disables it. */
   RECONCILE_SWEEP_MS: z.coerce.number().int().min(0).default(60_000),
+  /**
+   * How often each job queue worker asks the database for new work, in seconds (pg-boss minimum 0.5).
+   * Every check is a round trip to Postgres, and a hosted API pays for that traffic as outbound
+   * bandwidth (D083), so the hosted demo raises it. A job can wait up to this long before it starts.
+   */
+  JOB_POLL_SECONDS: z.coerce.number().min(0.5).default(2),
   /** Demo convenience: lets OPS use the simulator (ADMIN-only otherwise). */
   DEMO_MODE: bool.default(true),
 });
