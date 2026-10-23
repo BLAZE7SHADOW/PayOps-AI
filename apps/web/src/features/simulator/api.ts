@@ -28,7 +28,7 @@ export function useResetStatus() {
 export function useResetDemo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api<ResetStatus>('/api/simulator/reset', { method: 'POST' }),
+    mutationFn: () => api<ResetStatus>('/api/simulator/reset', { method: 'POST', body: { demo: true } }),
     onSuccess: () => qc.invalidateQueries(),
   });
 }

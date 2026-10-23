@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { GenerateScenarioBody, SCENARIOS, type GenerateScenarioResult, type ScenarioInfo } from '@payops/shared';
 import type { Core, ServerEnv } from '@payops/core';
 import { requirePermission } from '../auth/middleware';
-import { generateScenario, resetDemoData, snapshotDemoData, undoLastReset, undoStatus } from '@payops/simulator';
+import { generateScenario, resetDemoData, seedDemoCases, snapshotDemoData, undoLastReset, undoStatus } from '@payops/simulator';
 import { AppError, DEFAULT_CASSETTE_DIR } from '@payops/core';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -54,10 +54,14 @@ export function simulatorRoutes(core: Core, env: Pick<ServerEnv, 'DEMO_MODE'>): 
     res.json(await undoStatus(core));
   });
 
-  router.post('/reset', async (_req, res) => {
+  // `{ demo: true }` also regenerates the demo cases (what the Simulator page asks for); without it the
+  // reset leaves only the baseline world, which tests and clean LIVE walkthroughs rely on.
+  router.post('/reset', async (req, res) => {
+    const restoreDemo = (req.body as { demo?: unknown } | undefined)?.demo === true;
     await guard(async () => {
       await snapshotDemoData(core);
       await resetDemoData(core);
+      if (restoreDemo) await seedDemoCases(core);
     });
     res.json({ status: 'ok', ...(await undoStatus(core)) });
   });

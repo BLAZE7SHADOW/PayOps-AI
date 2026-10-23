@@ -1387,3 +1387,11 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Not measured.** The expected cut is about 90% or more, from reading the code. Confirm in Render, Billing, Included Usage after a few days, and lower the interval or re-enable the sweep if the demo feels slow.
 
+## D084 · Reset on the hosted demo restores the demo cases
+
+**What happened.** After Reset demo data the Overview was empty: no exceptions, no payments. The reset only wiped the tables and re-seeded the base world (merchants, customers), because the same function gives tests and LIVE walkthroughs a clean slate. A second effect: the seeded cases carry the dates of the day they were generated, so on a demo left running for two weeks "Captured today" read zero and the 14-day chart was flat.
+
+**Decision.** `seedDemoCases` (simulator package) holds what `pnpm seed` used to do inline: every fault scenario with its recorded seed, plus 30 healthy payments. `POST /api/simulator/reset` takes `{ "demo": true }` and runs it after the wipe; the Simulator page sends it. Without the flag the reset still leaves only the base world, so existing tests and the API contract are unchanged. Undo still restores the pre-reset snapshot.
+
+**Cost.** A demo reset writes about twenty scenarios, so on the hosted database it takes longer than a bare wipe (not measured; expect tens of seconds). The cooldown and lock still apply. Seeded cases still age between resets: the hosted demo shows fresh dates only right after a reset or a first deploy.
+

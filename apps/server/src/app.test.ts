@@ -468,3 +468,19 @@ describe('webhook event log API', () => {
     await ops.post('/api/webhooks/evt_missing/replay').send({}).expect(404);
   });
 });
+
+// Last on purpose: it replaces the shared data, and earlier tests build on each other's rows.
+describe('demo reset', () => {
+  it('reset with demo:true brings the demo cases back with fresh dates, and undo still works', async () => {
+    await ops.post('/api/simulator/reset').send({ demo: true }).expect(200);
+    const list = (await ops.get('/api/cases?limit=100').expect(200)).body as Page<CaseListItem>;
+    expect(list.items.length).toBeGreaterThanOrEqual(10);
+    const overview = (await ops.get('/api/overview').expect(200)).body as { openExceptions: number; capturedTodayCount: number };
+    expect(overview.openExceptions).toBeGreaterThanOrEqual(10);
+    expect(overview.capturedTodayCount).toBeGreaterThan(0);
+    // A second demo reset starts from an empty table, so no scenario is skipped as "already generated".
+    await ops.post('/api/simulator/reset').send({ demo: true }).expect(200);
+    const again = (await ops.get('/api/cases?limit=100').expect(200)).body as Page<CaseListItem>;
+    expect(again.items).toHaveLength(list.items.length);
+  });
+});

@@ -3,6 +3,8 @@
  * the internal records our own systems would have written, with faults injected per scenario.
  * Output is deterministic for a (scenario, seed) pair, relative to the core clock's "now".
  */
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   SCENARIOS,
@@ -11,7 +13,7 @@ import {
   type GenerateScenarioResult,
   type ScenarioKey,
 } from '@payops/shared';
-import { AppError, tables, type Core } from '@payops/core';
+import { AppError, DEFAULT_CASSETTE_DIR, tables, type Core } from '@payops/core';
 import { ScenarioContext } from './context';
 import { writeNoise } from './noise';
 import { SCENARIO_WRITERS } from './scenarios';
@@ -168,4 +170,45 @@ export async function resetDemoData(core: Pick<Core, 'db' | 'clock' | 'audit'>):
       tx,
     );
   });
+}
+
+const DEMO_NOISE_PAYMENTS = 30;
+const DEMO_BASE_SEED = 1000;
+
+/** Seeds that have recorded AI responses, so every pre-loaded case can be investigated in REPLAY mode. */
+function recordedSeed(key: string): number | undefined {
+  const file = join(DEFAULT_CASSETTE_DIR, 'manifest.json');
+  if (!existsSync(file)) return undefined;
+  const recorded = JSON.parse(readFileSync(file, 'utf8')) as Array<{ scenario: string; seed: number }>;
+  return recorded.find((r) => r.scenario === key)?.seed;
+}
+
+/**
+ * Generates the demo data set: every fault scenario once, plus healthy background payments. Used by
+ * the seed script and by the hosted demo's reset, so both give the same cases. Scenarios that already
+ * exist are skipped, so it is safe to run twice. Times are relative to the clock's "now".
+ */
+export async function seedDemoCases(
+  core: SimulatorCore,
+  onScenario?: (key: string, paymentCount: number, caseIds: string[]) => void,
+): Promise<void> {
+  const faults = SCENARIOS.filter((s) => s.expectedCaseType !== null);
+  for (const [i, info] of faults.entries()) {
+    try {
+      const result = await generateScenario(core, {
+        scenario: info.key,
+        seed: recordedSeed(info.key) ?? DEMO_BASE_SEED + i,
+        noise: 0,
+      });
+      onScenario?.(info.key, result.created.paymentIds.length, result.casesOpened.map((c) => c.displayId));
+    } catch (err) {
+      if (!(err instanceof AppError && err.code === 'CONFLICT')) throw err;
+      onScenario?.(info.key, 0, []);
+    }
+  }
+  try {
+    await generateScenario(core, { scenario: 'healthy_payment', seed: DEMO_BASE_SEED, noise: DEMO_NOISE_PAYMENTS });
+  } catch (err) {
+    if (!(err instanceof AppError && err.code === 'CONFLICT')) throw err;
+  }
 }

@@ -24,7 +24,7 @@ Free Render services sleep after 15 minutes idle; the first request then takes a
 
 - Sign in with a demo account (password `payops-demo`), open a pre-loaded case, and start an investigation. Every pre-loaded case uses a recorded seed, so it resolves from replay.
 - Simulator page: each scenario lists its **recorded seeds**. Other seeds still create the case, but the investigation escalates because there is no recording for it (by design).
-- **Reset demo data** wipes and re-seeds the shared data; **Undo last reset** restores what was there. There is one level of undo, a 10 second cooldown between resets, and a lock so two resets cannot overlap.
+- **Reset demo data** wipes the shared data and generates the demo cases again with fresh dates (the same set `pnpm seed` creates). It can take up to about half a minute on the hosted database; **Undo last reset** restores what was there. There is one level of undo, a 10 second cooldown between resets, and a lock so two resets cannot overlap.
 
 ## Recording more scenarios (on your Mac, with real keys)
 

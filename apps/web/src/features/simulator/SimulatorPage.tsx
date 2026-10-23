@@ -83,7 +83,7 @@ function ResetButton({ onDone }: { onDone: () => void }) {
           if (!o) reset.reset();
         }}
         title="Reset demo data"
-        description="This removes every generated payment, order, case and audit event, then restores the baseline data. This demo is shared, so anyone can reset it. Use Undo last reset to bring the previous data back."
+        description="This removes every generated payment, order, case and audit event, then loads the demo cases again with fresh dates. This demo is shared, so anyone can reset it. Use Undo last reset to bring the previous data back."
         footer={
           <>
             <DialogClose asChild>

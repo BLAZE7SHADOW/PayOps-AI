@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-23 · New Render service, reset restores demo cases (D084)
+- Moved the API to a new Render service (`payops-api-xatz`, old workspace suspended by bandwidth); `vercel.json` rewrites updated. UptimeRobot paused: the API now sleeps when idle and the wake-up notice covers the cold start.
+- Reset demo data now regenerates the demo cases (`seedDemoCases`, shared with the seed script). Test added (`demo reset`, last in `app.test.ts`). Reset time on the hosted database is not measured.
+- For next session: after 3 to 4 days read Render Billing, Included Usage and work out MB per awake hour (the old rate was about 18).
+
 ### 2026-10-22 · Render bandwidth suspension, fix written (D083)
 - Render suspended the workspace for using 5.46 GB of 5 GB, almost all of it the API's own database traffic. Added `JOB_POLL_SECONDS` (queue check interval) and set it to 10 and the sweep to off in `render.yaml`. Tests first (`env.test.ts`). Not yet committed or deployed: the service stays suspended until the owner adds a card or the monthly limit resets.
 - Correction: the earlier plan to move the demo video to YouTube was based on a wrong diagnosis (Vercel was fine) and was dropped.
