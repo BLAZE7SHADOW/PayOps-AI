@@ -1393,5 +1393,7 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Decision.** `seedDemoCases` (simulator package) holds what `pnpm seed` used to do inline: every fault scenario with its recorded seed, plus 30 healthy payments. `POST /api/simulator/reset` takes `{ "demo": true }` and runs it after the wipe; the Simulator page sends it. Without the flag the reset still leaves only the base world, so existing tests and the API contract are unchanged. Undo still restores the pre-reset snapshot.
 
-**Cost.** A demo reset writes about twenty scenarios, so on the hosted database it takes longer than a bare wipe (not measured; expect tens of seconds). The cooldown and lock still apply. Seeded cases still age between resets: the hosted demo shows fresh dates only right after a reset or a first deploy.
+**Background load.** Measured on Render with Supabase: about 10 seconds per scenario, roughly 3 minutes for the whole set. A request that long would be cut by the proxy, so the route wipes, answers, and loads the cases in the background. `GET /reset-status` reports `loadingDemo`; reset and undo are refused while it is true, and the Simulator page shows a notice and refreshes the other pages while cases appear. If the API restarts mid-load the demo is left partly filled; reset again.
+
+**Cost.** Cases appear one by one for a few minutes after a reset. Seeded cases still age between resets: the hosted demo shows fresh dates only right after a reset or a first deploy.
 

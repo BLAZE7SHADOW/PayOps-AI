@@ -471,8 +471,18 @@ describe('webhook event log API', () => {
 
 // Last on purpose: it replaces the shared data, and earlier tests build on each other's rows.
 describe('demo reset', () => {
-  it('reset with demo:true brings the demo cases back with fresh dates, and undo still works', async () => {
-    await ops.post('/api/simulator/reset').send({ demo: true }).expect(200);
+  it('reset with demo:true loads the demo cases in the background and blocks other resets meanwhile', async () => {
+    const loaded = async (): Promise<void> => {
+      for (let i = 0; i < 100; i++) {
+        if (!(await ops.get('/api/simulator/reset-status').expect(200)).body.loadingDemo) return;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw new Error('demo cases did not finish loading');
+    };
+    expect((await ops.post('/api/simulator/reset').send({ demo: true }).expect(200)).body.loadingDemo).toBe(true);
+    // Another reset or undo is refused while the cases load.
+    await ops.post('/api/simulator/undo-reset').send({}).expect(429);
+    await loaded();
     const list = (await ops.get('/api/cases?limit=100').expect(200)).body as Page<CaseListItem>;
     expect(list.items.length).toBeGreaterThanOrEqual(10);
     const overview = (await ops.get('/api/overview').expect(200)).body as { openExceptions: number; capturedTodayCount: number };
@@ -480,6 +490,7 @@ describe('demo reset', () => {
     expect(overview.capturedTodayCount).toBeGreaterThan(0);
     // A second demo reset starts from an empty table, so no scenario is skipped as "already generated".
     await ops.post('/api/simulator/reset').send({ demo: true }).expect(200);
+    await loaded();
     const again = (await ops.get('/api/cases?limit=100').expect(200)).body as Page<CaseListItem>;
     expect(again.items).toHaveLength(list.items.length);
   });

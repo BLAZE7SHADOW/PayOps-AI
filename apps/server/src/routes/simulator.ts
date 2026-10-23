@@ -35,10 +35,13 @@ export function simulatorRoutes(core: Core, env: Pick<ServerEnv, 'DEMO_MODE'>): 
   // The demo is public, so a reset or undo by one visitor affects everyone. A short cooldown and a
   // one-at-a-time lock stop button mashing; every reset first saves a snapshot that Undo restores.
   let busy = false;
+  // The demo cases load in the background after a reset: on the free hosted database they take a few
+  // minutes, longer than a proxy keeps a request open. The flag blocks another reset or undo meanwhile.
+  let loadingDemo = false;
   let lastChange = 0;
   const guard = async (work: () => Promise<void>): Promise<void> => {
     const wait = COOLDOWN_MS - (Date.now() - lastChange);
-    if (busy || wait > 0) {
+    if (busy || loadingDemo || wait > 0) {
       throw new AppError('RATE_LIMITED', `Someone just reset or restored the demo. Try again in ${Math.max(1, Math.ceil(wait / 1000))} seconds.`);
     }
     busy = true;
@@ -51,24 +54,32 @@ export function simulatorRoutes(core: Core, env: Pick<ServerEnv, 'DEMO_MODE'>): 
   };
 
   router.get('/reset-status', async (_req, res) => {
-    res.json(await undoStatus(core));
+    res.json({ ...(await undoStatus(core)), loadingDemo });
   });
 
-  // `{ demo: true }` also regenerates the demo cases (what the Simulator page asks for); without it the
-  // reset leaves only the baseline world, which tests and clean LIVE walkthroughs rely on.
+  // `{ demo: true }` also regenerates the demo cases in the background (what the Simulator page asks
+  // for; poll /reset-status for `loadingDemo`); without it the reset leaves only the baseline world, which tests and clean LIVE walkthroughs rely on.
   router.post('/reset', async (req, res) => {
     const restoreDemo = (req.body as { demo?: unknown } | undefined)?.demo === true;
     await guard(async () => {
       await snapshotDemoData(core);
       await resetDemoData(core);
-      if (restoreDemo) await seedDemoCases(core);
     });
-    res.json({ status: 'ok', ...(await undoStatus(core)) });
+    if (restoreDemo) {
+      loadingDemo = true;
+      void seedDemoCases(core)
+        .catch((err: unknown) => console.error('demo cases failed to load after reset', err))
+        .finally(() => {
+          loadingDemo = false;
+          lastChange = Date.now();
+        });
+    }
+    res.json({ status: 'ok', ...(await undoStatus(core)), loadingDemo });
   });
 
   router.post('/undo-reset', async (_req, res) => {
     await guard(() => undoLastReset(core));
-    res.json({ status: 'ok', ...(await undoStatus(core)) });
+    res.json({ status: 'ok', ...(await undoStatus(core)), loadingDemo });
   });
 
   return router;

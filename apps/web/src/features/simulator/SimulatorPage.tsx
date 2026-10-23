@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { SCENARIOS } from '@payops/shared';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { Button } from '../../ui/Button';
@@ -50,30 +51,40 @@ export function SimulatorPage() {
 function ResetActions({ onDone }: { onDone: () => void }) {
   const status = useResetStatus();
   const undo = useUndoReset();
+  const qc = useQueryClient();
+  const loading = status.data?.loadingDemo === true;
+  // Refresh the pages while cases are being created, and once more when loading ends.
+  const wasLoading = useRef(false);
+  useEffect(() => {
+    // Not the simulator queries: refetching the status here would retrigger this effect forever.
+    if (loading || wasLoading.current) void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'simulator' });
+    wasLoading.current = loading;
+  }, [loading, status.dataUpdatedAt, qc]);
   return (
     <div className="flex items-center gap-3">
+      {loading ? <span role="status" className="text-12 text-ink-2">Loading the demo cases. This takes a few minutes on the free database; they appear as they are created.</span> : null}
       {undo.isError ? <span role="alert" className="text-12 text-bad">{undo.error instanceof Error ? undo.error.message : 'Undo failed.'}</span> : null}
       {status.data?.canUndo ? (
         <Button
           variant="secondary"
-          disabled={undo.isPending}
+          disabled={undo.isPending || loading}
           title={status.data.snapshotAt ? `Restores the data as it was at ${formatTime(status.data.snapshotAt)}` : undefined}
           onClick={() => undo.mutate(undefined, { onSuccess: onDone })}
         >
           {undo.isPending ? 'Restoring' : 'Undo last reset'}
         </Button>
       ) : null}
-      <ResetButton onDone={onDone} />
+      <ResetButton onDone={onDone} disabled={loading} />
     </div>
   );
 }
 
-function ResetButton({ onDone }: { onDone: () => void }) {
+function ResetButton({ onDone, disabled }: { onDone: () => void; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const reset = useResetDemo();
   return (
     <>
-      <Button variant="danger" onClick={() => setOpen(true)}>
+      <Button variant="danger" disabled={disabled} onClick={() => setOpen(true)}>
         Reset demo data
       </Button>
       <Dialog

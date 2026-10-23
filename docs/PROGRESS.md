@@ -107,7 +107,7 @@ Shivam's Mac directly, same as task 9 did.
 
 ### 2026-10-23 · New Render service, reset restores demo cases (D084)
 - Moved the API to a new Render service (`payops-api-xatz`, old workspace suspended by bandwidth); `vercel.json` rewrites updated. UptimeRobot paused: the API now sleeps when idle and the wake-up notice covers the cold start.
-- Reset demo data now regenerates the demo cases (`seedDemoCases`, shared with the seed script). Test added (`demo reset`, last in `app.test.ts`). Reset time on the hosted database is not measured.
+- Reset demo data now regenerates the demo cases (`seedDemoCases`, shared with the seed script). Test added (`demo reset`, last in `app.test.ts`). Measured on the hosted database: about 3 minutes, so the cases load in the background (`loadingDemo` in `/reset-status`).
 - For next session: after 3 to 4 days read Render Billing, Included Usage and work out MB per awake hour (the old rate was about 18).
 
 ### 2026-10-22 · Render bandwidth suspension, fix written (D083)

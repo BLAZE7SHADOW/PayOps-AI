@@ -16,12 +16,15 @@ export function useGenerateScenario() {
 export interface ResetStatus {
   canUndo: boolean;
   snapshotAt: string | null;
+  /** True while the demo cases are being generated after a reset. */
+  loadingDemo?: boolean;
 }
 
 export function useResetStatus() {
   return useQuery({
     queryKey: ['simulator', 'reset-status'],
     queryFn: ({ signal }) => api<ResetStatus>('/api/simulator/reset-status', { signal }),
+    refetchInterval: (query) => (query.state.data?.loadingDemo ? 3000 : false),
   });
 }
 
