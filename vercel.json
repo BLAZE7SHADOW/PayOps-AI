@@ -11,15 +11,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://payops-api-dxwg.onrender.com/api/:path*"
+      "destination": "https://payops-api-xatz.onrender.com/api/:path*"
     },
     {
       "source": "/socket.io/",
-      "destination": "https://payops-api-dxwg.onrender.com/socket.io/"
+      "destination": "https://payops-api-xatz.onrender.com/socket.io/"
     },
     {
       "source": "/socket.io/:path*",
-      "destination": "https://payops-api-dxwg.onrender.com/socket.io/:path*"
+      "destination": "https://payops-api-xatz.onrender.com/socket.io/:path*"
     },
     {
       "source": "/(.*)",
