@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-25 · Phase B1 done: foundations and spikes (D087)
+- `python/payops` created: settings, errors, request-id logs, `/api/health`, async engine, Alembic baseline over the 13 Drizzle SQL files, pgserver-backed test harness. 9 tests, ruff and pyright clean, added to CI and `pnpm py:test`.
+- Spikes: pgserver (works), Procrastinate (15 ms pickup, retries work), python-socketio with the real client (14 of 14).
+- Open: run `scripts/check_listen_notify.py` against the Supabase Session pooler (needs the hosted connection string, so it is a step for Shivam).
+- Next: B2, the domain logic ported test-first (money, policy, action options, reconciliation matrix and lifecycle, executor, validator, audit hash chain).
+
 ### 2026-10-25 · Phase A clean-up and hardening done (D086)
 - CI workflow, pre-commit, `docs/OPERATIONS.md`. TypeScript `nodes.ts` split into `nodes/` (nine files), Python `nodes.py` split the same way, shared helpers. Zod schemas on the internal routes. Python service: typed settings, JSON logs and request ids, `/ready`, idempotent and restart-safe `/runs`. Parity unchanged (15 of 15, 83 exact, 0 fallback).
 - Next: Phase B (FastAPI backend), starting with B1 spikes: a Postgres for Python tests without Docker, Procrastinate through the Supabase pooler, python-socketio with the existing web client.

@@ -36,18 +36,22 @@ jobs:
       - run: pnpm eval
 
   python:
-    name: Python (ruff, pyright, pytest)
+    name: Python ${{ matrix.project }} (ruff, pyright, pytest)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [agents, payops]
     defaults:
       run:
-        working-directory: python/agents
+        working-directory: python/${{ matrix.project }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: python/agents/uv.lock
+          cache-dependency-glob: python/${{ matrix.project }}/uv.lock
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run pyright

@@ -60,3 +60,7 @@ Render keeps previous deploys: open the service, Events, and redeploy the previo
 ## Dependencies
 
 `pnpm audit --prod` and `pip-audit` run in CI and report advisories without blocking. Lockfiles (`pnpm-lock.yaml`, `python/agents/uv.lock`) are committed and CI installs from them with `--frozen-lockfile` and `uv sync --frozen`.
+
+## Python backend checks (D087)
+
+Before pointing real traffic at `python/payops`, run `scripts/check_listen_notify.py` against the hosted database's Session pooler (port 5432). It sends one notification and waits for it, and creates no tables.

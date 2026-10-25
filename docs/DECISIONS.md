@@ -1434,3 +1434,14 @@ Known quirk found while porting, present in both runtimes: the payment and recon
 
 **Production basics now in place:** CI on every push, typed settings, structured logs, request ids across both services, readiness, idempotent job entry points, timeouts on every outbound call, lockfiles with frozen installs, dependency audit.
 
+## D087 · Python backend foundations and the three B1 spikes (2026-10-25)
+
+New project `python/payops` (FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3), the future home of everything in `apps/server` and `packages/core`. Built so far: typed settings (same variable names as the TypeScript API), the shared error shape, JSON logs with request ids, `GET /api/health`, an async engine, and an Alembic baseline.
+
+**Spike results.**
+- *Postgres for tests without Docker: use `pgserver`* (a pip package that bundles Postgres 16). It starts in about 5 seconds per test run; every test gets its own database cloned from a migrated template in milliseconds. Its own `psql` helper breaks on a path with a space, so tests use psycopg. Works on Linux CI.
+- *Job queue: Procrastinate.* A job queued with LISTEN/NOTIFY was picked up in 15 ms with no polling interval, and a failed attempt retried. This replaces pg-boss, whose 2-second polling was a main source of the bandwidth that suspended Render (D083), so idle traffic should drop sharply. **Not yet checked on Supabase:** run `scripts/check_listen_notify.py` against the Session pooler (port 5432) before relying on it; the Transaction pooler (6543) does not support LISTEN.
+- *Realtime: python-socketio.* The unmodified `socket.io-client` that the web app uses connected over websocket and polling, was refused without a valid cookie, joined `ops` automatically, joined and left case rooms, and was disconnected when the server revoked its session. 14 of 14 checks.
+
+**Baseline migration.** Revision `0001` applies the 13 Drizzle SQL files unchanged (statements go to the driver directly, because the audit trigger text contains `%`). On a database Drizzle already built, which the hosted one is, it finds `public.cases` and only records itself. After B7 the SQL files and Alembic are the only schema source. One TypeScript-side step does not exist in Python yet: `sealLegacyAuditRows()` runs after migrations to hash rows written before the audit chain; it is ported with the audit chain in B2.
+
