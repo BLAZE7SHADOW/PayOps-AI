@@ -24,7 +24,7 @@ import type {
   RunStatus,
 } from '@payops/shared';
 import { buildCaseBrief } from './brief';
-import { toAttemptHistory } from './nodes';
+import { toAttemptHistory } from './nodes/shared';
 import { buildProposal } from './proposal';
 import { syncRunRow } from './run';
 import { createEventSink, patchRunRow, type RunPatch } from './store';

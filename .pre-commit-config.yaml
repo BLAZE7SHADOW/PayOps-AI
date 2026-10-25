@@ -1,0 +1,16 @@
+# Optional local hooks: `uvx pre-commit install`. The same checks run in CI.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        files: ^python/
+        args: [--fix]
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: bash -c 'cd python/agents && uv run pyright'
+        language: system
+        files: ^python/agents/
+        pass_filenames: false
