@@ -1,0 +1,62 @@
+# Operations
+
+How the services are configured, checked, logged and rolled back. Setup steps for the free hosted copy are in [DEPLOY.md](DEPLOY.md).
+
+## Services
+
+| Service | Where | Port | Needs |
+|---|---|---|---|
+| API (Express, jobs, Socket.IO) | `apps/server` | 4000 | Postgres (`DATABASE_URL`) |
+| Agent service (FastAPI) | `python/agents` | 8100 | the API's URL and shared secret; Postgres only for the checkpoint store |
+| Web | `apps/web` | 5173 (dev) | the API |
+
+The agent service is optional: the API runs the TypeScript agents unless `AGENT_RUNTIME=python` (D085).
+
+## Configuration
+
+All configuration is environment variables. Secrets are never committed (`.env` is ignored; `.env.example` lists names only).
+
+| Variable | Service | Meaning |
+|---|---|---|
+| `DATABASE_URL` | both | Supabase Session pooler (port 5432), or local PGlite on 54329 |
+| `AI_MODE` | API (sent with each run) | `REPLAY` (recorded, default), `RECORD`, `LIVE` |
+| `GEMINI_API_KEY`, `TYPESAFE_JEV_API_KEY` | both | needed for `LIVE` and `RECORD` only |
+| `AGENT_RUNTIME` | API | `ts` (default) or `python` |
+| `AGENT_SERVICE_URL`, `AGENT_INTERNAL_SECRET` | API | where the agent service is, and the shared secret (16+ characters) |
+| `AGENT_INTERNAL_SECRET`, `NODE_API_URL` | agent service | the same secret, and the API's URL |
+| `CHECKPOINTER` | agent service | `auto` (Postgres unless the URL is the local PGlite), `memory`, `postgres` |
+| `LOG_LEVEL` | agent service | `INFO` by default |
+| `AGENT_ALLOW_FIXTURES` | agent service | `1` only for evals: lets a request replace the models |
+
+The agent service reads its settings once at start (`payops_agents/settings.py`) and refuses to start without a secret.
+
+## Health
+
+- API: `GET /api/health` (checks the database).
+- Agent service: `GET /health` is liveness (the process is up). `GET /ready` is readiness (the checkpoint store answers); send traffic only when it returns 200.
+
+## Logs
+
+Both services log one JSON object per line to stdout: time, level, message, and a `requestId`. The API passes its `x-request-id` to the agent service, so one id follows a call across both. Search for the id to see every line for one request.
+
+## Retries and idempotency
+
+- The API's agent jobs are pg-boss jobs and can be delivered twice. `POST /runs` and `POST /runs/{id}/resume` are idempotent: a finished or paused run is reported as it is, a run that stopped part way continues from its last checkpoint, a run already executing answers 409.
+- Executor actions carry idempotency keys, so a repeated action does not repeat its effect.
+- Every outbound call has a timeout: Jev 10 s, the agent service's calls to the API 60 s (`NODE_API_TIMEOUT_SECONDS`), the API's call to the agent service 10 minutes.
+
+## Shutdown
+
+On `SIGTERM` the agent service stops taking new calls and closes its checkpoint pool and HTTP client. Start uvicorn with `--timeout-graceful-shutdown 30` so an in-flight run can finish. A run cut off anyway is picked up again by the API job's retry and continues from its checkpoint.
+
+## Checks before a release
+
+`pnpm typecheck && pnpm lint && pnpm test && pnpm eval && pnpm eval:python && pnpm py:test` (CI runs all of them). For a deploy that changes prompts or Jev questions, re-record cassettes first (`pnpm cassette:record`, billed) because a changed string changes its cassette key.
+
+## Rollback
+
+Render keeps previous deploys: open the service, Events, and redeploy the previous one. To go back to the TypeScript agents without a redeploy, unset `AGENT_RUNTIME` on the API (a run belongs to one runtime, so let paused runs finish or reject them first). Demo data can be restored with Reset demo data (about 5 minutes on the hosted database).
+
+## Dependencies
+
+`pnpm audit --prod` and `pip-audit` run in CI and report advisories without blocking. Lockfiles (`pnpm-lock.yaml`, `python/agents/uv.lock`) are committed and CI installs from them with `--frozen-lockfile` and `uv sync --frozen`.

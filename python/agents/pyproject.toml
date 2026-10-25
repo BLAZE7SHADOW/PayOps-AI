@@ -12,6 +12,7 @@ dependencies = [
   "langchain-google-genai>=2.0",
   "langgraph-checkpoint-postgres>=2.0",
   "psycopg[binary,pool]>=3.2",
+  "pydantic-settings>=2.16.1",
 ]
 
 [dependency-groups]
@@ -49,5 +50,5 @@ pythonVersion = "3.12"
 "src/payops_agents/grounding.py" = ["E501"]
 "src/payops_agents/risk.py" = ["E501"]
 "src/payops_agents/context.py" = ["E501"]
-"src/payops_agents/nodes.py" = ["E501"]
+"src/payops_agents/nodes/*.py" = ["E501"]
 "tests/*" = ["E501"]

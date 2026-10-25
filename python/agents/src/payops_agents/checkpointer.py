@@ -7,27 +7,28 @@ runtime for its whole life, so they never need to read each other's checkpoints.
 
 from __future__ import annotations
 
-import os
 from contextlib import AsyncExitStack
 from typing import Any
+
+from .settings import Settings
 
 SCHEMA = "checkpoints_py"
 LOCAL_PGLITE_PORT = 54329
 
 
-def _wants_postgres(database_url: str | None) -> bool:
-    mode = os.environ.get("CHECKPOINTER")
-    if mode in ("memory", "postgres"):
-        return mode == "postgres"
+def _wants_postgres(settings: Settings) -> bool:
+    if settings.checkpointer != "auto":
+        return settings.checkpointer == "postgres"
+    database_url = settings.database_url
     if not database_url:
         return False
     # `pnpm db:local` (PGlite) serves one connection, and the API already holds it.
     return f":{LOCAL_PGLITE_PORT}" not in database_url
 
 
-async def create_checkpointer(stack: AsyncExitStack) -> Any:
-    database_url = os.environ.get("DATABASE_URL")
-    if not _wants_postgres(database_url):
+async def create_checkpointer(stack: AsyncExitStack, settings: Settings) -> Any:
+    database_url = settings.database_url
+    if not _wants_postgres(settings):
         from langgraph.checkpoint.memory import InMemorySaver
 
         return InMemorySaver()
@@ -47,7 +48,7 @@ async def create_checkpointer(stack: AsyncExitStack) -> Any:
     pool = AsyncConnectionPool(
         database_url,
         min_size=1,
-        max_size=int(os.environ.get("CHECKPOINT_POOL_MAX", "3")),
+        max_size=settings.checkpoint_pool_max,
         kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         configure=configure,
         open=False,
@@ -57,3 +58,12 @@ async def create_checkpointer(stack: AsyncExitStack) -> Any:
     saver = AsyncPostgresSaver(pool)  # type: ignore[arg-type]
     await saver.setup()
     return saver
+
+
+async def checkpointer_ready(checkpointer: Any) -> bool:
+    """A cheap read that fails when the checkpoint database is unreachable."""
+    try:
+        await checkpointer.aget_tuple({"configurable": {"thread_id": "__ready__"}})
+    except Exception:  # noqa: BLE001 - any failure means not ready
+        return False
+    return True

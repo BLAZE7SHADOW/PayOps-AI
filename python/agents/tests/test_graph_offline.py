@@ -107,3 +107,45 @@ def test_replay_ports_read_the_shared_cassette_directory() -> None:
     assert decision.reader.paths == llm.reader.paths
     assert AgentDeps  # imported for the type; the runner builds deps from the environment
     assert REPLAY.ai_mode == "REPLAY"
+
+
+async def test_a_second_start_while_the_run_is_executing_is_refused() -> None:
+    import asyncio
+
+    from payops_agents.run import RunConflict
+
+    release = asyncio.Event()
+
+    class SlowApi(FakeNodeApi):
+        async def case_brief(self, case_id: str) -> dict[str, Any]:
+            await release.wait()
+            return await super().case_brief(case_id)
+
+    api = SlowApi()
+    r = runner(api)
+    first = asyncio.create_task(r.investigate("run_h", api.data["caseId"], "captured_order_failed", "REPLAY"))
+    await asyncio.sleep(0.01)
+    with pytest.raises(RunConflict):
+        await r.investigate("run_h", api.data["caseId"], "captured_order_failed", "REPLAY")
+    release.set()
+    assert (await first).status == "RESOLVED"
+
+
+async def test_a_run_that_stopped_part_way_continues_from_its_checkpoint() -> None:
+    api = FakeNodeApi()
+    calls = {"n": 0}
+    original = api.run_tools
+
+    async def flaky(case_id: str, tools: list[str]) -> list[dict[str, Any]]:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("api went away")
+        return await original(case_id, tools)
+
+    api.run_tools = flaky  # type: ignore[method-assign]
+    r = runner(api)
+    with pytest.raises(RuntimeError):
+        await r.investigate("run_i", api.data["caseId"], "captured_order_failed", "REPLAY")
+    assert api.failed == ["api went away"]
+    done = await r.investigate("run_i", api.data["caseId"], "captured_order_failed", "REPLAY")
+    assert done.status == "RESOLVED"

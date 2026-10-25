@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-25 · Phase A clean-up and hardening done (D086)
+- CI workflow, pre-commit, `docs/OPERATIONS.md`. TypeScript `nodes.ts` split into `nodes/` (nine files), Python `nodes.py` split the same way, shared helpers. Zod schemas on the internal routes. Python service: typed settings, JSON logs and request ids, `/ready`, idempotent and restart-safe `/runs`. Parity unchanged (15 of 15, 83 exact, 0 fallback).
+- Next: Phase B (FastAPI backend), starting with B1 spikes: a Postgres for Python tests without Docker, Procrastinate through the Supabase pooler, python-socketio with the existing web client.
+- Not done on purpose: splitting core services and typing the Python state (both folded into Phase B, see D086).
+
 ### 2026-10-25 · Python agent port, steps 0 to 6 done (D085)
 - Python graph in `python/agents` (FastAPI, LangGraph Python, uv). Node side: `AGENT_RUNTIME`, `AGENT_SERVICE_URL`, `AGENT_INTERNAL_SECRET`, `/internal/agent/*` routes (`apps/server/src/routes/internal-agent.ts`, wrapping `packages/agents/src/remote.ts`), job switch in `jobs/agents.ts`. Evals got an `AgentDriver` hook and `pnpm eval:python`.
 - Proof: `pnpm eval:python` 15 of 15 match TypeScript, 83 recorded calls matched exactly, 0 fallbacks. `pnpm py:test` (ruff, pyright, 39 pytest cases incl. a full offline run against a cassette). Run end to end locally through HTTP, pg-boss, Python, approval and resume. Postgres checkpointer: a paused run resumes on a fresh runner.

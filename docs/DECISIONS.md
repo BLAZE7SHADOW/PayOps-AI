@@ -1422,3 +1422,15 @@ Where the build differs from the first plan:
 
 Known quirk found while porting, present in both runtimes: the payment and reconciliation specialists run in parallel from the same state snapshot, so if both ask for follow-up tools they can allocate the same `ev_NN` ids and the merge by id keeps one. It has not shown up in the recorded scenarios (only one of the two asks for follow-ups); fixing it changes prompts and therefore cassette keys, so it is left for a deliberate change.
 
+## D086 · Clean up first, then move the whole backend to Python and retire TypeScript
+
+**Decision.** The backend ends up in Python (FastAPI, SQLAlchemy, a Postgres-native job queue, python-socketio); the TypeScript backend (`apps/server`, `packages/{core,agents,simulator,evals}`) is deleted at the end. `apps/web` and `packages/shared` stay. This supersedes D085's "TypeScript agents stay as the fallback": they stay only until the migration proves parity. Plan and phases are in the working plan (Phase A clean-up, Phase B migration B1 to B7).
+
+**Phase A (done 2026-10-25), behaviour unchanged.** CI (`.github/workflows/ci.yml`: TypeScript checks and evals, Python checks, parity, a non-blocking audit), pre-commit, `docs/OPERATIONS.md`. `packages/agents/src/nodes.ts` (926 lines) became `nodes/` with nine files, none over 171 lines, sharing helpers for the budget guard, Jev budget, evidence and finding construction. The Python `nodes.py` was split the same way. The internal routes validate with Zod instead of `as never` casts. The Python service got typed settings, JSON logs with request ids, `/ready`, a request-id header on its calls to the API, and idempotent, restart-safe runs. Prompt text, Jev questions and tool descriptions were not touched: `pnpm eval:python` still reports 83 exact cassette lookups and no fallback.
+
+**Deliberately not done in Phase A.**
+- *Splitting `case.service.ts` and `resolution.service.ts`, trimming comments in `packages/core`.* Phase B rewrites them in Python, so tidying them first is throwaway work. They are reorganised as they are ported.
+- *Typed dicts for the Python graph state.* A partial rollout broke type checking across every node. Phase B defines these as Pydantic domain models once, in the new `domain/` package.
+
+**Production basics now in place:** CI on every push, typed settings, structured logs, request ids across both services, readiness, idempotent job entry points, timeouts on every outbound call, lockfiles with frozen installs, dependency audit.
+

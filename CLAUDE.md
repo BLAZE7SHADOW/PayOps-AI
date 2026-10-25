@@ -43,7 +43,7 @@ If code and docs disagree, stop and ask Shivam. Do not silently "fix" either.
 
 pnpm workspaces · Node 22 · TypeScript strict · React 19 + Vite + React Router + TanStack Query + Zustand (UI state only) · Tailwind v4 with custom tokens · Radix UI primitives + `@radix-ui/react-icons` · Recharts (restyled) · Express 5 · Postgres (Supabase) via Drizzle ORM + `pg` · pg-boss (jobs in Postgres) · PGlite (local dev + tests) · Zod · Socket.IO (in-process) · pino · LangGraph JS + `@langchain/langgraph-checkpoint-postgres` · LangChain JS + `@langchain/google-genai` · `@typesafe-ai/sdk` (Jev) · Vitest · Playwright.
 
-**Exception (D085):** the agent system is being ported to a separate Python service in `python/agents` (FastAPI + LangGraph Python, managed with `uv`), switched by `AGENT_RUNTIME=ts|python`. The TypeScript agents stay as the fallback. Nothing else moves to Python.
+**Exception (D085, D086):** the agent system runs as a separate Python service in `python/agents` (FastAPI + LangGraph Python, managed with `uv`), switched by `AGENT_RUNTIME=ts|python`. The plan (D086) is to move the whole backend to Python (FastAPI) and delete the TypeScript backend once parity is proven; `apps/web` and `packages/shared` stay. Until then do not start new TypeScript backend features without asking.
 
 Do **not** add: MongoDB, Redis, BullMQ, any other worker service, Supabase Auth/RLS, Next.js, Redux, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, shadcn default styles, lucide-react, framer-motion, any icon pack with sparkles.
 

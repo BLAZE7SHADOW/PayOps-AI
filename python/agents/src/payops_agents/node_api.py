@@ -12,6 +12,8 @@ from typing import Any, Protocol
 
 import httpx
 
+from .logging_setup import request_id_var
+
 
 class NodeApiError(Exception):
     def __init__(self, path: str, status: int, body: str) -> None:
@@ -36,13 +38,16 @@ class NodeApiPort(Protocol):
 
 
 class NodeApi:
-    def __init__(self, base_url: str, secret: str, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, base_url: str, secret: str, client: httpx.AsyncClient | None = None, timeout: float = 60.0) -> None:
         self._base = base_url.rstrip("/") + "/internal/agent"
         self._headers = {"x-agent-secret": secret}
-        self._client = client or httpx.AsyncClient(timeout=60.0)
+        self._client = client or httpx.AsyncClient(timeout=timeout)
 
     async def _post(self, path: str, body: dict[str, Any]) -> Any:
-        res = await self._client.post(self._base + path, json=body, headers=self._headers)
+        headers = dict(self._headers)
+        if (rid := request_id_var.get()) is not None:
+            headers["x-request-id"] = rid
+        res = await self._client.post(self._base + path, json=body, headers=headers)
         if res.status_code >= 400:
             raise NodeApiError(path, res.status_code, res.text)
         return res.json()
