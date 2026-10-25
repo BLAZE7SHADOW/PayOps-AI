@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-25 · Python agent port, step 0 (D085)
+- Plan approved: port `packages/agents` to Python as `python/agents` (FastAPI + LangGraph Python, uv, Python 3.12), Node stays the system of record, `AGENT_RUNTIME=ts|python` switch, TS agents stay as fallback. Decision D085 (the plan said D084, which the reset change already used).
+- Done: scaffold (`pyproject.toml`, `uv.lock`, package, smoke test importing LangGraph), ruff and pyright (strict) and pytest green. Docs updated (CLAUDE.md stack exception, docs/02, D085).
+- Next: step 1, the Node side: `AGENT_RUNTIME` env, `/internal/agent/*` routes and the job switch, tests first. Then 2 schema export, 3 pure logic, 4 ports, 5 graph, 6 parity, 7 deploy.
+- Open: Jev has no Python SDK (read the TS SDK's request and response shapes before step 4); second Render service cost and cold start are unmeasured.
+
 ### 2026-10-23 · New Render service, reset restores demo cases (D084)
 - Moved the API to a new Render service (`payops-api-xatz`, old workspace suspended by bandwidth); `vercel.json` rewrites updated. UptimeRobot paused: the API now sleeps when idle and the wake-up notice covers the cold start.
 - Reset demo data now regenerates the demo cases (`seedDemoCases`, shared with the seed script). Test added (`demo reset`, last in `app.test.ts`). Measured on the hosted database: about 3 minutes, so the cases load in the background (`loadingDemo` in `/reset-status`).

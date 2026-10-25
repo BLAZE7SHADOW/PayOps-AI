@@ -33,7 +33,7 @@ Hexagonal: the domain core depends on **ports** (interfaces); **adapters** imple
           └────────────────────────────────────────────────────┘
 ```
 
-Why one process: the workload is small, and one process means one deploy, in-process Socket.IO (no Redis adapter), and simpler debugging. Jobs still go through pg-boss so agent runs never block HTTP requests and survive restarts. If it ever needs to scale, the same code can run a second process with `ROLE=worker`.
+Why one process: the workload is small, and one process means one deploy, in-process Socket.IO (no Redis adapter), and simpler debugging. Jobs still go through pg-boss so agent runs never block HTTP requests and survive restarts. If it ever needs to scale, the same code can run a second process with `ROLE=worker`. Exception (D085): the agent graph is being ported to a Python service (`python/agents`) that Node's agent jobs call over HTTP; Node stays the system of record and Python reaches data only through `/internal/agent/*`. Until parity is proven, `AGENT_RUNTIME=ts` (default) runs the TypeScript agents in this process.
 
 ## 2. Repository layout
 

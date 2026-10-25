@@ -1397,3 +1397,15 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Cost.** Cases appear one by one for a few minutes after a reset. Seeded cases still age between resets: the hosted demo shows fresh dates only right after a reset or a first deploy.
 
+## D085 · Port the agent system to Python as a separate service (staged, with a TypeScript fallback)
+
+**Why.** Python is the common language for AI roles, and the owner wants the LangGraph agent system in Python on his resume. Only the agents are ported (`packages/agents`, about 5,400 lines with tests). The web app, API, database code, jobs, simulator, policy, executor and validator stay in TypeScript. This overrides three rules in `CLAUDE.md`: the locked stack, "no separate worker service", and "stay in the current phase". It does not change the safety rules: the model still never touches the database and never authorizes or executes.
+
+**Boundary.** Node stays the system of record. A Python service (`python/agents`, FastAPI + LangGraph Python) runs the same graph. Node's agent jobs call it (`POST /runs`, `POST /runs/{id}/resume`, shared secret). Python reaches data and authority only through a new internal Node API (`/internal/agent/*`): load the case, record steps, patch the run row, propose, execute, validate, close, escalate. The one thing Python writes itself is LangGraph's own `checkpoints` schema. Python never connects to the application tables.
+
+**Switch.** `AGENT_RUNTIME=ts|python`, default `ts`. The TypeScript agents stay as the fallback and as the reference the evals compare against. The hosted demo stays on `ts` until the Python service is measured on Render (a second service means a second cold start and Node-to-Python traffic that counts as bandwidth, see D083).
+
+**Types and fixtures.** Shared Zod schemas are exported to JSON Schema and turned into Pydantic models by a script, with a test that fails when they drift. Jev has no Python SDK, so the Python `DecisionPort` calls its HTTP API. The recorded cassettes in `fixtures/cassettes` are shared, so no re-recording.
+
+**Done when** all 16 recorded scenarios pass the eval hard gates under `AGENT_RUNTIME=python` and match the TypeScript run. Plan and step order: step 0 scaffold (this entry), 1 Node internal API and switch, 2 schema export, 3 pure logic, 4 LLM and Jev ports, 5 graph and nodes, 6 parity, 7 deploy.
+

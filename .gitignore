@@ -27,3 +27,10 @@ Claude outputs/
 # Local scratch and handoff archives (not project source)
 _to_delete/
 *.zip
+
+# Python agent service
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
