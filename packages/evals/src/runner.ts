@@ -17,7 +17,7 @@ import {
 } from '@payops/core';
 import { fixedClock, startTestDatabase, type TestDatabase } from '@payops/core/testing';
 import { newId, type ActionType } from '@payops/shared';
-import { buildGraph, createEventSink, createRunRow } from '@payops/agents';
+import { buildGraph, createEventSink, createRunRow, type PayOpsStateType } from '@payops/agents';
 // Tooling-only import, same as packages/agents/scripts/record-cassettes.ts and graph.test.ts:
 // production code never imports the simulator.
 import { generateScenario } from '../../simulator/src/index';
@@ -34,6 +34,29 @@ const REPLAY_ENV = {
 };
 
 export type EvalMode = 'REPLAY' | 'LIVE';
+
+/**
+ * Runs a golden scenario somewhere other than the in-process TypeScript graph, for instance the Python
+ * agent service (D085). The caller owns that runtime; the suite only needs the run's final (or paused)
+ * state back, in the shape of `PayOpsStateType`, so the same hard gates apply to every runtime.
+ */
+/** The part of a fixture golden's options a remote runtime needs (the J1 note answers stay in this process). */
+export interface DriverFixture {
+  rootCause: string;
+  consistent?: number;
+  replanStrategy?: string;
+}
+
+export interface AgentDriver {
+  start(input: { runId: string; caseId: string; scenarioKey?: string; fixture?: DriverFixture }): Promise<{ state: PayOpsStateType; interrupted: boolean }>;
+  resume(input: {
+    runId: string;
+    caseId: string;
+    scenarioKey?: string;
+    fixture?: DriverFixture;
+    decision: { approvalId: string | null; decision: 'APPROVE' | 'REJECT'; decidedBy: null; comment: string | null };
+  }): Promise<{ state: PayOpsStateType; interrupted: boolean }>;
+}
 
 /**
  * LIVE only ever changes the driver for `{ kind: 'cassette' }` golden scenarios (real Gemini/Jev
@@ -68,10 +91,11 @@ function sharedCoreDecision() {
 
 async function runOne(
   core: Core,
-  saver: PostgresSaver,
+  saver: PostgresSaver | null,
   db: TestDatabase,
   golden: GoldenScenario,
   mode: EvalMode,
+  driver?: AgentDriver,
 ): Promise<RunOutcome> {
   const t0 = Date.now();
   const failures: string[] = [];
@@ -109,28 +133,43 @@ async function runOne(
   const runId = newId('run');
   const cassetteKey = golden.driver.kind === 'cassette' ? golden.scenario : undefined;
   await createRunRow(core, { id: runId, caseId, scenarioKey: cassetteKey });
-  const env = golden.driver.kind === 'cassette' ? cassetteEnv(mode) : null;
-  const llm = env ? createLlmPort(env, golden.scenario) : fixtureLlmPort();
-  const decision =
-    golden.driver.kind === 'cassette'
-      ? createDecisionPort(env!, golden.scenario)
-      : fixtureDecisionPort(golden.driver.options);
-  const deps = { core, llm, decision, onEvent: createEventSink(core, runId, caseId) };
+  const fixture: DriverFixture | undefined =
+    golden.driver.kind === 'fixture'
+      ? { rootCause: golden.driver.options.rootCause, consistent: golden.driver.options.consistent, replanStrategy: golden.driver.options.replanStrategy }
+      : undefined;
+  let result: PayOpsStateType;
+  let interrupted: boolean;
+  let deps: Parameters<typeof buildGraph>[0] | null = null;
   const config = { configurable: { thread_id: runId } };
-  let result = await buildGraph(deps, saver).invoke(
-    {
-      caseId,
-      runId,
-      aiMode:
-        mode === 'LIVE' && golden.driver.kind === 'cassette'
-          ? ('LIVE' as const)
-          : ('REPLAY' as const),
-      scenarioKey: cassetteKey,
-    },
-    config,
-  );
+  if (driver) {
+    const started = await driver.start({ runId, caseId, scenarioKey: cassetteKey, fixture });
+    result = started.state;
+    interrupted = started.interrupted;
+  } else {
+    const env = golden.driver.kind === 'cassette' ? cassetteEnv(mode) : null;
+    const llm = env ? createLlmPort(env, golden.scenario) : fixtureLlmPort();
+    const decision =
+      golden.driver.kind === 'cassette'
+        ? createDecisionPort(env!, golden.scenario)
+        : fixtureDecisionPort(golden.driver.options);
+    deps = { core, llm, decision, onEvent: createEventSink(core, runId, caseId) };
+    const invoked = await buildGraph(deps, saver!).invoke(
+      {
+        caseId,
+        runId,
+        aiMode:
+          mode === 'LIVE' && golden.driver.kind === 'cassette'
+            ? ('LIVE' as const)
+            : ('REPLAY' as const),
+        scenarioKey: cassetteKey,
+      },
+      config,
+    );
+    result = invoked as PayOpsStateType;
+    interrupted = isInterrupted(invoked);
+  }
 
-  if (isInterrupted(result)) {
+  if (interrupted) {
     if (golden.onApproval === 'none') {
       failures.push(`unexpected approval interrupt at tier ${result.policy?.tier ?? 'unknown'}`);
     } else {
@@ -150,20 +189,20 @@ async function runOne(
         { decision: decisionType, comment: golden.onApproval === 'reject' ? 'Eval rejection' : '' },
         manager,
       );
-      result = await buildGraph(
-        deps,
-        new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' }),
-      ).invoke(
-        new Command({
-          resume: {
-            approvalId: result.approvalId,
-            decision: decisionType,
-            decidedBy: null,
-            comment: golden.onApproval === 'reject' ? 'Eval rejection' : null,
-          },
-        }),
-        config,
-      );
+      const decision = {
+        approvalId: result.approvalId,
+        decision: decisionType,
+        decidedBy: null,
+        comment: golden.onApproval === 'reject' ? 'Eval rejection' : null,
+      } as const;
+      if (driver) {
+        result = (await driver.resume({ runId, caseId, scenarioKey: cassetteKey, fixture, decision })).state;
+      } else {
+        result = (await buildGraph(
+          deps!,
+          new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' }),
+        ).invoke(new Command({ resume: decision }), config)) as PayOpsStateType;
+      }
     }
   } else if (golden.onApproval !== 'none') {
     failures.push(
@@ -266,6 +305,8 @@ export interface EvalRunResult {
 export async function runEvalSuite(
   scenarios: readonly GoldenScenario[] = GOLDEN_SCENARIOS,
   mode: EvalMode = 'REPLAY',
+  /** Builds the driver once the shared database and core exist; omit to run the TypeScript graph in process. */
+  makeDriver?: (ctx: { core: Core; db: TestDatabase }) => AgentDriver | Promise<AgentDriver>,
 ): Promise<EvalRunResult> {
   const db = await startTestDatabase();
   try {
@@ -275,12 +316,16 @@ export async function runEvalSuite(
       agentResumer: { resume: async () => {} },
       decision: sharedCoreDecision(),
     });
-    const saver = new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' });
-    await saver.setup();
+    const driver = makeDriver ? await makeDriver({ core, db }) : undefined;
+    let saver: PostgresSaver | null = null;
+    if (!driver) {
+      saver = new PostgresSaver(db.pool, undefined, { schema: 'checkpoints' });
+      await saver.setup();
+    }
 
     const outcomes: RunOutcome[] = [];
     for (const golden of scenarios) {
-      outcomes.push(await runOne(core, saver, db, golden, mode));
+      outcomes.push(await runOne(core, saver, db, golden, mode, driver));
     }
     return { outcomes };
   } finally {
