@@ -10,13 +10,13 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@payops/core": "workspace:*",
-    "@payops/shared": "workspace:*",
     "@langchain/core": "^1.2.13",
     "@langchain/google-genai": "^2.3.2",
     "@langchain/langgraph": "^1.4.18",
     "@langchain/langgraph-checkpoint-postgres": "^1.0.5",
-    "zod": "^4.1.0",
-    "drizzle-orm": "^0.45.0"
+    "@payops/core": "workspace:*",
+    "@payops/shared": "workspace:*",
+    "drizzle-orm": "^0.45.0",
+    "zod": "^4.6.7"
   }
 }

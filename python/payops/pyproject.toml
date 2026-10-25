@@ -23,6 +23,7 @@ dev = [
     "pyright>=1.1.390",
     "pgserver>=0.1.4",
     "httpx>=0.28.1",
+    "sqlacodegen>=4.0.4",
 ]
 
 [build-system]

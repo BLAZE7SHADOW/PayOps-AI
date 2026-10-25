@@ -41,5 +41,10 @@
     "vitest": "^3.2.0",
     "@electric-sql/pglite": "^0.5.8",
     "@electric-sql/pglite-socket": "^0.2.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser": ">=2.4.0"
+    }
   }
 }
