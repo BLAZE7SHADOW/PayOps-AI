@@ -1409,3 +1409,15 @@ A banner on every page shows the mode, reason and who set it, and Start investig
 
 **Done when** all 16 recorded scenarios pass the eval hard gates under `AGENT_RUNTIME=python` and match the TypeScript run. Plan and step order: step 0 scaffold (this entry), 1 Node internal API and switch, 2 schema export, 3 pure logic, 4 LLM and Jev ports, 5 graph and nodes, 6 parity, 7 deploy.
 
+**D085 · What was built (2026-10-25).** Parity with TypeScript is measured, not assumed: `pnpm eval:python` passes 15 of 15 golden scenarios (7 recorded, 8 fixture) with every recorded Jev and Gemini call matched by exact cassette key, no fallback.
+
+Where the build differs from the first plan:
+- **Tools run in TypeScript.** The plan ported `tools.ts` to Python. The tools are projectors over a `CaseState` loaded from the database and the gateway, so they stay in the API (`/internal/agent/tools`); Python keeps only the catalog (names, groups, descriptions) for prompts. The same goes for `buildProposal`, which uses core's action options. This keeps Python off the data entirely and removes a second copy of the case model.
+- **No generated Pydantic from Zod.** Python uses plain dicts in the API's JSON shapes, and Pydantic only for the three LLM output schemas. The parity run is what catches drift.
+- **Synchronous calls.** The API's job calls `POST /runs` and waits for the run to finish or pause, rather than getting a 202. That keeps the job's retry behaviour and its place in the queue. The call can take minutes in LIVE mode, so the timeout is 10 minutes.
+- **Separate checkpoint schema.** `checkpoints_py`, because the two LangGraph libraries do not share an encoding. Local runs use an in-memory checkpointer (PGlite serves one connection and the API already holds it); production uses Postgres, and a test shows a paused run resuming on a fresh runner.
+- **Fixtures for evals only.** The service accepts hand-written Jev answers per run, but only when `AGENT_ALLOW_FIXTURES=1`.
+- **Not hosted yet.** `render.python.yaml` is a separate Blueprint so that nothing deploys by accident. The hosted demo stays on `AGENT_RUNTIME=ts` until the second service's cold start and bandwidth are measured (D083).
+
+Known quirk found while porting, present in both runtimes: the payment and reconciliation specialists run in parallel from the same state snapshot, so if both ask for follow-up tools they can allocate the same `ev_NN` ids and the merge by id keeps one. It has not shown up in the recorded scenarios (only one of the two asks for follow-ups); fixing it changes prompts and therefore cassette keys, so it is left for a deliberate change.
+

@@ -105,11 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
-### 2026-10-25 · Python agent port, step 0 (D085)
-- Plan approved: port `packages/agents` to Python as `python/agents` (FastAPI + LangGraph Python, uv, Python 3.12), Node stays the system of record, `AGENT_RUNTIME=ts|python` switch, TS agents stay as fallback. Decision D085 (the plan said D084, which the reset change already used).
-- Done: scaffold (`pyproject.toml`, `uv.lock`, package, smoke test importing LangGraph), ruff and pyright (strict) and pytest green. Docs updated (CLAUDE.md stack exception, docs/02, D085).
-- Next: step 1, the Node side: `AGENT_RUNTIME` env, `/internal/agent/*` routes and the job switch, tests first. Then 2 schema export, 3 pure logic, 4 ports, 5 graph, 6 parity, 7 deploy.
-- Open: Jev has no Python SDK (read the TS SDK's request and response shapes before step 4); second Render service cost and cold start are unmeasured.
+### 2026-10-25 · Python agent port, steps 0 to 6 done (D085)
+- Python graph in `python/agents` (FastAPI, LangGraph Python, uv). Node side: `AGENT_RUNTIME`, `AGENT_SERVICE_URL`, `AGENT_INTERNAL_SECRET`, `/internal/agent/*` routes (`apps/server/src/routes/internal-agent.ts`, wrapping `packages/agents/src/remote.ts`), job switch in `jobs/agents.ts`. Evals got an `AgentDriver` hook and `pnpm eval:python`.
+- Proof: `pnpm eval:python` 15 of 15 match TypeScript, 83 recorded calls matched exactly, 0 fallbacks. `pnpm py:test` (ruff, pyright, 39 pytest cases incl. a full offline run against a cassette). Run end to end locally through HTTP, pg-boss, Python, approval and resume. Postgres checkpointer: a paused run resumes on a fresh runner.
+- Not deployed: `render.python.yaml` is a separate Blueprint; the hosted demo stays on TypeScript. Measure cold start and bandwidth first (D083, `docs/DEPLOY.md`).
+- Known quirk in both runtimes: parallel specialists can allocate the same evidence id (D085).
+- Not verified: LIVE mode in Python (Gemini through LangChain Python, Jev over HTTP) because it needs real keys and billed calls. REPLAY and the cassette format are verified.
 
 ### 2026-10-23 · New Render service, reset restores demo cases (D084)
 - Moved the API to a new Render service (`payops-api-xatz`, old workspace suspended by bandwidth); `vercel.json` rewrites updated. UptimeRobot paused: the API now sleeps when idle and the wake-up notice covers the cold start.

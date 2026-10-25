@@ -187,6 +187,10 @@ Seven golden scenarios, run against live models on 2026-09-28. Full report: [doc
 
 One scenario (`refund_stuck`) got the expected fix but named a neighbouring root cause. Grounding checks that a finding is supported by its cited evidence, not that it is causally right; this is documented in D045 and D046 and excluded from the accuracy metric.
 
+## The agents in Python
+
+The investigation graph also runs as a Python service (`python/agents`: FastAPI, LangGraph Python, Pydantic, managed with `uv`). The TypeScript API stays the system of record; the Python graph asks it for tools, the policy decision, execution and validation. Set `AGENT_RUNTIME=python` on the API to use it. `pnpm eval:python` runs the 15 golden scenarios through the Python service and checks each one against the TypeScript result, and `pnpm py:test` runs its own tests. Design and limits: [D085](docs/DECISIONS.md) and [docs/03 §18](docs/03-agent-system.md).
+
 ## Run it locally
 
 Requires Node 22 or newer and pnpm 10.

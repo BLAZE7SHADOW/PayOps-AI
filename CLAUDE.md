@@ -75,6 +75,9 @@ pnpm test           # vitest, all packages
 pnpm typecheck
 pnpm lint
 pnpm eval           # evals in REPLAY (Phase 5)
+pnpm eval:python    # the same goldens through the Python agent service, compared with TypeScript (D085)
+pnpm py:test        # python/agents: ruff, pyright, pytest
+pnpm py:dev         # the Python agent service on :8100 (needs AGENT_RUNTIME=python and AGENT_INTERNAL_SECRET on the API)
 pnpm jev:ping       # Jev smoke test (Phase 4)
 ```
 

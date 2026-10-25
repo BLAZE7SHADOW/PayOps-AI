@@ -392,3 +392,25 @@ Payload always includes `{ runId, caseId, node, at, seq }`. The UI orders by `se
 `packages/evals`. Each golden scenario defines expected `rootCause`, allowed action sets, expected policy tier, expected final verdict, max tool calls, and optionally `expectedTools` (soft) and `forbiddenTools` (hard gate). A tool counts as used when it produced an evidence item (the item's `source`).
 
 Metrics reported per run: root-cause accuracy, action-set match, tool-set match, policy-tier match, share of full-path runs that dropped a finding, findings dropped per full-path run, replan success rate, mean tool calls, mean latency, cost per case. Per-scenario hard gates (status, verdict, tier, forbidden actions, forbidden tools, quarantine, max tool calls) fail the run. Aggregate limits (`EVAL_THRESHOLDS` in `packages/evals/src/types.ts`: root-cause accuracy, action-set match and tool-set match at least 80%, total cost at most $0.10) also fail it. The report starts with the commit, model names and the number of recorded scenarios, so two reports can be compared fairly. `pnpm eval` runs in REPLAY (CI), `pnpm eval:live` runs LIVE and writes `docs/evals/<date>.md`.
+
+## 18. Python runtime (D085)
+
+The graph exists twice: in TypeScript (`packages/agents`, runs inside the API) and in Python (`python/agents`, FastAPI + LangGraph Python). `AGENT_RUNTIME=ts|python` on the API picks one per deployment; a run belongs to one runtime for its whole life. Both have the same nodes, edges, prompts, Jev questions, fallbacks and events.
+
+**The seam.** The Python graph reasons and the TypeScript API acts. Python calls the API's `/internal/agent/*` routes (shared secret, not exposed through Vercel) for everything that reads data or carries authority:
+
+| Python needs | API route | Runs there |
+|---|---|---|
+| the case brief | `/case-brief` | `buildCaseBrief` over a fresh `CaseState` |
+| tool evidence | `/tools` | the tool functions in `tools.ts` (the catalog of names and descriptions is copied to Python for prompts) |
+| a proposal for a diagnosis | `/proposal` | `buildProposal`, `templateActions`, core's action options |
+| the policy tier | `/policy-gate` | `proposeFromAgent`, which creates the resolution and approval |
+| execute, validate, close | `/execute`, `/validate`, `/close-validated`, `/escalate-without-proposal` | the executor and validator |
+| step log, run row | `/steps`, `/sync`, `/fail` | `agent_steps`, `agent_runs`, evidence and findings tables |
+
+Python keeps Jev (J2 to J6), Gemini, context building, grounding rules, risk scoring, routing, the budget guard and the LangGraph checkpoints (`checkpoints_py` schema). Rules 2 and 3 still hold: the model never touches the database and never authorizes or executes.
+
+**Same recordings.** REPLAY reads the same `fixtures/cassettes/*.jsonl`. A key is a hash of the exact prompt, so `python/agents/src/payops_agents/context.py` reproduces the TypeScript prompt character for character, and `jsonutil.py` prints numbers and JSON the way `JSON.stringify` does. A test pins hashes computed by the TypeScript code.
+
+**Proving parity.** `pnpm eval:python` runs all 15 golden scenarios through the Python service against an in-process API and compares each with the TypeScript run on status, verdict, tier, root cause, actions, tools, tool calls, attempts and grounding violations. It also reports how many cassette lookups matched exactly and how many needed the nearest-recording fallback (the aim is zero).
+

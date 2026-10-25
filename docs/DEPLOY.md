@@ -41,3 +41,14 @@ This makes real, billed calls to Gemini and Jev (the whole suite is a fraction o
 ## Switching a deployment to live AI
 
 On Render set `AI_MODE=LIVE`, `GEMINI_API_KEY` and `TYPESAFE_JEV_API_KEY`, then redeploy. Do this only for a private or short-lived demo: anyone with the link could then trigger billed calls. For interviews, run locally with `AI_MODE=LIVE` and keep the hosted copy on REPLAY.
+
+## Python agent service (optional, D085)
+
+The hosted demo runs the TypeScript agents. To run the Python graph instead:
+
+1. Create the Python service from `render.python.yaml` (a second Blueprint). Give it `AGENT_INTERNAL_SECRET` (16+ characters, the same value as below), `NODE_API_URL` (the API's public URL) and `DATABASE_URL` (the Supabase Session pooler string; paused runs are kept in the `checkpoints_py` schema).
+2. On the API service set `AGENT_RUNTIME=python`, `AGENT_SERVICE_URL` (the Python service's URL) and the same `AGENT_INTERNAL_SECRET`. Redeploy. Leave `AGENT_RUNTIME` unset to go back.
+3. Check `GET <python-url>/health`, start an investigation, and approve a manager-tier case to check that a paused run resumes.
+
+Costs to expect on the free plan: a second service that also sleeps after 15 idle minutes, so the first investigation after a quiet period waits for the API (about 50 seconds) and then the Python service (about the same), and traffic between the two over public URLs counts as outbound bandwidth (D083). Neither is measured yet. Keep the monitor paused, and read Render's Included Usage after a few days before leaving it on.
+

@@ -1,0 +1,23 @@
+# Optional second Blueprint: the Python agent service (D085). It is NOT part of render.yaml on purpose:
+# the hosted demo runs the TypeScript agents (AGENT_RUNTIME=ts) until this service's cold start and its
+# traffic to the API have been measured against the free plan's 5 GB bandwidth (D083). To try it, create
+# this Blueprint beside the first one, then follow "Python agent service" in docs/DEPLOY.md.
+services:
+  - type: web
+    name: payops-agents
+    runtime: python
+    plan: free
+    rootDir: python/agents
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run uvicorn payops_agents.app:app_factory --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: AGENT_INTERNAL_SECRET
+        sync: false            # the same value the API has (16+ characters)
+      - key: NODE_API_URL
+        sync: false            # the API's public URL, e.g. https://payops-api-xxxx.onrender.com
+      - key: DATABASE_URL
+        sync: false            # Supabase Session pooler: LangGraph keeps paused runs in the checkpoints_py schema
+      # LIVE or RECORD only: GEMINI_API_KEY, TYPESAFE_JEV_API_KEY, AI_MODEL, JEV_MODEL. REPLAY needs none.
