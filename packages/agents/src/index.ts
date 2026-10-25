@@ -7,3 +7,4 @@ export * from './tools';
 export * from './templates';
 export * from './brief';
 export * from './proposal';
+export * from './remote';

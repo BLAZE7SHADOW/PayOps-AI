@@ -58,6 +58,12 @@ export const ServerEnvSchema = z.object({
    * bandwidth (D083), so the hosted demo raises it. A job can wait up to this long before it starts.
    */
   JOB_POLL_SECONDS: z.coerce.number().min(0.5).default(2),
+  /** Which runtime runs the agent graph: this process (`ts`) or the Python service in python/agents (D085). */
+  AGENT_RUNTIME: z.enum(['ts', 'python']).default('ts'),
+  /** Where the Python agent service listens (used when AGENT_RUNTIME=python). */
+  AGENT_SERVICE_URL: z.string().url().default('http://127.0.0.1:8100'),
+  /** Shared secret between this API and the Python service. Unset leaves /internal/agent off. */
+  AGENT_INTERNAL_SECRET: z.string().min(16).optional(),
   /** Demo convenience: lets OPS use the simulator (ADMIN-only otherwise). */
   DEMO_MODE: bool.default(true),
 });

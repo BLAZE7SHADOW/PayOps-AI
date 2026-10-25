@@ -8,7 +8,7 @@ const restrict = (patterns) => ['error', { patterns }];
 
 export default tseslint.config(
   // scripts/demo holds one-off video recording tools (CommonJS, console output), not product code.
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'fixtures/**', 'scripts/demo/**'] },
+  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'fixtures/**', 'scripts/demo/**', 'python/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

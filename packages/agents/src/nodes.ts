@@ -107,7 +107,7 @@ const REPLAN_STRATEGY_CRITERIA: Record<ReplanStrategy, string> = {
  * D047): every entry here was built by `replan`, which only ever runs after a validated attempt
  * (an `execute` failure escalates directly, never reaching `replan`), so `status` is always
  * `'VALIDATED'` by construction. */
-function toAttemptHistory(history: readonly AttemptSummary[]): AttemptHistory[] {
+export function toAttemptHistory(history: readonly AttemptSummary[]): AttemptHistory[] {
   return history.map((h) => ({ actionTypes: h.actions.map((a) => a.type), status: 'VALIDATED', verdict: h.verdict }));
 }
 

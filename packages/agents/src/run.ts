@@ -57,7 +57,7 @@ function buildDeps(core: Core, env: AgentEnv, runId: string, caseId: string, sce
  * already has -- there is no second read of the graph -- so the two never disagree within one
  * sync, only possibly across an interrupted/resumed run's separate syncs (each idempotent, see
  * `syncEvidenceAndFindings`'s doc comment in store.ts). */
-async function syncRunRow(core: Core, runId: string, caseId: string, state: Partial<PayOpsStateType>, interrupted: boolean): Promise<void> {
+export async function syncRunRow(core: Core, runId: string, caseId: string, state: Partial<PayOpsStateType>, interrupted: boolean): Promise<void> {
   await patchRunRow(core, runId, {
     status: state.status,
     path: state.diagnosis?.path ?? null,

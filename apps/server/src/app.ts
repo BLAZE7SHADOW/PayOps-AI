@@ -11,6 +11,7 @@ import { SessionStore } from './auth/session-store';
 import { errorHandler, notFoundHandler } from './middleware/errors';
 import { requestId } from './middleware/request-id';
 import { buildRouter, type RouteDeps } from './routes';
+import { internalAgentRoutes } from './routes/internal-agent';
 
 export interface AppDeps extends RouteDeps {
   env: ServerEnv;
@@ -38,6 +39,11 @@ export function createApp(deps: AppDeps): Express {
   );
   app.use(helmet());
   app.use(cors({ origin: deps.env.WEB_ORIGIN, credentials: true }));
+  // The Python agent service (D085) posts whole run states, so this route group gets its own, larger
+  // body limit and its own secret instead of the session cookie. Off unless a secret is configured.
+  if (deps.env.AGENT_INTERNAL_SECRET) {
+    app.use('/internal/agent', express.json({ limit: '5mb' }), internalAgentRoutes(deps.core, deps.env.AGENT_INTERNAL_SECRET));
+  }
   app.use(express.json({ limit: '100kb' }));
   app.use(cookieParser());
   app.use(requireJson());
