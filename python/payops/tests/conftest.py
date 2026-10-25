@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import tempfile
 from collections.abc import AsyncIterator, Iterator
 
@@ -15,6 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from payops.db.engine import create_engine
 from payops.db.migrate import upgrade
+
+# pgserver logs from an exit hook after pytest has closed stderr; the failure is harmless and only noisy.
+logging.raiseExceptions = False
 
 _counter = itertools.count()
 
