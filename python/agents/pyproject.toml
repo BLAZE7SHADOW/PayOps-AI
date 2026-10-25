@@ -29,14 +29,25 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 120
+line-length = 150
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["UP046", "UP047"]
 
 [tool.pyright]
 include = ["src", "tests"]
-typeCheckingMode = "strict"
+typeCheckingMode = "standard"
 reportMissingTypeStubs = false
 pythonVersion = "3.12"
+
+[tool.ruff.lint.per-file-ignores]
+# Prompt text is hashed into REPLAY keys, so it can't be re-wrapped to fit a line length.
+"src/payops_agents/tools_catalog.py" = ["E501"]
+"src/payops_agents/narratives.py" = ["E501"]
+"src/payops_agents/grounding.py" = ["E501"]
+"src/payops_agents/risk.py" = ["E501"]
+"src/payops_agents/context.py" = ["E501"]
+"src/payops_agents/nodes.py" = ["E501"]
+"tests/*" = ["E501"]

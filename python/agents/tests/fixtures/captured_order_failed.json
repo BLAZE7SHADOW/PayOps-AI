@@ -1,0 +1,218 @@
+{
+  "scenarioKey": "captured_order_failed",
+  "caseId": "case_9egkxbv2qgzp63",
+  "brief": {
+    "caseId": "case_9egkxbv2qgzp63",
+    "displayId": "PAY-0001",
+    "type": "PAYMENT_MISMATCH",
+    "detectionRuleIds": [
+      "D1_CAPTURED_NOT_PAID",
+      "D3_LEDGER_MISSING"
+    ],
+    "amountBand": "HIGH",
+    "mismatchedSystems": [
+      "ORDER",
+      "LEDGER",
+      "WEBHOOK"
+    ],
+    "flags": {
+      "hasRefund": false,
+      "hasSettlementBatch": true,
+      "isDuplicate": false,
+      "quarantinedText": false
+    }
+  },
+  "entityRefs": {
+    "batchId": "stb_zvzwwzyew6v7ky",
+    "orderId": "ord_e9jbf9rbfcjrsw",
+    "paymentId": "pay_bztn4zghr30jyr",
+    "customerId": "cus_65ktpb7sfqszt9",
+    "merchantId": "mer_fdfv7g4061wcb6",
+    "gwPaymentId": "gwp_sq7frv74pdg9aa"
+  },
+  "tools": {
+    "getInternalPayment": [
+      {
+        "source": "getInternalPayment",
+        "system": "ORDER",
+        "entityRef": "pay_bztn4zghr30jyr",
+        "facts": {
+          "status": "PENDING",
+          "amountMinor": 1249900,
+          "gwPaymentId": "gwp_sq7frv74pdg9aa"
+        },
+        "observedAt": "2026-09-27T10:00:30.000Z"
+      }
+    ],
+    "getGatewayPayment": [
+      {
+        "source": "getGatewayPayment",
+        "system": "GATEWAY",
+        "entityRef": "gwp_sq7frv74pdg9aa",
+        "facts": {
+          "status": "CAPTURED",
+          "amountMinor": 1249900,
+          "method": "CARD",
+          "refundedMinor": 0,
+          "capturedAt": "2026-09-27T10:00:30.000Z"
+        },
+        "observedAt": "2026-09-27T10:00:30.000Z"
+      }
+    ],
+    "getOrder": [
+      {
+        "source": "getOrder",
+        "system": "ORDER",
+        "entityRef": "ord_e9jbf9rbfcjrsw",
+        "facts": {
+          "status": "FAILED",
+          "amountMinor": 1249900
+        },
+        "observedAt": "2026-09-27T10:15:00.000Z"
+      }
+    ],
+    "getOrderTimeline": [
+      {
+        "source": "getOrderTimeline",
+        "system": "ORDER",
+        "entityRef": "ord_e9jbf9rbfcjrsw",
+        "facts": {
+          "index": 0,
+          "from": "none",
+          "to": "PENDING",
+          "reason": "none"
+        },
+        "observedAt": "2026-09-27T10:00:00.000Z"
+      },
+      {
+        "source": "getOrderTimeline",
+        "system": "ORDER",
+        "entityRef": "ord_e9jbf9rbfcjrsw",
+        "facts": {
+          "index": 1,
+          "from": "PENDING",
+          "to": "FAILED",
+          "reason": "No payment confirmation within 15 min"
+        },
+        "observedAt": "2026-09-27T10:15:00.000Z"
+      }
+    ],
+    "getWebhookDeliveries": [
+      {
+        "source": "getWebhookDeliveries",
+        "system": "WEBHOOK",
+        "entityRef": "evt_3fcqwsk7rsrxbh",
+        "facts": {
+          "event": "payment.captured",
+          "finalStatus": "FAILED",
+          "attempts": 3,
+          "lastHttpStatus": 500
+        },
+        "observedAt": "2026-09-27T10:00:31.000Z"
+      }
+    ],
+    "getPaymentAttempts": [
+      {
+        "source": "getPaymentAttempts",
+        "system": "GATEWAY",
+        "entityRef": "att_jp46d5g44wq4a1",
+        "facts": {
+          "outcome": "SUCCESS",
+          "amountMinor": 1249900
+        },
+        "observedAt": "2026-09-27T10:00:25.000Z"
+      }
+    ],
+    "getLedgerEntries": [],
+    "getRefund": [],
+    "getRefundGatewayStatus": [],
+    "getSettlementLines": [
+      {
+        "source": "getSettlementLines",
+        "system": "SETTLEMENT",
+        "entityRef": "sln_g6hbft0ggnvpg6",
+        "facts": {
+          "grossMinor": 1249900,
+          "feeMinor": 24998,
+          "netMinor": 1220402,
+          "lineNo": 1
+        },
+        "observedAt": "2026-09-28T10:00:30.000Z"
+      }
+    ],
+    "getFeeBreakdown": [
+      {
+        "source": "getFeeBreakdown",
+        "system": "SETTLEMENT",
+        "entityRef": "stb_zvzwwzyew6v7ky",
+        "facts": {
+          "expectedNetMinor": 1220402,
+          "reportedNetMinor": 1220402,
+          "diffMinor": 0,
+          "matched": true,
+          "summary": "expected ₹12,204.02, reported ₹12,204.02"
+        },
+        "observedAt": "2026-10-25T14:37:43.493Z"
+      }
+    ],
+    "getCustomerHistory": [
+      {
+        "source": "getCustomerHistory",
+        "system": "RISK",
+        "entityRef": "cus_65ktpb7sfqszt9",
+        "facts": {
+          "accountAgeDays": 728,
+          "riskFlagsCount": 0,
+          "riskFlags": "none"
+        },
+        "observedAt": "2024-09-30T12:00:00.000Z"
+      }
+    ],
+    "getDeviceSignals": [
+      {
+        "source": "getDeviceSignals",
+        "system": "RISK",
+        "entityRef": "cus_65ktpb7sfqszt9",
+        "facts": {
+          "deviceCount": 1,
+          "cardCountriesDistinct": 1,
+          "primaryIpCountry": "IN",
+          "ipCardCountryMismatch": false
+        },
+        "observedAt": "2026-09-27T10:00:25.000Z"
+      }
+    ],
+    "getFailedAttempts": [
+      {
+        "source": "getFailedAttempts",
+        "system": "RISK",
+        "entityRef": "cus_65ktpb7sfqszt9",
+        "facts": {
+          "failed24h": 0,
+          "total24h": 1
+        },
+        "observedAt": "2026-09-27T10:00:25.000Z"
+      }
+    ],
+    "getChargebackHistory": [
+      {
+        "source": "getChargebackHistory",
+        "system": "RISK",
+        "entityRef": "mer_fdfv7g4061wcb6",
+        "facts": {
+          "merchantDisputeCount": 0,
+          "note": "merchant-level settlement disputes, not customer-level chargebacks"
+        },
+        "observedAt": "1970-01-01T00:00:00.000Z"
+      }
+    ]
+  },
+  "proposalActions": [
+    {
+      "type": "REPLAY_WEBHOOK_EVENT",
+      "params": {
+        "eventId": "evt_3fcqwsk7rsrxbh"
+      }
+    }
+  ]
+}
