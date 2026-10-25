@@ -110,7 +110,7 @@ Shivam's Mac directly, same as task 9 did.
 - Proof: `pnpm eval:python` 15 of 15 match TypeScript, 83 recorded calls matched exactly, 0 fallbacks. `pnpm py:test` (ruff, pyright, 39 pytest cases incl. a full offline run against a cassette). Run end to end locally through HTTP, pg-boss, Python, approval and resume. Postgres checkpointer: a paused run resumes on a fresh runner.
 - Not deployed: `render.python.yaml` is a separate Blueprint; the hosted demo stays on TypeScript. Measure cold start and bandwidth first (D083, `docs/DEPLOY.md`).
 - Known quirk in both runtimes: parallel specialists can allocate the same evidence id (D085).
-- Not verified: LIVE mode in Python (Gemini through LangChain Python, Jev over HTTP) because it needs real keys and billed calls. REPLAY and the cassette format are verified.
+- LIVE verified (2026-10-25): Jev over raw HTTP and Gemini through LangChain Python each answered a smoke call, and one full LIVE investigation (PAY-0007, local throwaway database) ran the full path through the Python service: 4 Jev and 3 Gemini calls, grounded, paused for OPS approval, about $0.001. Not checked: LIVE retry on a real 429 or 5xx, and RECORD writing a cassette that the TypeScript reader accepts.
 
 ### 2026-10-23 · New Render service, reset restores demo cases (D084)
 - Moved the API to a new Render service (`payops-api-xatz`, old workspace suspended by bandwidth); `vercel.json` rewrites updated. UptimeRobot paused: the API now sleeps when idle and the wake-up notice covers the cold start.
