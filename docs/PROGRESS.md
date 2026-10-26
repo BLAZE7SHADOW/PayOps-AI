@@ -108,9 +108,9 @@ Shivam's Mac directly, same as task 9 did.
 ### 2026-10-26 · Phase B7 (on branch `b7-retire-typescript`, not merged)
 - Tagged `ts-backend-final` (pushed). Deleted `apps/server`, `packages/{core,agents,simulator,evals}`, the Node blueprint and the TS-only scripts; trimmed root scripts, vitest and ESLint config, `.env.example`, lockfile; CI has no parity job and runs `python -m payops.evals`.
 - Checks on the branch: web and shared typecheck, lint, 241 tests; 534 backend tests; 43 agent tests; evals 15 of 15, 83 exact, 0 fallback.
-- Docs: README, CLAUDE.md, D090, DEPLOY, OPERATIONS rewritten or bannered. `docs/02` and `docs/03` only have a map from old TS paths to Python paths at the top; their bodies still describe the TypeScript code and should be rewritten.
+- Docs: README, CLAUDE.md, D090, DEPLOY, OPERATIONS rewritten or bannered. `docs/02` is rewritten for the Python layout and `docs/03` has its paths and §18 (runtime) updated; both keep a small old-to-new path map at the top.
 - Merge only after the bandwidth check on Render passes (master is what Render deploys; a deploy of the old Node service needs the tag).
-- Later: a Python cassette recorder (replaces `cassette:record` and `eval:live`), rewrite docs/02 and docs/03 bodies, web mock comment in `apps/web/src/mocks/resolution.ts` still names `packages/core`.
+- Later: a Python cassette recorder (replaces `cassette:record` and `eval:live`).
 
 ### 2026-10-26 · Phase B6 batch 3: Render blueprint for the Python backend
 - `render.yaml` is now one Python service (`payops-backend`); the Node blueprint moved to `render.node.yaml` (rollback until B7); `render.python.yaml` (agent-only service) removed. `docs/DEPLOY.md` has the new steps.
