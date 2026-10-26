@@ -9,7 +9,7 @@ services:
     # The project lives in python/payops and installs the agent package from ../agents, so build from the repo root.
     buildCommand: pip install uv && cd python/payops && uv sync --frozen --no-dev
     # Migrations and demo users are applied on start (MIGRATE_ON_START defaults to on).
-    startCommand: cd python/payops && uv run uvicorn payops.api.app:app_factory --factory --host 0.0.0.0 --port $PORT --timeout-graceful-shutdown 30
+    startCommand: cd python/payops && uv run --no-dev uvicorn payops.api.app:app_factory --factory --host 0.0.0.0 --port $PORT --timeout-graceful-shutdown 30
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
