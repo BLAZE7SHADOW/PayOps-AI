@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ...db.models import Dispute
+from ...db.models import Dispute, Merchant
 from ..gateway import GatewaySettlementLine
 from ..money import format_money
 from .facts import FeeBreakdown, FeeTerms, expected_fee
@@ -42,7 +42,7 @@ def covering_dispute(disputes: Sequence[Dispute], diff_minor: int) -> Dispute | 
 
 
 def check_batch(
-    settlement_id: str, lines: Sequence[GatewaySettlementLine], merchant: FeeTerms, disputes: Sequence[Dispute] = ()
+    settlement_id: str, lines: Sequence[GatewaySettlementLine], merchant: FeeTerms | Merchant, disputes: Sequence[Dispute] = ()
 ) -> BatchCheck:
     ordered = sorted(lines, key=lambda line: line.line_no)
     offending: list[OffendingLine] = []

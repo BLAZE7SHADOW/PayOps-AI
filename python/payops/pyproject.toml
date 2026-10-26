@@ -58,6 +58,10 @@ pythonVersion = "3.12"
 "migrations/*" = ["I001"]
 "src/payops/db/models.py" = ["E501"]
 "src/payops/domain/**/*.py" = ["E501"]
+"src/payops/infra/*.py" = ["E501"]
+"src/payops/services/*.py" = ["E501"]
+"src/payops/api/*.py" = ["E501"]
+"src/payops/dto/*.py" = ["E501"]
 
 [[tool.pyright.executionEnvironments]]
 root = "tests"

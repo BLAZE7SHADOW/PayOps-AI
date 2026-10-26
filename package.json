@@ -25,7 +25,8 @@
     "eval:live": "tsx packages/evals/scripts/run-eval.ts --mode=live",
     "eval:python": "tsx packages/evals/scripts/run-eval-python.ts",
     "py:dev": "cd python/agents && uv run --env-file ../../.env uvicorn payops_agents.app:app_factory --factory --port 8100 --reload",
-    "py:test": "cd python/agents && uv run ruff check . && uv run pyright && uv run pytest -q && cd ../payops && uv run ruff check . && uv run pyright && uv run pytest -q"
+    "py:test": "cd python/agents && uv run ruff check . && uv run pyright && uv run pytest -q && cd ../payops && uv run ruff check . && uv run pyright && uv run pytest -q",
+    "contract:export": "tsx packages/evals/scripts/export-contract.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

@@ -10,13 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .. import __version__
-from ..db.engine import create_engine, ping
+from ..container import Services, build_services
+from ..db.engine import create_engine, ping, session_factory
 from ..observability import RequestIdMiddleware, configure_logging
+from ..ports import Clock, EventPublisher
 from ..settings import Settings, get_settings
 from .errors import install_error_handlers
+from .routes import read
 
 
-def create_app(settings: Settings | None = None, engine: AsyncEngine | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, engine: AsyncEngine | None = None, *, clock: Clock | None = None, events: EventPublisher | None = None,
+    services: Services | None = None,
+) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
 
@@ -24,6 +30,7 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         owned = engine is None
         app.state.engine = engine or create_engine(settings)
+        app.state.services = services or build_services(session_factory(app.state.engine), clock=clock, events=events)
         try:
             yield
         finally:
@@ -43,6 +50,7 @@ def create_app(settings: Settings | None = None, engine: AsyncEngine | None = No
         response.status_code = 200 if up else 503
         return {"status": "ok" if up else "degraded", "checks": {"database": "ok" if up else "down"}, "aiMode": settings.ai_mode}
 
+    api.include_router(read.router)
     app.include_router(api)
     return app
 
