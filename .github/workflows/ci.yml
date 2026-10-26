@@ -93,3 +93,5 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uvx pip-audit --requirement <(uv export --frozen --no-dev --no-hashes --project python/agents) --no-deps --disable-pip
         shell: bash
+      - run: uvx pip-audit --requirement <(uv export --frozen --no-dev --no-hashes --project python/payops) --no-deps --disable-pip
+        shell: bash
