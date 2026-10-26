@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import type { CaseSourceRecords as Records } from '@payops/shared';
 import { formatDateTime, formatFullDateTime, formatMoney, statusLabel } from '../../lib/format';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Skeleton } from '../../ui/Skeleton';
 import { useCaseSourceRecords } from './api';
 
@@ -18,7 +18,7 @@ export function CaseSourceRecords({ caseId }: { caseId: string }) {
           {q.isFetching && q.data ? 'Refreshing…' : 'Refresh records'}
         </button>
       </header>
-      {q.isError ? <ErrorState title="Could not load source records." error={q.error} onRetry={() => void q.refetch()} /> : q.data ? <RecordsView data={q.data} /> : <div className="space-y-3 p-5" aria-hidden="true"><Skeleton height={24} /><Skeleton height={24} /><Skeleton height={24} /></div>}
+      {q.isError ? <QueryError title="Could not load source records." query={q} /> : q.data ? <RecordsView data={q.data} /> : <div className="space-y-3 p-5" aria-hidden="true"><Skeleton height={24} /><Skeleton height={24} /><Skeleton height={24} /></div>}
     </section>
   );
 }

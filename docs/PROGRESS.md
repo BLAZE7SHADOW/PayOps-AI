@@ -112,6 +112,11 @@ Shivam's Mac directly, same as task 9 did.
 - Cleanup 1: removed the unused standalone agent service from `python/agents` (`app.py`, `logging_setup.py`, the HTTP `NodeApi` client, its test, the secret and URL settings, the fastapi and uvicorn dependencies). `OPERATIONS.md` rewritten for one backend process. Agents tests 36, backend 538, evals 15 of 15 with 83 exact lookups.
 - Merge only after the bandwidth check on Render passes (master is what Render deploys; a deploy of the old Node service needs the tag).
 - Added the Python cassette recorder `payops/evals/record.py` (`pnpm cassette:record`, flags `--all`, `--only`). Its run, approval and manifest handling is tested by replaying the original three scenarios; a real RECORD run has not been done (needs the keys and billed calls), so the first one should be a single scenario with `--only`.
+### 2026-10-26 · Cleanup pass (code simplification, behaviour unchanged)
+- Done: removed the unused standalone agent service (on the B7 branch); web `QueryError` component replaces 24 hand-wired "could not load, retry" blocks (retry wiring in one place, 2 new tests).
+- Checked and dropped: a factory for the web list hooks (they already share `useCursorList`, each is one line).
+- Left for later, in order: reformat the Python backend to 120 columns, typed agent state, generating web types from the backend's OpenAPI, a short "how to add an endpoint, action or page" guide.
+
 ### 2026-10-26 · Case page: a clear next step for every status
 - Shivam hit an escalated case with an empty Approvals page and could not tell who acts or where. Escalation (no fix proposed, no approval) was worded like a waiting state.
 - New five-stage progress path on the case page (`CaseProgress`, `case-progress.ts`): Detected, Investigated, Approval, Fix applied, Verified, each Done, Now, Next or Stopped, with a short note (for example "Waiting for a manager", "Nothing to approve yet").

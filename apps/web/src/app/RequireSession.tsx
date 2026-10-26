@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { useSession } from '../lib/session';
-import { ErrorState } from '../ui/ErrorState';
+import { QueryError } from '../ui/ErrorState';
 import { ShellSkeleton } from './ShellSkeleton';
 
 /**
@@ -16,7 +16,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
   if (session.isError) {
     return (
       <main className="min-h-screen bg-paper p-6">
-        <ErrorState title="Could not check your session." error={session.error} onRetry={() => void session.refetch()} />
+        <QueryError title="Could not check your session." query={session} />
       </main>
     );
   }

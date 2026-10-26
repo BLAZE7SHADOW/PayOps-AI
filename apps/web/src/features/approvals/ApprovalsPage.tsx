@@ -7,7 +7,7 @@ import { tone } from '../../lib/status';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { pickEnum, useUrlState } from '../../lib/use-url-state';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { Money } from '../../ui/Money';
 import { LoadMore } from '../../ui/Pagination';
@@ -108,7 +108,7 @@ export function ApprovalsPage() {
 
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load approvals." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load approvals." query={list} />
         </div>
       ) : (
         <>

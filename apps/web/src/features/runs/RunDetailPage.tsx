@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router';
 import { CASE_TYPE_LABEL, DETECTION_RULE_LABEL, formatMoney, type AgentRunItem, type AgentStepItem, type CaseDetail } from '@payops/shared';
 import { formatDateTime, formatFullDateTime, statusLabel } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/use-document-title';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { PageHeader } from '../../ui/PageHeader';
 import { Skeleton } from '../../ui/Skeleton';
 import { Tag } from '../../ui/Tag';
@@ -28,7 +28,7 @@ export function RunDetailPage() {
   if (run.isError) {
     return (
       <div className="border border-rule bg-surface">
-        <ErrorState title="Could not load this run." error={run.error} onRetry={() => void run.refetch()} />
+        <QueryError title="Could not load this run." query={run} />
       </div>
     );
   }
@@ -69,7 +69,7 @@ export function RunDetailPage() {
       {r && describeHandoff(r) ? <HandoffCard handoff={describeHandoff(r)!} className="mb-6" /> : null}
       <section aria-labelledby="flow-title">
         <h2 id="flow-title" className="mb-3 text-20 font-semibold">What the agent did, step by step</h2>
-        {steps.isError ? <ErrorState title="Could not load run steps." error={steps.error} onRetry={() => void steps.refetch()} />
+        {steps.isError ? <QueryError title="Could not load run steps." query={steps} />
           : !r || steps.isPending ? <div className="space-y-3 rounded-lg border border-rule bg-surface p-5" aria-hidden="true">{[0, 1, 2].map((i) => <Skeleton key={i} height={76} width="100%" />)}</div>
           : <RunSteps run={r} steps={items} />}
       </section>

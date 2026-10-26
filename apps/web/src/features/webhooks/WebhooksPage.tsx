@@ -9,7 +9,7 @@ import { useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
 import { Drawer } from '../../ui/Drawer';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { KeyValue } from '../../ui/KeyValue';
 import { Mono } from '../../ui/Mono';
@@ -89,7 +89,7 @@ export function WebhooksPage() {
       </FilterBar>
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load webhook events." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load webhook events." query={list} />
         </div>
       ) : (
         <>
@@ -125,7 +125,7 @@ function WebhookDrawer({ id, onClose }: { id: string | undefined; onClose: () =>
   return (
     <Drawer open={Boolean(id)} onOpenChange={(open) => !open && onClose()} title="Webhook event" width={560}>
       {detail.isError ? (
-        <ErrorState title="Could not load this event." error={detail.error} onRetry={() => void detail.refetch()} />
+        <QueryError title="Could not load this event." query={detail} />
       ) : detail.data ? (
         <WebhookDetailBody d={detail.data} now={new Date()} />
       ) : (

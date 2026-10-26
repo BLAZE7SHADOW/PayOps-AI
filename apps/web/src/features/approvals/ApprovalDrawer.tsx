@@ -7,7 +7,7 @@ import { resolutionTone } from '../../lib/resolution';
 import { tone } from '../../lib/status';
 import { useUser } from '../../lib/session';
 import { Drawer } from '../../ui/Drawer';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { MiniMatrix } from '../../ui/MiniMatrix';
 import { Money } from '../../ui/Money';
 import { Skeleton } from '../../ui/Skeleton';
@@ -34,7 +34,7 @@ export function ApprovalDrawer({ approvalId, onClose }: Props) {
       footer={a && a.status === 'PENDING' ? <Decision key={a.id} a={a} /> : undefined}
     >
       {q.isError ? (
-        <ErrorState className="pt-12" title="Could not load this approval." error={q.error} onRetry={() => void q.refetch()} />
+        <QueryError className="pt-12" title="Could not load this approval." query={q} />
       ) : (
         <>
           <Header a={a} />

@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import type { CaseDetail } from '@payops/shared';
 import { formatDateTime } from '../../lib/format';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Skeleton } from '../../ui/Skeleton';
 import { Tag } from '../../ui/Tag';
 import type { Tone } from '../../lib/status';
@@ -72,7 +72,7 @@ export function CaseStory({ c }: { c: CaseDetail }) {
         {' '}Each label shows who produced the step: fixed code, Jev, Gemini, or a person.
       </p>
 
-      {runs.isError ? <ErrorState title="Could not load the investigation." error={runs.error} onRetry={() => void runs.refetch()} /> : pending ? <StorySkeleton /> : (
+      {runs.isError ? <QueryError title="Could not load the investigation." query={runs} /> : pending ? <StorySkeleton /> : (
         <>
           <p className="sr-only" role="status">{story.length} steps recorded.</p>
           <StoryList story={story} onOpen={setRef} pendingApprovalId={c.resolutionView?.pendingApprovalId ?? null} />

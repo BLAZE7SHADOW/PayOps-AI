@@ -4,7 +4,7 @@ import { DETECTION_RULE_LABEL, type CaseDetail } from '@payops/shared';
 import { useCaseRoom } from '../../lib/socket';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { Investigation, InvestigationSkeleton } from '../investigation/Investigation';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Section } from '../../ui/Section';
 import { Skeleton } from '../../ui/Skeleton';
 import { StateMatrix, StateMatrixSkeleton, mismatchSummary } from '../../ui/StateMatrix';
@@ -55,7 +55,7 @@ export function CasePage() {
   if (q.isError) {
     return (
       <div className="border border-rule bg-surface">
-        <ErrorState title="Could not load this case." error={q.error} onRetry={() => void q.refetch()} />
+        <QueryError title="Could not load this case." query={q} />
       </div>
     );
   }
