@@ -1,14 +1,17 @@
-"""Golden scenarios (docs/03 §17). Each one pins a simulator scenario and seed to a driver and a set of expectations. Two drivers exist: `cassette` replays
-real recorded Gemini and Jev responses (`fixtures/cassettes/*.jsonl`), `fixture` uses hand-written deterministic answers for scenarios with no recording.
+"""Golden scenarios (docs/03 §17). Each one pins a simulator scenario and seed to a driver and a set of expectations.
+Two drivers exist: `cassette` replays real recorded Gemini and Jev responses (`fixtures/cassettes/*.jsonl`), `fixture`
+uses hand-written deterministic answers for scenarios with no recording.
 
-Root cause is never a hard gate: the diagnosis is a model guess, so it is only measured. `status`, `verdict` and `tier` ARE hard gates: they come from the
-policy, executor and validator, which are code."""
+Root cause is never a hard gate: the diagnosis is a model guess, so it is only measured. `status`, `verdict` and `tier`
+ARE hard gates: they come from the policy, executor and validator, which are code."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
 from payops_agents.ports import FixtureOptions
+
+from ..dto.actions import ACTION_TYPES
 
 
 @dataclass(frozen=True)
@@ -24,7 +27,8 @@ class Golden:
     verdict: str | None
     expected_root_cause: str
     tier: str | None = None
-    #: Documented, known mismatch of the recorded diagnosis, so the report explains a miss instead of flagging a regression.
+    #: Documented, known mismatch of the recorded diagnosis, so the report explains a miss instead of flagging a
+    #: regression.
     known_root_cause_caveat: str | None = None
     allowed_action_sets: tuple[tuple[str, ...], ...] | None = None
     forbidden_action_types: tuple[str, ...] = ()
@@ -37,6 +41,13 @@ class Golden:
 
 def _fx(root_cause: str, **kw: object) -> FixtureOptions:
     return FixtureOptions(root_cause, **kw)  # type: ignore[arg-type]
+
+
+#: Failure-path goldens must end without proposing anything that changes data (a person takes over).
+_CHANGES_DATA = tuple(a for a in ACTION_TYPES if a != "ESCALATE_TO_HUMAN")
+_NO_DIAGNOSIS = (
+    "Ending with no diagnosis is the correct outcome here, so this scenario is left out of root-cause accuracy."
+)
 
 
 GOLDEN_SCENARIOS: tuple[Golden, ...] = (
@@ -76,4 +87,14 @@ GOLDEN_SCENARIOS: tuple[Golden, ...] = (
            allowed_action_sets=(("SYNC_REFUND_STATUS",),)),
     Golden("cancel_raced_capture", "cancel_raced_capture", 5206, _fx("REFUND_NOT_INITIATED"), "approve", "RESOLVED", "PASS", "REFUND_NOT_INITIATED", "OPS",
            expected_tools=("getGatewayPayment", "getOrder", "getLedgerEntries"), allowed_action_sets=(("INITIATE_REFUND",),)),
+    # Failure paths: the agent must stop safely, propose nothing, and hand the case to a person.
+    Golden("unknown_cause_escalates", "captured_order_failed", 5301, _fx("UNKNOWN"), "none", "ESCALATED", None, "UNKNOWN",
+           known_root_cause_caveat=_NO_DIAGNOSIS, forbidden_action_types=_CHANGES_DATA,
+           notes="Jev cannot name a cause. No fix is proposed, so no approval is created: the case waits for a person (Resolve manually)."),
+    Golden("inconsistent_evidence_escalates", "captured_order_failed", 5302, _fx("WEBHOOK_PROCESSING_FAILURE", consistent=0.1), "none", "ESCALATED", None, "UNKNOWN",
+           known_root_cause_caveat=_NO_DIAGNOSIS, forbidden_action_types=_CHANGES_DATA,
+           notes="Jev names a cause but says the evidence does not agree with itself. A diagnosis the evidence does not support is not acted on."),
+    Golden("providers_down_escalates", "captured_order_failed", 5303, _fx("WEBHOOK_PROCESSING_FAILURE", fail=True), "none", "ESCALATED", None, "UNKNOWN",
+           known_root_cause_caveat=_NO_DIAGNOSIS, forbidden_action_types=_CHANGES_DATA,
+           notes="Jev raises on every call and no model is available: each decision point uses its fallback, the run records the error, nothing is proposed or executed."),
 )  # fmt: skip

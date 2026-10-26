@@ -1,10 +1,24 @@
 # 02 · System Architecture
 
-> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+> **Backend moved to Python (D090).** Paths in this file were updated; the map below is for reading old commits and decisions. The last TypeScript commit is the tag `ts-backend-final` (`git show ts-backend-final:<path>`).
+>
+> | Was | Now |
+> |---|---|
+> | `apps/server` (Express routes, auth, Socket.IO, pg-boss) | `python/payops/src/payops/api`, `auth`, `jobs`, `realtime.py` (FastAPI, python-socketio, Procrastinate) |
+> | `packages/core` (domain, services, executor, validator, adapters, Drizzle schema) | `payops/domain`, `services`, `services/writes`, `infra`, `db` (SQLAlchemy models, Alembic) |
+> | `packages/agents` and `python/agents` as a service | `python/agents/src/payops_agents` (the graph) and `payops/agent_tools` (tools, run store, in-process node API) |
+> | `packages/simulator` | `payops/simulator` |
+> | `packages/evals` | `payops/evals` (`pnpm eval`) |
+> | `/internal/agent/*`, `AGENT_RUNTIME`, `AGENT_INTERNAL_SECRET` | removed: agents call the services in process |
+> | Drizzle migrations | `python/payops/migrations` (SQL `0000` to `0012` kept as `migrations/sql`, then Alembic revisions) |
+> | `.env` read in `env.ts` | `payops/settings.py` |
+
+
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...`, or add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc`.
 
 ## 1. Shape
 
-Monorepo, TypeScript everywhere. **Two runnable apps** (web, server) and a few packages. **One database** (Postgres on Supabase) holds business data, the job queue and LangGraph checkpoints. No Redis, no separate worker process.
+Two runnable parts: the **web app** (`apps/web`, TypeScript) and **one Python backend process** (`python/payops`, with the agent graph from `python/agents` running inside it). **One database** (Postgres on Supabase) holds business data, the job queue and LangGraph checkpoints. No Redis, no separate worker service.
 
 Hexagonal: the domain core depends on **ports** (interfaces); **adapters** implement them. The agent system is a client of the domain core, not part of it.
 
@@ -12,107 +26,116 @@ Hexagonal: the domain core depends on **ports** (interfaces); **adapters** imple
           ┌──────────── apps/web (React + Vite) ─────────────┐
           │  TanStack Query (REST)     Socket.IO client       │
           └────────────┬───────────────────────┬─────────────┘
-                       │ REST /api/*           │ websocket
+                       │ REST /api/*           │ websocket /socket.io
           ┌────────────▼───────────────────────▼─────────────────────────┐
-          │ apps/server (one Node process)                                │
-          │  Express routes · Socket.IO · pg-boss workers                 │
-          │  jobs: agent-run · agent-resume · reconcile-sweep             │
+          │ python/payops (one process: uvicorn + FastAPI)                │
+          │  routers · python-socketio · Procrastinate worker             │
+          │  jobs: agent_run · agent_resume · webhook_retry · reconcile   │
           └──────┬──────────────────────────────┬────────────────────────┘
                  │ uses                          │ runs graphs
-          ┌──────▼──────── packages/core ───────┐ ┌──▼──── packages/agents ─────────┐
-          │ Drizzle schema + domain services     │ │ LangGraph graph, nodes, tools,  │
-          │ detection · policy · executor ·      │ │ context builders, Jev questions │
-          │ validator · audit · ports/ adapters/ │ │ (calls core services via tools) │
-          └──────┬───────────────────────────────┘ └──┬─────────────────────────────┘
-                 │                                     │
-          ┌──────▼─────────────────────────────────────▼──────┐
-          │ Postgres (Supabase in the cloud · PGlite locally)  │
-          │  public.*      business + ops tables (Drizzle)     │
-          │  pgboss.*      job queue                           │
-          │  checkpoints   LangGraph PostgresSaver             │
-          └────────────────────────────────────────────────────┘
+          ┌──────▼──── services, domain ────────┐ ┌──▼──── python/agents ───────────┐
+          │ SQLAlchemy models + services        │ │ LangGraph graph, nodes, context │
+          │ detection · policy · executor ·     │ │ builders, Jev questions         │
+          │ validator · audit · ports/infra     │ │ (reach services through         │
+          │                                     │ │  agent_tools / InProcessNodeApi)│
+          └──────┬──────────────────────────────┘ └──┬──────────────────────────────┘
+                 │                                    │
+          ┌──────▼────────────────────────────────────▼──────┐
+          │ Postgres (Supabase in the cloud · pgserver locally)│
+          │  public.*       business + ops tables (Alembic)   │
+          │  procrastinate_* job queue                        │
+          │  checkpoints_py LangGraph Postgres saver          │
+          └───────────────────────────────────────────────────┘
 ```
 
-Why one process: the workload is small, and one process means one deploy, in-process Socket.IO (no Redis adapter), and simpler debugging. Jobs still go through pg-boss so agent runs never block HTTP requests and survive restarts. If it ever needs to scale, the same code can run a second process with `ROLE=worker`. Exception (D085): the agent graph is being ported to a Python service (`python/agents`) that Node's agent jobs call over HTTP; Node stays the system of record and Python reaches data only through `/internal/agent/*`. Until parity is proven, `AGENT_RUNTIME=ts` (default) runs the TypeScript agents in this process.
+Why one process: the workload is small, and one process means one deploy, in-process Socket.IO (no Redis adapter) and simpler debugging. Jobs still go through the queue so agent runs never block HTTP requests and survive restarts. The worker sleeps until Postgres NOTIFY wakes it, which keeps an idle API nearly silent on the network (D083, D089).
 
 ## 2. Repository layout
 
 ```
 payops-ai/
 ├─ CLAUDE.md                 session bootstrap (read first)
-├─ AGENTS.md                 pointer for non-Claude coding agents
 ├─ docs/                     source of truth (this folder)
-├─ apps/
-│  ├─ web/                   React 19 + Vite + TS
-│  │  └─ src/{app,routes,features/<feature>/{api,components,hooks},ui,styles,lib}
-│  └─ server/                Express 5 + Socket.IO + pg-boss
-│     └─ src/{routes,middleware,socket,jobs,scripts,main.ts,app.ts}
-├─ packages/
-│  ├─ shared/                Zod schemas, enums, DTO types, action catalog, money utils, event names
-│  ├─ core/                  Drizzle schema + migrations, domain services, detection, policy, executor, validator, ports, adapters
-│  ├─ agents/                LangGraph graph, nodes, state, context builders, prompts, tools, grounding, Jev questions
-│  ├─ simulator/             seeded scenario generators, fault injection, fake gateway writes
-│  └─ evals/                 golden scenarios + runner + report
+├─ apps/web/                 React 19 + Vite + TS
+│  └─ src/{app,routes,features/<feature>/{api,components,hooks},ui,styles,lib}
+├─ packages/shared/          Zod schemas, enums, DTO types, permissions, money utils for the web app
+├─ python/
+│  ├─ payops/                the backend (uv project)
+│  │  ├─ src/payops/
+│  │  │  ├─ api/             FastAPI app, routes/{read,write,auth,simulator,ops}, session middleware, socket, startup
+│  │  │  ├─ domain/          pure logic: money, policy, actions, reconciliation, validation, audit hash, permissions
+│  │  │  ├─ services/        read services; services/writes: orders, ledger, refunds, cases, executor, resolutions, approvals
+│  │  │  ├─ infra/           gateway adapter, snapshot loader, audit store
+│  │  │  ├─ db/              engine, models, migrate, retry; migrations/ (Alembic) in the project root
+│  │  │  ├─ auth/            passwords, TOTP, secret box, tokens, sessions, rate limit
+│  │  │  ├─ jobs/            Procrastinate queue and the inline test queue
+│  │  │  ├─ agent_tools/     tools, case brief, run store, in-process node API, runtime
+│  │  │  ├─ simulator/       seeded scenario generators, fault injection
+│  │  │  ├─ evals/           golden scenarios + runner (`python -m payops.evals`)
+│  │  │  └─ dto/, settings.py, container.py (composition root), observability.py
+│  │  ├─ migrations/         Alembic: sql/ (0000 to 0012 as before), versions/
+│  │  └─ tests/              pytest, with committed recordings in tests/fixtures and tests/contract
+│  └─ agents/                `payops_agents`: graph, nodes, state, context, prompts, grounding, Jev questions, cassette adapters
 ├─ fixtures/cassettes/       recorded LLM/Jev responses for REPLAY
-├─ scripts/                  local-db (PGlite server)
-├─ .env.example
-└─ package.json / pnpm-workspace.yaml / tsconfig.base.json
+├─ render.yaml, vercel.json  hosting (see DEPLOY.md)
+└─ package.json / pnpm-workspace.yaml
 ```
 
-Dependency direction (lint-enforced): `shared ← core ← agents ← server`, `simulator → core`, `shared ← web`. `core` never imports `agents`. `web` never imports `core`.
+Dependency direction: `domain` imports nothing from `services`, `api` or `agents`; `payops_agents` never imports `payops` (it reaches the backend through the `NodeApiPort` interface, implemented by `InProcessNodeApi`); `web` imports only `packages/shared`.
 
 ## 3. Ports and adapters
 
-```ts
-// packages/core/src/ports/
-PaymentGatewayPort   getPayment, listByOrder, listWebhookDeliveries, listRefunds, listSettlementLines,
-                     createRefund, replayWebhook                  (writes arrive in Phase 2)
-LlmPort              invokeStructured<T>(schema, messages, meta) → { data: T, usage }
-DecisionPort         ask(state, questions, tag) → typed answers   (Jev)
-EventPublisherPort   publish(room, event, payload)
-ClockPort            now()   (fixed in tests and simulator)
+```python
+# payops/domain/gateway.py, payops/ports.py (Clock, EventPublisher), payops_agents/ports.py (LlmPort, DecisionPort)
+PaymentGateway    get_payment, list_by_order, list_webhook_deliveries, list_refunds, list_settlement_lines,
+                  create_refund, replay_webhook, set_webhook_sink
+LlmPort           invoke_structured(schema, messages, meta) -> (data, usage)
+DecisionPort      ask(state, questions, tag) -> typed answers      (Jev)
+EventPublisher    publish(room, event, payload)                    (realtime.py has OpsEvents)
+Clock             now()   (fixed in tests and the simulator)
 ```
 
 | Port | Adapters |
 |---|---|
-| PaymentGatewayPort | `SimulatorGatewayAdapter` (reads/writes `gw_*` tables, default) · `RazorpayTestAdapter` (stretch, Phase 6) |
-| LlmPort | `GeminiLlmAdapter` · `RecordingLlmAdapter` · `ReplayLlmAdapter` |
-| DecisionPort | `JevDecisionAdapter` (`@typesafe-ai/sdk`) · `RecordingDecisionAdapter` · `ReplayDecisionAdapter` |
-| EventPublisherPort | `SocketIoPublisher` (in-process) · `NoopPublisher` (tests) |
+| PaymentGateway | `SimulatorGateway` (reads and writes `gw_*` tables, own connection pool) |
+| LlmPort | `GeminiLlm`, `RecordingLlm`, `ReplayLlm` (`payops_agents/ports.py`, `cassette.py`) |
+| DecisionPort | `JevDecision` (REST call to `api.typesafe.ai`), `RecordingDecision`, `ReplayDecision` |
+| EventPublisher | `OpsEvents` over python-socketio (in-process), `NoopPublisher` (tests) |
 
-Adapters are wired once in a composition root (`packages/core/src/container.ts`).
+Adapters are wired once in the composition root, `payops/container.py` (`build_services`).
 
 ### Two worlds, deliberately separate
 
-- **External world** (what a real gateway/bank owns): `gw_payments`, `gw_refunds`, `gw_webhook_deliveries`, `gw_settlement_lines`. Only the gateway adapter and the simulator touch these.
-- **Internal world** (our systems): `orders`, `payments`, `ledger_entries`, `refunds`, `settlements`, …
+- **External world** (what a real gateway or bank owns): `gw_payments`, `gw_refunds`, `gw_webhook_deliveries`, `gw_settlement_lines`. Only the gateway adapter and the simulator touch these.
+- **Internal world** (our systems): `orders`, `payments`, `ledger_entries`, `refunds`, `settlements`, and so on.
 
 Reconciliation compares the two. This is what makes the problem real and lets a Razorpay adapter drop in later.
 
 ## 4. Key flows
 
-### 4.1 Scenario → case
+### 4.1 Scenario to case
 ```
 POST /api/simulator/scenarios {scenario, seed}
- → simulator writes gw_* + internal rows (with the injected fault)
- → detection runs for the touched orders/batches (and every 60s via the reconcile-sweep job)
- → rule hits → CaseService.openOrUpdate(fingerprint)  (one open case per fingerprint, enforced by a partial unique index)
- → socket "case.created" to room "ops"
+ -> simulator writes gw_* + internal rows (with the injected fault)
+ -> detection runs for the touched orders and batches (and periodically if RECONCILE_SWEEP_MS > 0)
+ -> rule hits -> CaseService.open_or_update(fingerprint)  (one open case per fingerprint, partial unique index)
+ -> socket "case.created" to room "ops"
 ```
 
-### 4.2 Investigation (Phase 3+)
+### 4.2 Investigation
 ```
-POST /api/cases/:id/runs (OPS+) → insert agent_run, boss.send('agent-run') → 202 {runId}
-pg-boss worker → graph.invoke(initialState, {configurable: {thread_id: runId}})
- → events to room case:<id>
- → interrupt at awaitApproval → run AWAITING_APPROVAL, approval row created, job completes
-POST /api/approvals/:id/decision → role + four-eyes check → boss.send('agent-resume')
-worker → graph.invoke(new Command({resume}), {configurable: {thread_id}}) → execute → validate → (replan) → end
+POST /api/cases/{id}/runs (OPS+) -> insert agent_run, queue.agent_run -> 202 {runId}
+worker -> graph.ainvoke(initial_state, config={"configurable": {"thread_id": run_id}})
+ -> events to room case:<id>
+ -> interrupt at await_approval -> run AWAITING_APPROVAL, approval row created, job completes
+POST /api/approvals/{id}/decision -> role + four-eyes check -> queue.agent_resume
+worker -> graph.ainvoke(Command(resume=...), thread_id) -> execute -> validate -> (replan) -> end
 ```
+The run start and resume calls are idempotent: a finished or running thread returns its status.
 
-### 4.3 Manual resolution (Phase 2)
+### 4.3 Manual resolution
 ```
-POST /api/cases/:id/actions {actions[]} → same policy → same approval → same executor → same validator
+POST /api/cases/{id}/actions {actions[]} -> same policy -> same approval -> same executor -> same validator
 ```
 
 ## 5. API surface
@@ -138,24 +161,24 @@ POST /api/cases/:id/actions {actions[]} → same policy → same approval → sa
 | GET | /api/policy | VIEWER | 2 |
 | POST | /api/cases/:id/runs · GET /api/runs · /api/runs/:id · /api/runs/:id/steps | OPS / VIEWER | 3 |
 
-Conventions: Zod-validated input (schemas from `shared`), keyset cursor pagination (`{items, nextCursor}`), errors `{ error: { code, message, details?, requestId } }`, `x-request-id` on every response.
+Conventions: Pydantic-validated input (`payops/dto`), keyset cursor pagination (`{items, nextCursor}`), errors `{ error: { code, message, details?, requestId } }`, `x-request-id` on every response.
 
 ## 6. Cross-cutting
 
-- **Database access:** Drizzle ORM over `pg` (node-postgres). Schema in `packages/core/src/db/schema/*`, SQL migrations generated by drizzle-kit into `packages/core/drizzle/`, applied by `pnpm db:migrate` and on server start.
-- **Transactions:** multi-row writes (ledger postings, executor steps, case updates + audit) run in `db.transaction`. Inside a transaction, only the `tx` handle is used.
-- **Integrity in the database:** primary keys, foreign keys where ownership is clear, `unique(idempotency_key)`, partial unique index for one open case per fingerprint, check constraints on money (`amount_minor >= 0`).
-- **Money:** `bigint` columns in `mode: 'number'` (safe integers), always paise, `*_minor` names. Formatting only in `shared/money.ts`.
-- **Time:** `timestamptz`, UTC. Services take `now` from `ClockPort`.
-- **IDs:** prefixed text ids (`pay_…`, `ord_…`, `case_…`). Case display ids `PAY-0042`.
-- **Auth (Phase 2):** own JWT in an httpOnly cookie, roles `VIEWER < OPS < MANAGER < ADMIN`, seeded demo users. We do not use Supabase Auth or RLS; the server is the only database client.
-- **Audit:** state changes write `audit_events` in the same transaction.
-- **Logging:** pino JSON with `requestId, caseId, runId, node`.
-- **Config:** Zod-parsed env in `core/config/env.ts`; the server fails fast on bad config.
+- **Database access:** SQLAlchemy 2 async over psycopg 3. Models in `payops/db/models.py`; migrations are Alembic revisions (`0001` applies the original SQL files `0000` to `0012` unchanged, including the audit hash-chain triggers). They run on start (`MIGRATE_ON_START`) and with `alembic upgrade head`.
+- **Transactions:** multi-row writes (ledger postings, executor steps, case updates plus audit) run in one `engine.transaction(...)` block that hands the services an `AsyncSession`. Serialization failures retry (`db/retry.py`). Simulated gateway reads use a separate pool so a request never waits on a second connection from its own pool (D089).
+- **Integrity in the database:** primary keys, foreign keys where ownership is clear, `unique(idempotency_key)`, a partial unique index for one open case per fingerprint, check constraints on money (`amount_minor >= 0`).
+- **Money:** `bigint` columns, always paise, `*_minor` names. Formatting only in `domain/money.py` (and `shared/money.ts` for the web).
+- **Time:** `timestamptz`, UTC. Services take `now` from the `Clock`.
+- **IDs:** prefixed text ids (`pay_...`, `ord_...`, `case_...`). Case display ids `PAY-0042`.
+- **Auth:** own HS256 JWT in an httpOnly cookie plus a `sessions` row, scrypt password hashes, TOTP MFA with sealed secrets, a database rate limiter, and a JSON-only rule for state-changing requests. Roles `VIEWER < OPS < MANAGER < ADMIN`, seeded demo users. We do not use Supabase Auth or RLS; the backend is the only database client.
+- **Audit:** state changes write `audit_events` in the same transaction, hash-chained.
+- **Logging:** JSON lines with `requestId` (`observability.py`).
+- **Config:** typed `pydantic-settings` in `payops/settings.py`; the process fails fast on bad config.
 
 ### Roles and permissions
 
-Roles rank `VIEWER < OPS < MANAGER < ADMIN`; a permission names the lowest role that has it. The table lives in `packages/shared/src/permissions.ts` and is the only place a role is compared. Routes use `requirePermission(key)`, services and the UI use `hasPermission(role, key)`. A test fails if a route has no guard (or an explicit `publicRoute()` marker) and if this table drifts from the code. Routes with no sign-in: health, login, MFA code step, demo login, logout, `me`, demo accounts.
+Roles rank `VIEWER < OPS < MANAGER < ADMIN`; a permission names the lowest role that has it. The table lives in `python/payops/src/payops/domain/permissions.py` (the web copy is `packages/shared/src/permissions.ts`) and is the only place a role is compared. Routes use `require_permission(key)`, services use `has_permission(role, key)` and the UI uses `hasPermission(role, key)` from `packages/shared`. A test fails if a route has no guard (or an explicit `publicRoute()` marker) and if this table drifts from the code. Routes with no sign-in: health, login, MFA code step, demo login, logout, `me`, demo accounts.
 
 <!-- permissions:start -->
 | Permission | Lowest role | What it allows | Extra rule |
@@ -193,39 +216,36 @@ Roles rank `VIEWER < OPS < MANAGER < ADMIN`; a permission names the lowest role 
 | Var | Notes |
 |---|---|
 | `NODE_ENV`, `PORT`, `WEB_ORIGIN` | |
-| `DATABASE_URL` | Supabase **session pooler** or direct connection string (port 5432). Not the transaction pooler (6543): pg-boss and LangGraph need session features. Local: `postgres://postgres:postgres@127.0.0.1:54329/postgres` from `pnpm db:local`. |
-| `JWT_SECRET` | required in production |
+| `DATABASE_URL` | Supabase **session pooler** (port 5432), letters and digits in the password. Not the transaction pooler (6543): the queue and LangGraph need session features. Local: the URL `pnpm db:local` prints. |
+| `JWT_SECRET` | required in production, 16+ characters |
 | `AI_MODE` | `LIVE` · `RECORD` · `REPLAY` (default REPLAY) |
-| `AI_PROVIDER`, `AI_MODEL`, `GEMINI_API_KEY` | already set in `.env` |
-| `TYPESAFE_JEV_API_KEY`, `JEV_MODEL` | key already set; pin the model |
-| `GATEWAY_ADAPTER` | `simulator` (default) · `razorpay` |
-| `RECONCILE_SWEEP_MS` | 0 disables the sweep |
+| `AI_PROVIDER`, `AI_MODEL`, `GEMINI_API_KEY` | live and record only |
+| `TYPESAFE_JEV_API_KEY`, `JEV_MODEL` | live and record only |
+| `RECONCILE_SWEEP_MS` | 0 disables the periodic sweep |
+| `JOB_POLL_SECONDS`, `GATEWAY_POOL_MAX`, `DATABASE_POOL_MAX`, `CHECKPOINTER`, `MIGRATE_ON_START`, `JOBS` | see `docs/OPERATIONS.md` |
 | `DEMO_MODE` | lets OPS use the simulator |
-| `VITE_API_URL` | web, optional (dev uses Vite proxy) |
+| `VITE_API_URL` | web, optional (dev uses the Vite proxy) |
 
 ## 8. Local development
 
-Two ways to get a database, no Docker needed:
+No Docker needed. `pnpm db:local` starts a local Postgres (`pgserver`, data in `~/.payops-devdb`) and prints its `DATABASE_URL`; put it in `.env`, or point `DATABASE_URL` at Supabase. Then `pnpm dev` runs the API on :4000 (it migrates and creates the demo users on start) and the web app on :5173. Use **Reset demo data** in the Simulator to load the demo cases.
 
-1. `pnpm db:local` starts **PGlite** (Postgres compiled to WASM) on port 54329 with data in `.data/pglite`. Zero install. Good for development and tests.
-2. Point `DATABASE_URL` at your Supabase project.
+Tests start their own throwaway Postgres (`pgserver`), clone a migrated template database per test, and use `JOBS=inline` and `CHECKPOINTER=memory`.
 
-Then `pnpm db:migrate && pnpm dev`. Tests start their own throwaway PGlite instance.
-
-PGlite serialises transactions across connections, so code must never wait on a second connection while holding a transaction (also good practice on real Postgres).
-
-## 9. Deployment (Phase 6)
+## 9. Deployment
 
 | Piece | Where |
 |---|---|
 | web | Vercel |
-| server | Render or Railway (one Docker service) |
+| backend | Render, one Python web service from `render.yaml` |
 | database | Supabase free tier |
 
-Public deployment runs `AI_MODE=REPLAY` and a nightly `reset` job.
+The public demo runs `AI_MODE=REPLAY`. Steps and rollback are in `docs/DEPLOY.md`.
 
 ## 10. Tech choices (locked)
 
-React 19, Vite 7, TypeScript 5.9 strict, React Router 7, TanStack Query 5, Zustand (UI state only), Tailwind v4 with our own tokens, Radix UI primitives, Recharts restyled, Socket.IO, Express 5, Drizzle ORM + drizzle-kit, pg, pg-boss, Zod 4, pino, LangGraph JS + `@langchain/langgraph-checkpoint-postgres`, LangChain JS + `@langchain/google-genai`, `@typesafe-ai/sdk`, PGlite (local + tests), Vitest, Playwright, pnpm workspaces, Node 22.
+**Web:** React 19, Vite 7, TypeScript 5.9 strict, React Router 7, TanStack Query 5, Zustand (UI state only), Tailwind v4 with our own tokens, Radix UI primitives, Recharts restyled, Socket.IO client, Zod 4.
 
-Not used, on purpose: MongoDB, Redis, BullMQ, separate worker service, Supabase Auth/RLS, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, Next.js, Redux, shadcn default styling, lucide icons.
+**Backend:** Python 3.12 with `uv`, FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3, Pydantic v2, Procrastinate, python-socketio, LangGraph Python with the Postgres checkpointer, PyJWT and cryptography, pytest, ruff, pyright, `pgserver`.
+
+Not used, on purpose: MongoDB, Redis, BullMQ, Celery, a separate worker service, Supabase Auth/RLS, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, Next.js, Redux, shadcn default styling, lucide icons.

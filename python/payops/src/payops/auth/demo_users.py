@@ -42,7 +42,9 @@ def is_demo_email(email: str) -> bool:
 
 async def seed_demo_users(session: AsyncSession) -> int:
     """Inserts missing demo users. Returns how many were created."""
-    have = set((await session.scalars(select(User.email).where(User.email.in_([a.email for a in DEMO_ACCOUNTS])))).all())
+    have = set(
+        (await session.scalars(select(User.email).where(User.email.in_([a.email for a in DEMO_ACCOUNTS])))).all()
+    )
     created = 0
     now = datetime.now(UTC)
     for account in DEMO_ACCOUNTS:
@@ -50,8 +52,16 @@ async def seed_demo_users(session: AsyncSession) -> int:
             continue
         session.add(
             User(
-                id=DEMO_IDS[account.email], email=account.email, name=account.name, role=account.role, password_hash=hash_password(DEMO_PASSWORD),
-                totp_secret_sealed=None, totp_enabled_at=None, totp_last_step=None, created_at=now, updated_at=now,
+                id=DEMO_IDS[account.email],
+                email=account.email,
+                name=account.name,
+                role=account.role,
+                password_hash=hash_password(DEMO_PASSWORD),
+                totp_secret_sealed=None,
+                totp_enabled_at=None,
+                totp_last_step=None,
+                created_at=now,
+                updated_at=now,
             )
         )
         created += 1

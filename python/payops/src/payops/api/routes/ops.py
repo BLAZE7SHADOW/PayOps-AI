@@ -18,13 +18,21 @@ router = APIRouter()
 
 
 @router.get("/audit", dependencies=[Depends(require_permission("audit.view"))])
-async def list_audit(query: Annotated[AuditListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[AuditEventItem]:
+async def list_audit(
+    query: Annotated[AuditListQuery, Query()], services: ServicesDep, session: SessionDep
+) -> Page[AuditEventItem]:
     return await services.audit.list(session, query)
 
 
 @router.get("/audit/verify", dependencies=[Depends(require_permission("audit.verify"))])
-async def verify_audit(services: ServicesDep, session: SessionDep, head_seq: Annotated[str | None, Query(alias="headSeq")] = None, head_hash: Annotated[str | None, Query(alias="headHash")] = None) -> AuditChainStatus:
-    """Walks the whole hash chain. An optional head (seq and hash) saved from an earlier export or check also detects a cut tail."""
+async def verify_audit(
+    services: ServicesDep,
+    session: SessionDep,
+    head_seq: Annotated[str | None, Query(alias="headSeq")] = None,
+    head_hash: Annotated[str | None, Query(alias="headHash")] = None,
+) -> AuditChainStatus:
+    """Walks the whole hash chain. An optional head (seq and hash) saved from an earlier export or check also detects a
+    cut tail."""
     head = None
     if head_seq is not None and head_hash:
         try:
@@ -51,7 +59,15 @@ async def export_audit(
     async with session.begin():
         await services.audit.record(
             session,
-            AuditInput("USER", user.id, user.name, "audit.exported", "system", "audit-log", f"{user.name} exported the audit log as CSV"),
+            AuditInput(
+                "USER",
+                user.id,
+                user.name,
+                "audit.exported",
+                "system",
+                "audit-log",
+                f"{user.name} exported the audit log as CSV",
+            ),
         )
     return StreamingResponse(
         services.audit.export_csv(session, case_id, entity_id),
@@ -61,7 +77,9 @@ async def export_audit(
 
 
 @router.get("/webhooks", dependencies=[Depends(require_permission("webhook.view"))])
-async def list_webhooks(query: Annotated[WebhookLogListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[WebhookLogItem]:
+async def list_webhooks(
+    query: Annotated[WebhookLogListQuery, Query()], services: ServicesDep, session: SessionDep
+) -> Page[WebhookLogItem]:
     return await services.webhooks.list(session, query)
 
 
@@ -76,12 +94,16 @@ async def get_webhook(event_id: str, services: ServicesDep, session: SessionDep)
 
 
 @router.get("/handoff", dependencies=[Depends(require_permission("handoff.view"))])
-async def handoff(query: Annotated[HandoffQuery, Query()], services: ServicesDep, session: SessionDep) -> HandoffSummary:
+async def handoff(
+    query: Annotated[HandoffQuery, Query()], services: ServicesDep, session: SessionDep
+) -> HandoffSummary:
     return await services.handoff.summary(session, query.hours)
 
 
 @router.get("/views")
-async def list_views(user: Annotated[SessionUser, Depends(require_permission("view.manage"))], services: ServicesDep, session: SessionDep) -> Page[SavedViewItem]:
+async def list_views(
+    user: Annotated[SessionUser, Depends(require_permission("view.manage"))], services: ServicesDep, session: SessionDep
+) -> Page[SavedViewItem]:
     items = await services.views.list(session, user.id)
     return Page[SavedViewItem](items=items, next_cursor=None, total=len(items))
 

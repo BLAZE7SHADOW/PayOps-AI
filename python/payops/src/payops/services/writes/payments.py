@@ -23,7 +23,9 @@ class PaymentWriteService:
             raise not_found("Payment", payment_id)
         return row
 
-    async def set_status(self, session: AsyncSession, payment_id: str, status: str, reason: str, ctx: WriteContext) -> Payment | None:
+    async def set_status(
+        self, session: AsyncSession, payment_id: str, status: str, reason: str, ctx: WriteContext
+    ) -> Payment | None:
         """Mirrors a gateway status onto our payment. A no-op (returns None) when already equal."""
         row = await self._lock(session, payment_id)
         if row.status == status:
@@ -35,8 +37,13 @@ class PaymentWriteService:
         await self._audit.record(
             session,
             audit_from(
-                ctx, action="payment.status_changed", entity_type="payment", entity_id=payment_id,
-                summary=f"Internal payment {payment_id} moved {previous} to {status}: {reason}", before={"status": previous}, after={"status": status},
+                ctx,
+                action="payment.status_changed",
+                entity_type="payment",
+                entity_id=payment_id,
+                summary=f"Internal payment {payment_id} moved {previous} to {status}: {reason}",
+                before={"status": previous},
+                after={"status": status},
             ),
         )
         return row
@@ -52,8 +59,13 @@ class PaymentWriteService:
         await self._audit.record(
             session,
             audit_from(
-                ctx, action="payment.held", entity_type="payment", entity_id=payment_id,
-                summary=f"Payment {payment_id} ({format_money(row.amount_minor)}) put on hold: {reason}", before={"hold": False}, after={"hold": True},
+                ctx,
+                action="payment.held",
+                entity_type="payment",
+                entity_id=payment_id,
+                summary=f"Payment {payment_id} ({format_money(row.amount_minor)}) put on hold: {reason}",
+                before={"hold": False},
+                after={"hold": True},
             ),
         )
         return row

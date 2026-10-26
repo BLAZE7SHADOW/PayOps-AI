@@ -1,4 +1,5 @@
-"""Shared state while one scenario is written: the transaction, the seeded id generator, the clock's "now", and what has been created so far."""
+"""Shared state while one scenario is written: the transaction, the seeded id generator, the clock's "now", and what has
+been created so far."""
 
 from __future__ import annotations
 
@@ -58,8 +59,8 @@ class ScenarioContext:
         self._pending.append(line)
 
     async def flush_settlements(self) -> None:
-        """Writes the gateway settlement file (one batch per group and merchant) and our internal settlement record. The gateway settles T+1 after the last
-        capture in the batch."""
+        """Writes the gateway settlement file (one batch per group and merchant) and our internal settlement record. The
+        gateway settles T+1 after the last capture in the batch."""
         groups: dict[str, list[PendingLine]] = {}
         for line in self._pending:
             groups.setdefault(f"{line.group}|{line.merchant.id}", []).append(line)
@@ -75,15 +76,31 @@ class ScenarioContext:
                 reported_net += net
                 self.tx.add(
                     GwSettlementLine(
-                        id=self.ids.next("settlementLine"), batch_id=batch_id, merchant_id=merchant.id, gw_payment_id=line.gw_payment_id, gross_minor=line.gross_minor,
-                        fee_minor=fee, tax_minor=tax, net_minor=net, line_no=i + 1, settled_on=settled_on, created_at=settled_on,
+                        id=self.ids.next("settlementLine"),
+                        batch_id=batch_id,
+                        merchant_id=merchant.id,
+                        gw_payment_id=line.gw_payment_id,
+                        gross_minor=line.gross_minor,
+                        fee_minor=fee,
+                        tax_minor=tax,
+                        net_minor=net,
+                        line_no=i + 1,
+                        settled_on=settled_on,
+                        created_at=settled_on,
                     )
                 )
             await self.tx.flush()
             self.tx.add(
                 Settlement(
-                    id=batch_id, merchant_id=merchant.id, settled_on=settled_on, payment_ids=[line.payment_id for line in lines if line.payment_id is not None],
-                    expected_net_minor=expected_net, reported_net_minor=reported_net, status="PENDING", created_at=settled_on, updated_at=settled_on,
+                    id=batch_id,
+                    merchant_id=merchant.id,
+                    settled_on=settled_on,
+                    payment_ids=[line.payment_id for line in lines if line.payment_id is not None],
+                    expected_net_minor=expected_net,
+                    reported_net_minor=reported_net,
+                    status="PENDING",
+                    created_at=settled_on,
+                    updated_at=settled_on,
                 )
             )
             await self.tx.flush()

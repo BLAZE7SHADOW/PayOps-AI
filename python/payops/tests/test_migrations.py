@@ -11,7 +11,9 @@ from tests.conftest import _with_database
 
 async def test_a_new_database_gets_every_table_and_the_audit_triggers(engine: AsyncEngine) -> None:
     async with engine.connect() as conn:
-        tables = (await conn.execute(text("select count(*) from information_schema.tables where table_schema = 'public'"))).scalar()
+        tables = (
+            await conn.execute(text("select count(*) from information_schema.tables where table_schema = 'public'"))
+        ).scalar()
         triggers = {r[0] for r in await conn.execute(text("select tgname from pg_trigger where not tgisinternal"))}
         revision = (await conn.execute(text("select version_num from alembic_version"))).scalar()
     assert tables == 39  # the 34 application tables, alembic_version and the 4 job queue tables
@@ -21,10 +23,12 @@ async def test_a_new_database_gets_every_table_and_the_audit_triggers(engine: As
 
 async def test_the_audit_log_cannot_be_edited_or_deleted(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
-        await conn.execute(text(
-            "insert into audit_events (id, actor_type, actor_id, actor_name, action, entity_type, entity_id, summary, seq, prev_hash, hash) "
-            "values ('aud_1', 'SYSTEM', 'x', 'X', 'test', 'system', 'e', 'first', 1, '', 'h1')"
-        ))
+        await conn.execute(
+            text(
+                "insert into audit_events (id, actor_type, actor_id, actor_name, action, entity_type, entity_id, summary, seq, prev_hash, hash) "
+                "values ('aud_1', 'SYSTEM', 'x', 'X', 'test', 'system', 'e', 'first', 1, '', 'h1')"
+            )
+        )
     for statement in ("update audit_events set summary = 'changed'", "delete from audit_events"):
         with pytest.raises(DBAPIError, match="append-only"):
             async with engine.begin() as conn:

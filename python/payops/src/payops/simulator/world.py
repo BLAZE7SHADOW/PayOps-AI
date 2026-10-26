@@ -1,5 +1,5 @@
-"""Base data every scenario draws from: merchants with fee contracts, customers and their devices. Ids come from a fixed seed, and inserts use ON CONFLICT
-DO NOTHING, so seeding is idempotent."""
+"""Base data every scenario draws from: merchants with fee contracts, customers and their devices. Ids come from a fixed
+seed, and inserts use ON CONFLICT DO NOTHING, so seeding is idempotent."""
 
 from __future__ import annotations
 
@@ -50,7 +50,11 @@ class _CustomerRow:
     fingerprint: str
 
 
-_MERCHANTS = (("kavya", "Kavya Electronics", 200), ("northwind", "Northwind Grocers", 180), ("tandem", "Tandem Travel", 220))
+_MERCHANTS = (
+    ("kavya", "Kavya Electronics", 200),
+    ("northwind", "Northwind Grocers", 180),
+    ("tandem", "Tandem Travel", 220),
+)
 _CUSTOMER_NAMES = (
     "Aarav Sharma", "Priya Iyer", "Rohan Mehta", "Ananya Reddy", "Vikram Nair", "Sneha Kulkarni", "Arjun Patel", "Kavya Menon", "Ishaan Gupta", "Meera Pillai",
     "Aditya Joshi", "Diya Banerjee", "Karthik Subramanian", "Neha Deshpande", "Rahul Verma", "Pooja Chatterjee", "Siddharth Rao", "Tanvi Shetty", "Nikhil Agarwal",
@@ -60,9 +64,12 @@ _EMAIL_DOMAINS = ("gmail.com", "outlook.com", "yahoo.co.in", "rediffmail.com")
 
 
 def _build_world() -> tuple[World, list[_CustomerRow]]:
-    """The world's ids and names are a pure function of the fixed seed. The order of every call on the generator matters: it is the TypeScript order."""
+    """The world's ids and names are a pure function of the fixed seed. The order of every call on the generator
+    matters: it is the TypeScript order."""
     gen = seeded_ids("world")
-    merchants = {key: WorldMerchant(key, gen.next("merchant"), name, fee_bps, 1800, 0) for key, name, fee_bps in _MERCHANTS}
+    merchants = {
+        key: WorldMerchant(key, gen.next("merchant"), name, fee_bps, 1800, 0) for key, name, fee_bps in _MERCHANTS
+    }
     rows: list[_CustomerRow] = []
     for name in _CUSTOMER_NAMES:
         first, last = name.lower().split(" ")
@@ -90,8 +97,14 @@ async def seed_world(session: AsyncSession, now: datetime) -> World:
         .values(
             [
                 {
-                    "id": m.id, "name": m.name, "fee_bps": m.fee_bps, "fee_fixed_minor": m.fee_fixed_minor, "tax_bps": m.tax_bps, "settlement_cycle_days": 1,
-                    "created_at": at(1200), "updated_at": at(1200),
+                    "id": m.id,
+                    "name": m.name,
+                    "fee_bps": m.fee_bps,
+                    "fee_fixed_minor": m.fee_fixed_minor,
+                    "tax_bps": m.tax_bps,
+                    "settlement_cycle_days": 1,
+                    "created_at": at(1200),
+                    "updated_at": at(1200),
                 }
                 for m in WORLD.merchants.values()
             ]
@@ -103,8 +116,13 @@ async def seed_world(session: AsyncSession, now: datetime) -> World:
         .values(
             [
                 {
-                    "id": c.id, "name": c.name, "email_masked": mask_email(c.email), "phone_masked": mask_phone(c.phone), "risk_flags": [],
-                    "created_at": at(c.age_days), "updated_at": at(c.age_days),
+                    "id": c.id,
+                    "name": c.name,
+                    "email_masked": mask_email(c.email),
+                    "phone_masked": mask_phone(c.phone),
+                    "risk_flags": [],
+                    "created_at": at(c.age_days),
+                    "updated_at": at(c.age_days),
                 }
                 for c in _ROWS
             ]
@@ -113,7 +131,18 @@ async def seed_world(session: AsyncSession, now: datetime) -> World:
     )
     await session.execute(
         pg_insert(Device)
-        .values([{"id": c.device_id, "customer_id": c.id, "fingerprint": c.fingerprint, "ip_country": "IN", "first_seen_at": at(c.age_days)} for c in _ROWS])
+        .values(
+            [
+                {
+                    "id": c.device_id,
+                    "customer_id": c.id,
+                    "fingerprint": c.fingerprint,
+                    "ip_country": "IN",
+                    "first_seen_at": at(c.age_days),
+                }
+                for c in _ROWS
+            ]
+        )
         .on_conflict_do_nothing()
     )
     return WORLD

@@ -93,14 +93,22 @@ def test_otpauth_link_matches_typescript() -> None:
 def test_a_session_cookie_made_by_typescript_is_accepted_here() -> None:
     claims = verify_session(V["sessionToken"], CONFIG, _issued(V["sessionToken"]))
     assert claims is not None
-    assert (claims.user_id, claims.role, claims.session_id, claims.name, claims.email) == ("usr_1", "OPS", "ses_abc", "Ananya Rao", "ops@payops.dev")
+    assert (claims.user_id, claims.role, claims.session_id, claims.name, claims.email) == (
+        "usr_1",
+        "OPS",
+        "ses_abc",
+        "Ananya Rao",
+        "ops@payops.dev",
+    )
 
 
 def test_a_session_cookie_made_here_has_the_same_claims() -> None:
     now = datetime.now(UTC)
     token = sign_session("usr_1", "OPS", "Ananya Rao", "ops@payops.dev", "ses_abc", CONFIG, now)
     mine = jwt.decode(token, CONFIG.key, algorithms=["HS256"], issuer="payops")
-    theirs = jwt.decode(V["sessionToken"], CONFIG.key, algorithms=["HS256"], issuer="payops", options={"verify_exp": False})
+    theirs = jwt.decode(
+        V["sessionToken"], CONFIG.key, algorithms=["HS256"], issuer="payops", options={"verify_exp": False}
+    )
     assert set(mine) == set(theirs) and mine["exp"] - mine["iat"] == theirs["exp"] - theirs["iat"] == 8 * 3600
     assert jwt.get_unverified_header(token) == jwt.get_unverified_header(V["sessionToken"])
 
@@ -109,21 +117,30 @@ def test_expired_forged_and_garbage_cookies_are_refused() -> None:
     issued = _issued(V["sessionToken"])
     late = datetime.fromtimestamp(issued.timestamp() + 8 * 3600 + 1, tz=UTC)
     assert verify_session(V["sessionToken"], CONFIG, late) is None
-    assert verify_session(V["sessionToken"], SessionConfig("another-secret-that-is-long-enough-123", False), issued) is None
+    assert (
+        verify_session(V["sessionToken"], SessionConfig("another-secret-that-is-long-enough-123", False), issued)
+        is None
+    )
     assert verify_session("garbage", CONFIG) is None and verify_session(None, CONFIG) is None
-    assert verify_session(V["challengeToken"], CONFIG, issued) is None  # a challenge has no session id, so it is not a cookie
+    assert (
+        verify_session(V["challengeToken"], CONFIG, issued) is None
+    )  # a challenge has no session id, so it is not a cookie
 
 
 def test_mfa_challenge_round_trip_and_it_is_not_a_session() -> None:
     issued = _issued(V["challengeToken"])
     assert verify_mfa_challenge(V["challengeToken"], CONFIG, issued) == "usr_1"
-    assert verify_mfa_challenge(V["sessionToken"], CONFIG, _issued(V["sessionToken"])) is None  # a session cookie is not a challenge
+    assert (
+        verify_mfa_challenge(V["sessionToken"], CONFIG, _issued(V["sessionToken"])) is None
+    )  # a session cookie is not a challenge
     mine = sign_mfa_challenge("usr_9", CONFIG, issued)
     assert verify_mfa_challenge(mine, CONFIG, issued) == "usr_9"
     assert verify_mfa_challenge(mine, CONFIG, datetime.fromtimestamp(issued.timestamp() + 301, tz=UTC)) is None
 
 
 def test_demo_user_ids_match_the_ones_already_in_the_database() -> None:
-    dump = json.loads(__import__("gzip").open(Path(__file__).parent / "contract" / "db.json.gz").read())["tables"]["users"]
+    dump = json.loads(__import__("gzip").open(Path(__file__).parent / "contract" / "db.json.gz").read())["tables"][
+        "users"
+    ]
     stored = {u["email"]: u["id"] for u in dump}
     assert {a.email: DEMO_IDS[a.email] for a in DEMO_ACCOUNTS} == stored

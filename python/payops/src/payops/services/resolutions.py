@@ -1,5 +1,6 @@
-"""Read side of resolutions: builds ResolutionItem DTOs (with approval, execution steps and the latest validation) and the case page's
-resolution view. Batched: a constant number of queries however many resolutions are shown. (packages/core resolution-query.service.ts)"""
+"""Read side of resolutions: builds ResolutionItem DTOs (with approval, execution steps and the latest validation) and
+the case page's resolution view. Batched: a constant number of queries however many resolutions are shown.
+(packages/core resolution-query.service.ts)"""
 
 from __future__ import annotations
 
@@ -43,7 +44,9 @@ def to_approval_summary(a: Approval) -> ApprovalSummary:
 
 
 def to_validation_dto(v: ValidationResult) -> ValidationResultDto:
-    return ValidationResultDto.model_validate({"id": v.id, "verdict": v.verdict, "checks": v.checks, "at": to_iso(v.at)})
+    return ValidationResultDto.model_validate(
+        {"id": v.id, "verdict": v.verdict, "checks": v.checks, "at": to_iso(v.at)}
+    )
 
 
 def to_execution_steps(resolution: Resolution, rows: Sequence[Execution]) -> list[ExecutionStep]:
@@ -106,7 +109,13 @@ class ResolutionQueryService:
         ids = [r.id for r in rows]
         approvals = (await session.scalars(select(Approval).where(Approval.resolution_id.in_(ids)))).all()
         executions = (await session.scalars(select(Execution).where(Execution.resolution_id.in_(ids)))).all()
-        validations = (await session.scalars(select(ValidationResult).where(ValidationResult.resolution_id.in_(ids)).order_by(desc(ValidationResult.at)))).all()
+        validations = (
+            await session.scalars(
+                select(ValidationResult)
+                .where(ValidationResult.resolution_id.in_(ids))
+                .order_by(desc(ValidationResult.at))
+            )
+        ).all()
         approval_by = {a.resolution_id: a for a in approvals}
         latest_validation: dict[str, ValidationResult] = {}
         for v in validations:
@@ -138,19 +147,32 @@ class ResolutionQueryService:
         """Newest first."""
         return list(
             (
-                await session.scalars(select(Resolution).where(Resolution.case_id == case_id).order_by(desc(Resolution.created_at), desc(Resolution.attempt)))
+                await session.scalars(
+                    select(Resolution)
+                    .where(Resolution.case_id == case_id)
+                    .order_by(desc(Resolution.created_at), desc(Resolution.attempt))
+                )
             ).all()
         )
 
     async def pending_approval(self, session: AsyncSession, case_id: str) -> Approval | None:
-        return (await session.scalars(select(Approval).where(and_(Approval.case_id == case_id, Approval.status == "PENDING")).limit(1))).first()
+        return (
+            await session.scalars(
+                select(Approval).where(and_(Approval.case_id == case_id, Approval.status == "PENDING")).limit(1)
+            )
+        ).first()
 
     @staticmethod
     def history(items: Sequence[ResolutionItem]) -> list[AttemptHistory]:
-        return [AttemptHistory([a["type"] for a in i.actions], i.status, i.validation.verdict if i.validation else None) for i in items]
+        return [
+            AttemptHistory([a["type"] for a in i.actions], i.status, i.validation.verdict if i.validation else None)
+            for i in items
+        ]
 
     @staticmethod
-    def cannot_propose_reason(case: Case, items: Sequence[ResolutionItem], pending: Approval | None, viewer: SessionUser | None) -> str | None:
+    def cannot_propose_reason(
+        case: Case, items: Sequence[ResolutionItem], pending: Approval | None, viewer: SessionUser | None
+    ) -> str | None:
         """Why the viewer cannot propose now, or None if they can."""
         if viewer is None:
             return "Sign in to propose a resolution."

@@ -27,8 +27,9 @@ def build_close_nodes(ctx: NodeContext) -> dict[str, Node]:
         return {"status": "REJECTED"}
 
     async def close_escalated(state: State) -> Update:
-        """After a validated attempt that `replan` gave up on the resolution is still open, so it is closed here. After a
-        budget-guard trip before `policyGate` there is no resolution, so only the case is escalated. Other routes already closed everything."""
+        """After a validated attempt that `replan` gave up on the resolution is still open, so it is closed here. After
+        a budget-guard trip before `policyGate` there is no resolution, so only the case is escalated. Other routes
+        already closed everything."""
         validation = state.get("validation")
         if validation:
             await api.close_validated(state["caseId"], state["runId"], state["resolutionId"], validation["verdict"])  # type: ignore[arg-type]

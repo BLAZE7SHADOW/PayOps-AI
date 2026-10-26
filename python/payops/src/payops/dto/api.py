@@ -150,7 +150,8 @@ class OverviewMetrics(CamelModel):
     awaiting_approval: int
     resolved7d: int = Field(alias="resolved7d")
     resolved_by_agent7d: int = Field(alias="resolvedByAgent7d")
-    #: Validator verdicts recorded in the last 7 days (one row per verification, so a replanned case counts each attempt).
+    #: Validator verdicts recorded in the last 7 days (one row per verification, so a replanned case counts each
+    #: attempt).
     validator_outcomes7d: dict[str, int] = Field(alias="validatorOutcomes7d")
     exceptions_by_type: list[dict[str, Any]]
     oldest_open: list[CaseListItem]

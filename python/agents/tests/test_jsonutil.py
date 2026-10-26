@@ -37,7 +37,10 @@ def test_hashes_match_the_typescript_implementation() -> None:
     )
     messages = [{"role": "system", "content": 'a "quoted" line\nnext — dash ₹'}, {"role": "user", "content": "u"}]
     assert stable_hash(messages) == "327bacd92c9f583e6b25781b5fe2e28e6617e2ff8d777374c37564446abc0926"
-    request = {"state": {"n": 1e21, "m": 1.5e-7, "k": 100, "f": 0.1}, "questions": {"q": {"type": "noul", "instructions": "Is it?"}}}
+    request = {
+        "state": {"n": 1e21, "m": 1.5e-7, "k": 100, "f": 0.1},
+        "questions": {"q": {"type": "noul", "instructions": "Is it?"}},
+    }
     assert stable_hash(request) == "c833f562c71723c9fd953b25a25a4b9181e1a627924962f7a421f581387c3b74"
     assert cassette_key("J6_DIAGNOSE", 0, "abc") == "41f944390796f24be8d755e4"
 

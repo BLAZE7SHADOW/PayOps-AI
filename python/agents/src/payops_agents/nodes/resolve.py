@@ -1,7 +1,9 @@
-"""`resolve`: diagnose (full path) or write the template narrative (fast path), let code check the cause, build the proposal."""
+"""`resolve`: diagnose (full path) or write the template narrative (fast path), let code check the cause, build the
+proposal."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ..budget import zero_budget
@@ -12,6 +14,7 @@ from ..narratives import narrative_for
 from ..ports import LlmCallMeta
 from ..runids import next_finding_id
 from ..schemas import DiagnosisSchema
+from ..shapes import Evidence
 from ..tools_catalog import FOLLOWUP_TOOLS
 from .shared import Node, NodeContext, State, Update, evidence_from
 
@@ -19,7 +22,7 @@ from .shared import Node, NodeContext, State, Update, evidence_from
 def _apply_reconciliation(
     diagnosis: dict[str, Any],
     reconciliation: dict[str, Any],
-    evidence: list[dict[str, Any]],
+    evidence: Sequence[Evidence],
     existing_findings: list[dict[str, Any]],
     out: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -28,8 +31,12 @@ def _apply_reconciliation(
     if reconciliation["kind"] == "REPLACE":
         replaced = narrative_for(reconciliation["rootCause"], evidence)
         finding = {
-            "id": next_finding_id(existing_findings), "agent": "payment", "code": "OTHER",
-            "statement": replaced["text"], "evidenceIds": replaced["citedIds"], "confidence": CODE_OVERRIDE_CONFIDENCE,
+            "id": next_finding_id(existing_findings),
+            "agent": "payment",
+            "code": "OTHER",
+            "statement": replaced["text"],
+            "evidenceIds": replaced["citedIds"],
+            "confidence": CODE_OVERRIDE_CONFIDENCE,
         }
         out.append(finding)
         return {
@@ -42,8 +49,17 @@ def _apply_reconciliation(
     if reconciliation["kind"] == "ESCALATE":
         unknown = narrative_for("UNKNOWN", evidence)
         candidates = reconciliation["candidates"]
-        options = f" Causes the evidence supports: {', '.join(candidates)}." if candidates else " The evidence supports no known cause."
-        return {**diagnosis, "rootCause": "UNKNOWN", "narrative": f"{unknown['text']} {reconciliation['reason']}{options}", "supportingFindingIds": []}
+        options = (
+            f" Causes the evidence supports: {', '.join(candidates)}."
+            if candidates
+            else " The evidence supports no known cause."
+        )
+        return {
+            **diagnosis,
+            "rootCause": "UNKNOWN",
+            "narrative": f"{unknown['text']} {reconciliation['reason']}{options}",
+            "supportingFindingIds": [],
+        }
     return diagnosis
 
 
@@ -63,11 +79,15 @@ def build_resolve_node(ctx: NodeContext) -> dict[str, Node]:
 
         if not diagnosis:
             grounded = surviving_findings(state_findings, grounding["violations"] if grounding else None)
-            context = build_resolve_context(brief, grounded, len(evidence), state.get("risk"), grounding, state.get("history", []))
+            context = build_resolve_context(
+                brief, grounded, len(evidence), state.get("risk"), grounding, state.get("history", [])
+            )
             # No diagnosis can be built without the model, and no resolution exists yet, so the case itself is escalated
             # (the same route as a budget-guard trip).
             try:
-                result = await llm.invoke_structured(DiagnosisSchema, context.messages, LlmCallMeta("resolve", 0, state.get("scenarioKey")))
+                result = await llm.invoke_structured(
+                    DiagnosisSchema, context.messages, LlmCallMeta("resolve", 0, state.get("scenarioKey"))
+                )
             except Exception as err:  # noqa: BLE001
                 message = f"Gemini call failed while diagnosing the case: {err}"
                 await on_event("resolve", "NODE_COMPLETED", {"fallback": True, "error": message})
@@ -81,7 +101,8 @@ def build_resolve_node(ctx: NodeContext) -> dict[str, Node]:
                 "costUsd": estimate_call_cost_usd("gemini", result.input_tokens, result.output_tokens),
             }
             await on_event(
-                "resolve", "LLM_CALLED",
+                "resolve",
+                "LLM_CALLED",
                 {
                     "call": "diagnosis",
                     "diagnosis": diagnosis,
@@ -94,25 +115,44 @@ def build_resolve_node(ctx: NodeContext) -> dict[str, Node]:
             # Fast path: a code template writes the narrative, no model call.
             narrative = narrative_for(diagnosis["rootCause"], evidence)
             finding = {
-                "id": next_finding_id(state_findings), "agent": "payment", "code": "OTHER", "statement": narrative["text"],
-                "evidenceIds": narrative["citedIds"], "confidence": diagnosis["confidence"],
+                "id": next_finding_id(state_findings),
+                "agent": "payment",
+                "code": "OTHER",
+                "statement": narrative["text"],
+                "evidenceIds": narrative["citedIds"],
+                "confidence": diagnosis["confidence"],
             }
             findings.append(finding)
             diagnosis = {**diagnosis, "narrative": narrative["text"], "supportingFindingIds": [finding["id"]]}
             await on_event("resolve", "FINDING_CREATED", {"findingIds": [finding["id"]]})
 
-        # Code checks the stated cause against the evidence (D063, D064). The settlement checks need getFeeBreakdown, which
+        # Code checks the stated cause against the evidence (D063, D064). The settlement checks need getFeeBreakdown,
+        # which
         # the model may not have asked for, so code fetches it rather than read a missing lookup as "no evidence".
-        missing = [t for t in FOLLOWUP_TOOLS if t.name == "getFeeBreakdown" and not any(e["source"] == t.name for e in evidence)]
+        missing = [
+            t
+            for t in FOLLOWUP_TOOLS
+            if t.name == "getFeeBreakdown" and not any(e["source"] == t.name for e in evidence)
+        ]
         top_up_results = await api.run_tools(state["caseId"], [t.name for t in missing]) if missing else []
         top_up = evidence_from(evidence, top_up_results, "resolve")
         checked_evidence = [*evidence, *top_up]
         reconciliation = reconcile_diagnosis(diagnosis["rootCause"], checked_evidence)
-        diagnosis = _apply_reconciliation(diagnosis, reconciliation, checked_evidence, [*state_findings, *findings], findings)
+        diagnosis = _apply_reconciliation(
+            diagnosis, reconciliation, checked_evidence, [*state_findings, *findings], findings
+        )
 
         proposal = await api.proposal(state["caseId"], diagnosis, state.get("history", []))
-        await on_event("resolve", "PROPOSAL_CREATED", {"diagnosis": diagnosis, "proposal": proposal, "rootCauseCheck": reconciliation})
+        await on_event(
+            "resolve",
+            "PROPOSAL_CREATED",
+            {"diagnosis": diagnosis, "proposal": proposal, "rootCauseCheck": reconciliation},
+        )
         await on_event("resolve", "NODE_COMPLETED", {})
-        return await guard_budget("resolve", state, {"diagnosis": diagnosis, "proposal": proposal, "findings": findings, "budget": budget, "evidence": top_up})
+        return await guard_budget(
+            "resolve",
+            state,
+            {"diagnosis": diagnosis, "proposal": proposal, "findings": findings, "budget": budget, "evidence": top_up},
+        )
 
     return {"resolve": resolve}

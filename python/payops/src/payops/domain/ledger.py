@@ -33,7 +33,11 @@ def summarize_journals(entries: Sequence[LedgerEntry]) -> list[JournalSummary]:
         first = legs[0]
         kind = "REVERSAL" if first.reversal_of else "REFUND" if first.refund_id else "CAPTURE"
         reverser = next((reversed_by[leg.id] for leg in legs if leg.id in reversed_by), None)
-        out.append(JournalSummary(journal_id, kind, first.amount_minor, first.posted_at, first.source, first.memo, legs, reverser))
+        out.append(
+            JournalSummary(
+                journal_id, kind, first.amount_minor, first.posted_at, first.source, first.memo, legs, reverser
+            )
+        )
     return out
 
 

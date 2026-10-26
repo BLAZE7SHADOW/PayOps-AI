@@ -1,0 +1,58 @@
+# Runs the golden scenarios against the REAL Gemini and Jev (billed, a few cents). Never on a push or pull request.
+# Start it by hand (Actions > Live evals > Run workflow) or let the weekly schedule run it.
+# One-time setup: add the repository secrets GEMINI_API_KEY and TYPESAFE_JEV_API_KEY (Settings > Secrets and variables > Actions).
+# Optional repository variables AI_MODEL and JEV_MODEL pin the models; the defaults in the code are used otherwise.
+name: Live evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated scenario names to run (empty runs all model-driven scenarios)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-eval
+  cancel-in-progress: false
+
+jobs:
+  live-eval:
+    name: Golden scenarios against the live providers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: python/payops
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/payops/uv.lock
+      - run: uv sync --frozen
+      - name: Run the live evals
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TYPESAFE_JEV_API_KEY: ${{ secrets.TYPESAFE_JEV_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          JEV_MODEL: ${{ vars.JEV_MODEL }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ] || [ -z "$TYPESAFE_JEV_API_KEY" ]; then
+            echo "::notice::Live evals skipped: add the GEMINI_API_KEY and TYPESAFE_JEV_API_KEY repository secrets to enable them."
+            exit 0
+          fi
+          uv run python -m payops.evals.live --report live-eval-report.json ${ONLY:+--only "$ONLY"}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-eval-report
+          path: python/payops/live-eval-report.json
+          if-no-files-found: ignore
+          retention-days: 90

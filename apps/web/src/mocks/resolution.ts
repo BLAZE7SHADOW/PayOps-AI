@@ -1,7 +1,7 @@
 /**
  * DEV-ONLY stand-in for Phase 2 core: demo users, action options, a small policy engine,
  * execution and validation. It mirrors the contract in packages/shared (dto/resolution.ts) so the
- * UI can be built and screenshotted without the server. The real rules live in packages/core.
+ * UI can be built and screenshotted without the server. The real rules live in Python domain code.
  */
 import {
   ACTION_META,

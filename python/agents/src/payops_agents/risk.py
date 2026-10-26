@@ -1,11 +1,13 @@
-"""J3 risk composite: signals, buckets, weights and the rules-only fallback (packages/agents risk.ts, risk.weights.ts)."""
+"""J3 risk composite: signals, buckets, weights and the rules-only fallback (packages/agents risk.ts,
+risk.weights.ts)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .constants import RISK_TIERS_AGENT
+from .shapes import Evidence
 
 RISK_WEIGHTS = {"velocity_abuse": 0.3, "identity_mismatch": 0.25, "chargeback_pattern": 0.25, "merchant_exposure": 0.2}
 
@@ -29,7 +31,7 @@ def combine_risk_scores(scores: Mapping[str, float], mean_confidence: float) -> 
     return {"tier": tier, "scores": scores, "meanConfidence": mean_confidence}
 
 
-def _facts_of(evidence: list[dict[str, Any]], source: str) -> dict[str, Any]:
+def _facts_of(evidence: Sequence[Evidence], source: str) -> dict[str, Any]:
     return next((e["facts"] for e in evidence if e["source"] == source), {})
 
 
@@ -45,7 +47,7 @@ def _number(value: Any, default: float) -> float:
         return float("nan")
 
 
-def extract_risk_signals(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+def extract_risk_signals(evidence: Sequence[Evidence]) -> dict[str, Any]:
     history = _facts_of(evidence, "getCustomerHistory")
     device = _facts_of(evidence, "getDeviceSignals")
     attempts = _facts_of(evidence, "getFailedAttempts")
@@ -90,7 +92,9 @@ def bucket_risk_signals(s: dict[str, Any]) -> dict[str, Any]:
     flag_count = int(flags)
     return {
         "account_age": account_age,
-        "failed_attempts_24h_bucket": _count_bucket(s["failed24h"], [(0, "0"), (2, "1-2"), (5, "3-5"), (10, "6-10")], "10+"),
+        "failed_attempts_24h_bucket": _count_bucket(
+            s["failed24h"], [(0, "0"), (2, "1-2"), (5, "3-5"), (10, "6-10")], "10+"
+        ),
         "card_countries": f"{int(s['cardCountriesDistinct'])} distinct",
         "device_count": f"{int(s['deviceCount'])} distinct",
         "ip_card_country_mismatch": s["ipCardCountryMismatch"],

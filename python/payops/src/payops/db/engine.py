@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from ..settings import Settings, sqlalchemy_url
 
 
-def create_engine(settings: Settings | None = None, *, url: str | None = None, pool_size: int | None = None) -> AsyncEngine:
+def create_engine(
+    settings: Settings | None = None, *, url: str | None = None, pool_size: int | None = None
+) -> AsyncEngine:
     resolved = url or (settings.sqlalchemy_url if settings else None)
     if resolved is None:
         raise ValueError("pass settings or a url")

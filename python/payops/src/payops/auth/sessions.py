@@ -1,5 +1,6 @@
-"""Server-side record of every signed-in browser. The cookie holds a signed JWT with a session id; a request is only accepted while that row exists, is not
-revoked and has not expired. That is what makes "sign out everywhere" and "revoke this device" work, which a JWT alone cannot."""
+"""Server-side record of every signed-in browser. The cookie holds a signed JWT with a session id; a request is only
+accepted while that row exists, is not revoked and has not expired. That is what makes "sign out everywhere" and "revoke
+this device" work, which a JWT alone cannot."""
 
 from __future__ import annotations
 
@@ -48,22 +49,36 @@ class SessionStore:
         session_id = f"ses_{uuid.uuid4()}"
         session.add(
             Session(
-                id=session_id, user_id=user_id, created_at=now, last_seen_at=now, expires_at=session_expiry(now), ip=ip[:64], user_agent=user_agent[:300],
-                mfa_verified=mfa_verified, revoked_at=None,
+                id=session_id,
+                user_id=user_id,
+                created_at=now,
+                last_seen_at=now,
+                expires_at=session_expiry(now),
+                ip=ip[:64],
+                user_agent=user_agent[:300],
+                mfa_verified=mfa_verified,
+                revoked_at=None,
             )
         )
         await session.flush()
         return session_id
 
     async def resolve(self, session: AsyncSession, session_id: str, user_id: str) -> ActiveSession | None:
-        """The session and its user as they are now (role and name come from the users table, so a role change applies at once), or None if it is unknown,
-        revoked, expired or belongs to someone else."""
+        """The session and its user as they are now (role and name come from the users table, so a role change applies
+        at once), or None if it is unknown, revoked, expired or belongs to someone else."""
         now = self._clock.now()
         row = (
             await session.execute(
                 select(Session, User)
                 .join(User, User.id == Session.user_id)
-                .where(and_(Session.id == session_id, Session.user_id == user_id, Session.revoked_at.is_(None), Session.expires_at > now))
+                .where(
+                    and_(
+                        Session.id == session_id,
+                        Session.user_id == user_id,
+                        Session.revoked_at.is_(None),
+                        Session.expires_at > now,
+                    )
+                )
             )
         ).first()
         if row is None:
@@ -78,8 +93,14 @@ class SessionStore:
         rows = (await session.scalars(select(Session).where(live).order_by(Session.created_at))).all()
         return [
             {
-                "id": r.id, "createdAt": to_iso(r.created_at), "lastSeenAt": to_iso(r.last_seen_at), "expiresAt": to_iso(r.expires_at), "ip": r.ip,
-                "userAgent": r.user_agent, "mfaVerified": r.mfa_verified, "current": r.id == current_id,
+                "id": r.id,
+                "createdAt": to_iso(r.created_at),
+                "lastSeenAt": to_iso(r.last_seen_at),
+                "expiresAt": to_iso(r.expires_at),
+                "ip": r.ip,
+                "userAgent": r.user_agent,
+                "mfaVerified": r.mfa_verified,
+                "current": r.id == current_id,
             }
             for r in rows
         ]
@@ -92,7 +113,10 @@ class SessionStore:
         """True if a live session was revoked."""
         rows = (
             await session.execute(
-                update(Session).where(Session.id == session_id, Session.revoked_at.is_(None)).values(revoked_at=self._clock.now()).returning(Session.id)
+                update(Session)
+                .where(Session.id == session_id, Session.revoked_at.is_(None))
+                .values(revoked_at=self._clock.now())
+                .returning(Session.id)
             )
         ).all()
         self._notify_revoked([r[0] for r in rows])
@@ -103,6 +127,10 @@ class SessionStore:
         conditions = [Session.user_id == user_id, Session.revoked_at.is_(None)]
         if keep_id:
             conditions.append(Session.id != keep_id)
-        rows = (await session.execute(update(Session).where(*conditions).values(revoked_at=self._clock.now()).returning(Session.id))).all()
+        rows = (
+            await session.execute(
+                update(Session).where(*conditions).values(revoked_at=self._clock.now()).returning(Session.id)
+            )
+        ).all()
         self._notify_revoked([r[0] for r in rows])
         return len(rows)

@@ -1,5 +1,5 @@
-"""Sign-in and account security: password and demo sign-in, one-time codes, enrolment, session revocation. The routes only set and clear the cookie; every
-rule lives here. (apps/server routes/auth.ts)"""
+"""Sign-in and account security: password and demo sign-in, one-time codes, enrolment, session revocation. The routes
+only set and clear the cookie; every rule lives here. (apps/server routes/auth.ts)"""
 
 from __future__ import annotations
 
@@ -46,7 +46,13 @@ class MfaRequired:
 
 class AuthService:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], clock: Clock, audit: AuditService, store: SessionStore, limiter: RateLimiter, config: SessionConfig,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Clock,
+        audit: AuditService,
+        store: SessionStore,
+        limiter: RateLimiter,
+        config: SessionConfig,
         demo_mode: bool,
     ) -> None:
         self._sessions = sessions
@@ -62,8 +68,12 @@ class AuthService:
     def _session_user(u: User) -> dict[str, str]:
         return {"id": u.id, "email": u.email, "name": u.name, "role": u.role}
 
-    async def _start_session(self, s: AsyncSession, user: User, ip: str, user_agent: str, mfa_verified: bool) -> SignedIn:
-        session_id = await self._store.create(s, user_id=user.id, ip=ip, user_agent=user_agent, mfa_verified=mfa_verified)
+    async def _start_session(
+        self, s: AsyncSession, user: User, ip: str, user_agent: str, mfa_verified: bool
+    ) -> SignedIn:
+        session_id = await self._store.create(
+            s, user_id=user.id, ip=ip, user_agent=user_agent, mfa_verified=mfa_verified
+        )
         token = sign_session(user.id, user.role, user.name, user.email, session_id, self._config, self._clock.now())
         return SignedIn(token, self._session_user(user))
 
@@ -100,14 +110,22 @@ class AuthService:
         if not self._demo_mode:
             raise AppError("NOT_FOUND", "Demo sign-in is disabled")
         async with transaction(self._sessions) as s:
-            user = (await s.scalars(select(User).where(User.email == email))).one_or_none() if is_demo_email(email) else None
+            user = (
+                (await s.scalars(select(User).where(User.email == email))).one_or_none()
+                if is_demo_email(email)
+                else None
+            )
             if user is None:
                 raise AppError("UNAUTHENTICATED", "Not a demo account")
             # A demo account that turned MFA on is asked for its code like any other account.
             return await self._after_password(s, user, ip, user_agent)
 
     def demo_accounts(self) -> list[dict[str, str]]:
-        return [{"email": a.email, "name": a.name, "role": a.role, "label": a.label} for a in DEMO_ACCOUNTS] if self._demo_mode else []
+        return (
+            [{"email": a.email, "name": a.name, "role": a.role, "label": a.label} for a in DEMO_ACCOUNTS]
+            if self._demo_mode
+            else []
+        )
 
     async def logout(self, session_id: str | None) -> None:
         if session_id:
@@ -116,8 +134,9 @@ class AuthService:
 
     # ── One-time codes ───────────────────────────────────────────────────────
     async def _check_code(self, s: AsyncSession, user: User, code: str, *, pending: bool = False) -> bool:
-        """Checks a code against the user's seed. A code is accepted once: the step it matched is stored with a conditional update, so two requests racing with
-        the same code cannot both succeed. `pending` allows checking the seed of a setup that is not switched on yet."""
+        """Checks a code against the user's seed. A code is accepted once: the step it matched is stored with a
+        conditional update, so two requests racing with the same code cannot both succeed. `pending` allows checking the
+        seed of a setup that is not switched on yet."""
         if not user.totp_secret_sealed or (not pending and not user.totp_enabled_at):
             return False
         secret = open_secret(user.totp_secret_sealed, self._config.seal_key)
@@ -137,10 +156,13 @@ class AuthService:
         return bool(claimed)
 
     # ── Enrolment ────────────────────────────────────────────────────────────
-    async def security_overview(self, s: AsyncSession, user_id: str, role: str, current_session: str | None) -> SecurityOverview:
+    async def security_overview(
+        self, s: AsyncSession, user_id: str, role: str, current_session: str | None
+    ) -> SecurityOverview:
         user = await s.get(User, user_id)
         return SecurityOverview(
-            mfa_enabled=bool(user and user.totp_enabled_at), mfa_recommended=mfa_recommended_for(role),
+            mfa_enabled=bool(user and user.totp_enabled_at),
+            mfa_recommended=mfa_recommended_for(role),
             sessions=await self._store.list_active(s, user_id, current_session),
         )
 
@@ -170,7 +192,16 @@ class AuthService:
             # Other browsers signed in without a code are signed out now that a code is required.
             revoked = await self._store.revoke_all_for(s, user_id, keep_session)
             await self._audit.record(
-                s, AuditInput("USER", user_id, name, "auth.mfa_enabled", "user", user_id, f"{name} turned on MFA ({revoked} other sessions signed out)")
+                s,
+                AuditInput(
+                    "USER",
+                    user_id,
+                    name,
+                    "auth.mfa_enabled",
+                    "user",
+                    user_id,
+                    f"{name} turned on MFA ({revoked} other sessions signed out)",
+                ),
             )
         return {"mfaEnabled": True, "otherSessionsRevoked": revoked}
 
@@ -183,7 +214,9 @@ class AuthService:
             if not await self._check_code(s, user, code):
                 raise AppError("VALIDATION_FAILED", BAD_CODE)
             user.totp_secret_sealed = user.totp_enabled_at = user.totp_last_step = None
-            await self._audit.record(s, AuditInput("USER", user_id, name, "auth.mfa_disabled", "user", user_id, f"{name} turned off MFA"))
+            await self._audit.record(
+                s, AuditInput("USER", user_id, name, "auth.mfa_disabled", "user", user_id, f"{name} turned off MFA")
+            )
         return {"mfaEnabled": False}
 
     async def mfa_reset(self, admin_id: str, admin_name: str, target_id: str) -> dict[str, object]:
@@ -197,7 +230,13 @@ class AuthService:
             await self._audit.record(
                 s,
                 AuditInput(
-                    "USER", admin_id, admin_name, "auth.mfa_reset", "user", target_id, f"{admin_name} reset MFA for {target.name} ({revoked} sessions signed out)"
+                    "USER",
+                    admin_id,
+                    admin_name,
+                    "auth.mfa_reset",
+                    "user",
+                    target_id,
+                    f"{admin_name} reset MFA for {target.name} ({revoked} sessions signed out)",
                 ),
             )
         return {"mfaEnabled": False, "sessionsRevoked": revoked}
@@ -208,7 +247,16 @@ class AuthService:
             revoked = await self._store.revoke_all_for(s, user_id, current)
             if revoked > 0:
                 await self._audit.record(
-                    s, AuditInput("USER", user_id, name, "auth.sessions_revoked", "user", user_id, f"{name} signed out {revoked} other sessions")
+                    s,
+                    AuditInput(
+                        "USER",
+                        user_id,
+                        name,
+                        "auth.sessions_revoked",
+                        "user",
+                        user_id,
+                        f"{name} signed out {revoked} other sessions",
+                    ),
                 )
         return {"revoked": revoked}
 
@@ -220,8 +268,14 @@ class AuthService:
                 raise AppError("NOT_FOUND", "Session not found")
             revoked = await self._store.revoke(s, session_id)
             if revoked:
-                summary = f"{name} signed out a session" if owner == user_id else f"{name} signed out a session of another user"
-                await self._audit.record(s, AuditInput("USER", user_id, name, "auth.session_revoked", "user", owner, summary))
+                summary = (
+                    f"{name} signed out a session"
+                    if owner == user_id
+                    else f"{name} signed out a session of another user"
+                )
+                await self._audit.record(
+                    s, AuditInput("USER", user_id, name, "auth.session_revoked", "user", owner, summary)
+                )
         return revoked
 
     async def revoke_all_of_user(self, admin_id: str, admin_name: str, target_id: str) -> dict[str, int]:
@@ -231,6 +285,15 @@ class AuthService:
                 raise AppError("NOT_FOUND", "User not found")
             revoked = await self._store.revoke_all_for(s, target_id)
             await self._audit.record(
-                s, AuditInput("USER", admin_id, admin_name, "auth.sessions_revoked", "user", target_id, f"{admin_name} signed out {revoked} sessions of {target.name}")
+                s,
+                AuditInput(
+                    "USER",
+                    admin_id,
+                    admin_name,
+                    "auth.sessions_revoked",
+                    "user",
+                    target_id,
+                    f"{admin_name} signed out {revoked} sessions of {target.name}",
+                ),
             )
         return {"revoked": revoked}

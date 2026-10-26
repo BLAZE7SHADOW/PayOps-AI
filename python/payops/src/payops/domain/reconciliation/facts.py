@@ -1,5 +1,5 @@
-"""Small derived facts over an OrderSnapshot. Every rule and matrix cell is built from these, so "what counts as captured" or
-"what the contract fee is" is decided in exactly one place."""
+"""Small derived facts over an OrderSnapshot. Every rule and matrix cell is built from these, so "what counts as
+captured" or "what the contract fee is" is decided in exactly one place."""
 
 from __future__ import annotations
 
@@ -44,7 +44,8 @@ def captured_gw(s: HasGateway) -> list[GatewayPayment]:
 
 
 def held_captures(s: HasGateway) -> list[GatewayPayment]:
-    """Captured gateway payments still holding customer money (not fully refunded). A duplicate capture refunded in full no longer counts."""
+    """Captured gateway payments still holding customer money (not fully refunded). A duplicate capture refunded in full
+    no longer counts."""
     return [g for g in captured_gw(s) if g.amount_minor > g.refunded_minor]
 
 
@@ -74,7 +75,11 @@ def capture_credit_minor(s: HasLedger) -> int:
 
 def refund_posted_minor(s: HasLedger) -> int:
     """Refund money posted to the ledger (DEBIT MERCHANT_PAYABLE tagged with a refund)."""
-    return sum(e.amount_minor for e in s.ledger if e.account == "MERCHANT_PAYABLE" and e.refund_id is not None and e.direction == "DEBIT")
+    return sum(
+        e.amount_minor
+        for e in s.ledger
+        if e.account == "MERCHANT_PAYABLE" and e.refund_id is not None and e.direction == "DEBIT"
+    )
 
 
 def gateway_processed_refund_minor(s: HasGwRefunds) -> int:

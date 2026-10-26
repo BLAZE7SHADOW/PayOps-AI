@@ -1,7 +1,8 @@
-"""Everything reconciliation needs to know about one order, loaded once and then read by pure functions (matrix, rules, lifecycle).
+"""Everything reconciliation needs to know about one order, loaded once and then read by pure functions (matrix, rules,
+lifecycle).
 
-Nothing here is fetched lazily, so the same snapshot always produces the same verdicts, which is what makes the rules easy to test.
-"""
+Nothing here is fetched lazily, so the same snapshot always produces the same verdicts, which is what makes the rules
+easy to test."""
 
 from __future__ import annotations
 
@@ -9,7 +10,18 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from ..db.models import Customer, Device, Dispute, LedgerEntry, Merchant, Order, Payment, PaymentAttempt, Refund, Settlement
+from ..db.models import (
+    Customer,
+    Device,
+    Dispute,
+    LedgerEntry,
+    Merchant,
+    Order,
+    Payment,
+    PaymentAttempt,
+    Refund,
+    Settlement,
+)
 from .gateway import GatewayPayment, GatewayRefund, GatewaySettlementLine, GatewayWebhookDelivery
 
 

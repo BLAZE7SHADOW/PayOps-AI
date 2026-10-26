@@ -31,9 +31,15 @@ class FakeNodeApi:
 
     async def proposal(self, case_id: str, diagnosis: dict[str, Any], history: list[dict[str, Any]]) -> dict[str, Any]:
         self.calls.append("proposal")
-        return {"actions": self.data["proposalActions"], "rationale": diagnosis["narrative"], "expectedPostconditions": []}
+        return {
+            "actions": self.data["proposalActions"],
+            "rationale": diagnosis["narrative"],
+            "expectedPostconditions": [],
+        }
 
-    async def policy_gate(self, case_id: str, run_id: str, proposal: dict[str, Any], diagnosis_confidence: float) -> dict[str, Any]:
+    async def policy_gate(
+        self, case_id: str, run_id: str, proposal: dict[str, Any], diagnosis_confidence: float
+    ) -> dict[str, Any]:
         self.calls.append("policy_gate")
         return {
             "resolutionId": "res_fake",

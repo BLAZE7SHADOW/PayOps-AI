@@ -1,4 +1,5 @@
-"""The FastAPI application factory. Kept free of `uvicorn.run` so tests can build it with their own settings and database."""
+"""The FastAPI application factory. Kept free of `uvicorn.run` so tests can build it with their own settings and
+database."""
 
 from __future__ import annotations
 
@@ -31,13 +32,19 @@ from .startup import prepare_database
 
 
 def create_app(
-    settings: Settings | None = None, engine: AsyncEngine | None = None, *, clock: Clock | None = None, events: EventPublisher | None = None,
+    settings: Settings | None = None,
+    engine: AsyncEngine | None = None,
+    *,
+    clock: Clock | None = None,
+    events: EventPublisher | None = None,
     services: Services | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
 
-    realtime = Realtime(settings.web_origin, session_config(settings.jwt_secret, settings.node_env), lambda: app.state.services)
+    realtime = Realtime(
+        settings.web_origin, session_config(settings.jwt_secret, settings.node_env), lambda: app.state.services
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -52,15 +59,27 @@ def create_app(
         else:
             queue = ProcrastinateJobs(
                 PsycopgConnector(conninfo=settings.database_url, min_size=1, max_size=settings.job_pool_max),
-                handlers, sweep_enabled=settings.reconcile_sweep_ms > 0,
+                handlers,
+                sweep_enabled=settings.reconcile_sweep_ms > 0,
             )
         gateway_engine = create_async_engine(
-            app.state.engine.url, pool_size=settings.gateway_pool_max, max_overflow=0, pool_pre_ping=True, pool_recycle=1800
+            app.state.engine.url,
+            pool_size=settings.gateway_pool_max,
+            max_overflow=0,
+            pool_pre_ping=True,
+            pool_recycle=1800,
         )
         gateway = SimulatorGateway(session_factory(gateway_engine), clock or SystemClock())
         app.state.services = services or build_services(
-            session_factory(app.state.engine), clock=clock, events=events or realtime, gateway=gateway, auth_config=app.state.session_config,
-            demo_mode=settings.demo_mode, cassette_dir=settings.cassettes, reset_cooldown_seconds=0 if settings.node_env == "test" else 10, jobs=queue,
+            session_factory(app.state.engine),
+            clock=clock,
+            events=events or realtime,
+            gateway=gateway,
+            auth_config=app.state.session_config,
+            demo_mode=settings.demo_mode,
+            cassette_dir=settings.cassettes,
+            reset_cooldown_seconds=0 if settings.node_env == "test" else 10,
+            jobs=queue,
         )
         handlers.services = app.state.services
         app.state.jobs = queue
@@ -75,7 +94,9 @@ def create_app(
             app.state.services.approval_service.agent_resumer = QueueResumer(queue)
             if isinstance(queue, ProcrastinateJobs):
                 await queue.app.open_async()
-                worker = asyncio.get_running_loop().create_task(queue.run_worker(fetch_job_polling_interval=settings.job_poll_seconds))
+                worker = asyncio.get_running_loop().create_task(
+                    queue.run_worker(fetch_job_polling_interval=settings.job_poll_seconds)
+                )
             try:
                 yield
             finally:
@@ -90,20 +111,29 @@ def create_app(
         if owned:
             await app.state.engine.dispose()
 
-    app = FastAPI(title="PayOps AI", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(
+        title="PayOps AI", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json"
+    )
     app.state.session_config = session_config(settings.jwt_secret, settings.node_env)
     app.state.realtime = realtime
     app.mount("/socket.io", realtime.asgi)
     install_error_handlers(app)
     install_session_middleware(app)
-    app.add_middleware(CORSMiddleware, allow_origins=[settings.web_origin], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.web_origin],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.add_middleware(RequestIdMiddleware)
 
     api = APIRouter(prefix="/api")
 
     @api.get("/health", dependencies=[Depends(public_route())])
     async def health(response: Response) -> dict[str, object]:
-        """Ready when the database answers and the agent's checkpoint store does (a run cannot pause or resume without it)."""
+        """Ready when the database answers and the agent's checkpoint store does (a run cannot pause or resume without
+        it)."""
         database = await ping(app.state.engine)
         agents = await app.state.agents.ready()
         ok = database and agents

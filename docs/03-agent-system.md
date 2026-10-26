@@ -1,5 +1,19 @@
 # 03 · Agent System
 
+> **Backend moved to Python (D090).** Paths in this file were updated; the map below is for reading old commits and decisions. The last TypeScript commit is the tag `ts-backend-final` (`git show ts-backend-final:<path>`).
+>
+> | Was | Now |
+> |---|---|
+> | `apps/server` (Express routes, auth, Socket.IO, pg-boss) | `python/payops/src/payops/api`, `auth`, `jobs`, `realtime.py` (FastAPI, python-socketio, Procrastinate) |
+> | `packages/core` (domain, services, executor, validator, adapters, Drizzle schema) | `payops/domain`, `services`, `services/writes`, `infra`, `db` (SQLAlchemy models, Alembic) |
+> | `packages/agents` and `python/agents` as a service | `python/agents/src/payops_agents` (the graph) and `payops/agent_tools` (tools, run store, in-process node API) |
+> | `packages/simulator` | `payops/simulator` |
+> | `packages/evals` | `payops/evals` (`pnpm eval`) |
+> | `/internal/agent/*`, `AGENT_RUNTIME`, `AGENT_INTERNAL_SECRET` | removed: agents call the services in process |
+> | Drizzle migrations | `python/payops/migrations` (SQL `0000` to `0012` kept as `migrations/sql`, then Alembic revisions) |
+> | `.env` read in `env.ts` | `payops/settings.py` |
+
+
 This is the most important design document in the repo. If code and this doc disagree, stop and ask before changing either.
 
 ## 1. Design stance
@@ -77,7 +91,7 @@ facts (code) ─► J6 diagnosis (Jev: Choice over RootCause + Nouls) ─► con
 ```
 
 - **J6 · Diagnosis** (graph node `diagnose`): state = code-built case brief (enums, bands, booleans; never raw numbers or dates). One call: `root_cause` Choice over `RootCause`, plus Nouls `evidence_consistent` ("the facts point to one cause") and `needs_human` ("this looks unusual or risky"). Fallback on error: go to the full investigation.
-- **Resolution templates** live in `packages/agents/src/templates.ts`: pure functions `RootCause → CatalogAction[]`, reusing the manual-path recommendations in `core/actions/options.ts`. `UNKNOWN` never has a template.
+- **Resolution templates** live in `python/payops/src/payops/agent_tools/proposal.py` (`template_actions`): pure functions `RootCause → CatalogAction[]`, reusing the manual-path recommendations in `domain/actions`. `UNKNOWN` never has a template.
 - **Narratives** are code templates that cite evidence ids, so the UI still shows "The captured webhook failed 3 times with HTTP 500 [ev_02]".
 - Policy treats fast-path proposals like any agent proposal (J6 confidence is the diagnosis confidence for P5/P6/P8).
 - Gemini is used only when Jev is unsure, the case is novel, a replan needs reasoning, or `needs_human` fires. The Agent Runs screen shows `path: FAST | FULL` and tokens per run, so the saving is visible and measurable in evals.
@@ -115,7 +129,7 @@ else specialists = { s | noul(need_s) ≥ 0.35 } ∪ mandatory(caseType)
 ### J3 · Risk composite (inside Risk specialist)
 Code turns raw signals into descriptive state (`"account_age": "created 2 hours before payment"`, `"failed_attempts_24h_bucket": "6-10"`, `"card_countries": "3 distinct"`). Jev answers atomic **Scores** (levels 0–3) in one call:
 `velocity_abuse`, `identity_mismatch`, `chargeback_pattern`, `merchant_exposure`.
-Code combines: `risk = Σ wᵢ·scoreᵢ` with weights in `policies/risk.weights.ts` → tier `LOW | MEDIUM | HIGH | CRITICAL`. If mean confidence < 0.5, tier is raised by one level (uncertainty is treated as risk).
+Code combines: `risk = Σ wᵢ·scoreᵢ` with weights in `python/agents/src/payops_agents/risk.py` → tier `LOW | MEDIUM | HIGH | CRITICAL`. If mean confidence < 0.5, tier is raised by one level (uncertainty is treated as risk).
 
 ### J4 · Grounding check (graph node `groundCheck`)
 After specialists join. For each finding claim, one Choice per claim, batched:
@@ -186,7 +200,7 @@ execute ─► validate ─┬─ PASS ─► closeResolved ─► END
 
 ## 6. State
 
-Defined with `Annotation.Root` in `packages/agents/src/state.ts`. Types come from `packages/shared` (Zod schemas, `z.infer`).
+Defined as `PayOpsState`, a `TypedDict` with reducers, in `python/agents/src/payops_agents/state.py`. The JSON shapes match the API's camelCase DTOs.
 
 ```ts
 export const PayOpsState = Annotation.Root({
@@ -288,7 +302,7 @@ Rules:
 
 ## 9. Tools
 
-Tools are typed, read-only TypeScript projections over a `CaseState` already loaded through core services. `triage` runs the baseline set; Payment and Reconciliation may choose follow-up tools from their own Zod-constrained groups. The node turns projected facts into `EvidenceItem`s and emits `TOOL_COMPLETED`; it does not give models direct database or write access.
+Tools are typed, read-only projections (`payops/agent_tools/tools.py`) over a `CaseState` already loaded through the services. `triage` runs the baseline set; Payment and Reconciliation may choose follow-up tools from their own schema-constrained groups. The node turns projected facts into `EvidenceItem`s and emits `TOOL_COMPLETED`; it does not give models direct database or write access.
 
 | Group | Tools |
 |---|---|
@@ -300,7 +314,7 @@ There are **no write tools** available to any agent. Writes happen only in the e
 
 ## 10. Action catalog (closed set)
 
-`packages/shared/src/actions.ts`. Each action has: Zod params, `moneyMoving`, `reversible`, preconditions (code), executor handler, postconditions (validator checks).
+`python/payops/src/payops/domain/actions` (the web copy is `packages/shared/src/actions.ts`). Each action has: Pydantic params, `moneyMoving`, `reversible`, preconditions (code), executor handler, postconditions (validator checks).
 
 | Action | Money-moving | Postconditions checked by validator |
 |---|---|---|
@@ -320,9 +334,9 @@ Every execution uses an idempotency key `hash(caseId, runId, attempt, actionInde
 
 ## 11. Policy engine
 
-Pure TypeScript in `packages/core/src/policy/`. Versioned rules, each returns `{ tier, ruleId, reason }`; the strictest tier wins. Policy version is stored on every decision. The rule table shown to users lives in `packages/shared/src/policy.ts` (`POLICY_RULES`) and must match the code.
+Pure Python in `python/payops/src/payops/domain/policy/`. Versioned rules, each returns `{ tier, ruleId, reason }`; the strictest tier wins. Policy version is stored on every decision. The rule table shown to users lives in `payops/dto/policy.py` (`POLICY_RULES`; the web copy is `packages/shared/src/policy.ts`) and must match the code.
 
-Actions have a class (`shared/actions.ts`): `STATE_CORRECTION`, `MONEY_MOVEMENT`, `CLAIM`, `CONTROL`. The same engine evaluates proposals from people and from the agent; rules marked "agent" use model confidence and are skipped for people (a person's proposal has no model confidence). For people, "gateway capture verified" in P6 is checked by the action's preconditions instead of cited evidence. A person's proposal that needs approval must be approved by **someone else** (four-eyes).
+Actions have a class (`domain/actions`): `STATE_CORRECTION`, `MONEY_MOVEMENT`, `CLAIM`, `CONTROL`. The same engine evaluates proposals from people and from the agent; rules marked "agent" use model confidence and are skipped for people (a person's proposal has no model confidence). For people, "gateway capture verified" in P6 is checked by the action's preconditions instead of cited evidence. A person's proposal that needs approval must be approved by **someone else** (four-eyes).
 
 | Rule | Condition | Tier |
 |---|---|---|
@@ -344,7 +358,7 @@ Approval rules: MANAGER tier needs role MANAGER. An approver cannot approve a ru
 
 ## 12. Validator
 
-`packages/core/src/validation/`. Never trusts state; re-reads from services.
+`python/payops/src/payops/domain/validation.py` and `services/writes/validator.py`. Never trusts state; re-reads from services.
 
 1. Per-action postconditions (table above).
 2. Global invariants for the case entities:
@@ -375,7 +389,7 @@ LLM: LangChain `ChatGoogleGenerativeAI` (`@langchain/google-genai`), model from 
 
 - Untrusted text screened by J1, quarantined when flagged.
 - Tool outputs are data; they are rendered into prompts as tables of facts, never as instructions.
-- Model outputs are Zod-validated; unknown enum = rejected, one retry with the validation error, then fallback.
+- Model outputs are Pydantic-validated; unknown enum = rejected, one retry with the validation error, then fallback.
 - Closed action catalog + policy + four-eyes approvals mean a manipulated model can at worst *propose* something that a human then sees with its evidence.
 - Eval set includes an injection case (`scenario: injected_refund_request`).
 
@@ -389,28 +403,33 @@ Payload always includes `{ runId, caseId, node, at, seq }`. The UI orders by `se
 
 ## 17. Evals
 
-`packages/evals`. Each golden scenario defines expected `rootCause`, allowed action sets, expected policy tier, expected final verdict, max tool calls, and optionally `expectedTools` (soft) and `forbiddenTools` (hard gate). A tool counts as used when it produced an evidence item (the item's `source`).
+`python/payops/src/payops/evals` (`pnpm eval`). Each golden scenario defines expected `rootCause`, allowed action sets, expected policy tier, expected final verdict, max tool calls, and optionally `expectedTools` (soft) and `forbiddenTools` (hard gate). A tool counts as used when it produced an evidence item (the item's `source`).
 
-Metrics reported per run: root-cause accuracy, action-set match, tool-set match, policy-tier match, share of full-path runs that dropped a finding, findings dropped per full-path run, replan success rate, mean tool calls, mean latency, cost per case. Per-scenario hard gates (status, verdict, tier, forbidden actions, forbidden tools, quarantine, max tool calls) fail the run. Aggregate limits (`EVAL_THRESHOLDS` in `packages/evals/src/types.ts`: root-cause accuracy, action-set match and tool-set match at least 80%, total cost at most $0.10) also fail it. The report starts with the commit, model names and the number of recorded scenarios, so two reports can be compared fairly. `pnpm eval` runs in REPLAY (CI), `pnpm eval:live` runs LIVE and writes `docs/evals/<date>.md`.
+Metrics reported per run: root-cause accuracy, action-set match, tool-set match, policy-tier match, share of full-path runs that dropped a finding, findings dropped per full-path run, replan success rate, mean tool calls, mean latency, cost per case. Per-scenario hard gates (status, verdict, tier, forbidden actions, forbidden tools, quarantine, max tool calls) fail the run. Aggregate limits (`check_thresholds` in `payops/evals/report.py`: root-cause accuracy, action-set match and tool-set match at least 80%, total cost at most $0.10) also fail it. The report starts with the commit, model names and the number of recorded scenarios, so two reports can be compared fairly. `pnpm eval` runs in REPLAY (CI), `pnpm eval:live` runs LIVE and writes `docs/evals/<date>.md`.
 
-## 18. Python runtime (D085)
+**Baseline and report.** Gates and limits only catch what crosses a fixed line, so every run is also compared with `fixtures/evals/baseline.json`, which pins for each scenario what happened the last time the result was accepted: status, tier, verdict, proposed actions, root-cause match, tool, model and Jev calls, cost, grounding violations and replay fallbacks. Anything worse is a named regression and fails the run (for example `refund_stuck: tool calls rose from 10 to 11`); anything better is listed as an improvement and never fails. REPLAY is deterministic, so a difference is real. A deliberate change is accepted with `python -m payops.evals --update-baseline`, and the baseline's diff is read in review. A scenario that is added or removed is reported, and totals are compared only when the set of scenarios is the same. Each run can also write the full record as JSON (`--report`): CI keeps it as the `eval-report` artifact and prints a summary table on the run page, which gives a history across commits. Latency is stored for reference and never compared. The baseline is not a quality bar by itself: it says "not worse than before", and the hard gates and aggregate limits say "good enough".
 
-The graph exists twice: in TypeScript (`packages/agents`, runs inside the API) and in Python (`python/agents`, FastAPI + LangGraph Python). `AGENT_RUNTIME=ts|python` on the API picks one per deployment; a run belongs to one runtime for its whole life. Both have the same nodes, edges, prompts, Jev questions, fallbacks and events.
+**Failure-path goldens.** Three scenarios pin what the agent does when it cannot or should not act, each ending `ESCALATED` with no proposal, no approval and nothing executed (`forbidden_action_types` covers every action that changes data): `unknown_cause_escalates` (Jev cannot name a cause), `inconsistent_evidence_escalates` (a cause is named but the evidence disagrees with itself) and `providers_down_escalates` (every Jev call raises and no model is available, so each decision point uses its fallback and the run records the error). They use the deterministic fixtures, so they cost nothing and run in the replay suite. They are left out of root-cause accuracy (`known_root_cause_caveat`) because no diagnosis is the correct result. For the operator, this is the state "a person needs to take over": the case page offers Resolve manually and the Approvals page stays empty.
 
-**The seam.** The Python graph reasons and the TypeScript API acts. Python calls the API's `/internal/agent/*` routes (shared secret, not exposed through Vercel) for everything that reads data or carries authority:
+**Live evals.** The replay suite only shows the code still behaves as it did when the answers were recorded. `python -m payops.evals.live` (`pnpm eval:live`) runs the model-driven goldens against the real Gemini and Jev today, which catches a model update, a prompt that stopped working or an API that changed. It makes billed calls, stops starting scenarios past a cost cap (`--max-cost`, default $0.50), holds the run to the same gates and limits as the replay suite, does not compare with the baseline (live answers vary) and writes its own JSON report. `.github/workflows/live-eval.yml` runs it weekly and on demand when the `GEMINI_API_KEY` and `TYPESAFE_JEV_API_KEY` repository secrets exist, and otherwise skips with a notice.
 
-| Python needs | API route | Runs there |
-|---|---|---|
-| the case brief | `/case-brief` | `buildCaseBrief` over a fresh `CaseState` |
-| tool evidence | `/tools` | the tool functions in `tools.ts` (the catalog of names and descriptions is copied to Python for prompts) |
-| a proposal for a diagnosis | `/proposal` | `buildProposal`, `templateActions`, core's action options |
-| the policy tier | `/policy-gate` | `proposeFromAgent`, which creates the resolution and approval |
-| execute, validate, close | `/execute`, `/validate`, `/close-validated`, `/escalate-without-proposal` | the executor and validator |
-| step log, run row | `/steps`, `/sync`, `/fail` | `agent_steps`, `agent_runs`, evidence and findings tables |
+## 18. Runtime: the graph inside the Python API (D085, D090)
 
-Python keeps Jev (J2 to J6), Gemini, context building, grounding rules, risk scoring, routing, the budget guard and the LangGraph checkpoints (`checkpoints_py` schema). Rules 2 and 3 still hold: the model never touches the database and never authorizes or executes.
+The graph lives in `python/agents` (`payops_agents`) and runs inside the backend process. It is a library: it never imports `payops`. Everything that reads data or carries authority goes through `NodeApiPort`, which the backend implements as `InProcessNodeApi` (`payops/agent_tools/node_api.py`) with direct service calls. Before D090 the same port was an HTTP client to the TypeScript API's `/internal/agent/*` routes.
 
-**Same recordings.** REPLAY reads the same `fixtures/cassettes/*.jsonl`. A key is a hash of the exact prompt, so `python/agents/src/payops_agents/context.py` reproduces the TypeScript prompt character for character, and `jsonutil.py` prints numbers and JSON the way `JSON.stringify` does. A test pins hashes computed by the TypeScript code.
+| The graph needs | Provided by (`payops/agent_tools`) |
+|---|---|
+| the case brief | `brief.py` over a fresh `CaseState` |
+| tool evidence | `tools.py` (15 read-only tools; `tools_catalog.py` in `payops_agents` holds the names and descriptions used in prompts) |
+| a proposal for a diagnosis | `proposal.py` (`build_proposal`, `template_actions`) |
+| the policy tier | `ResolutionService.propose_from_agent`, which creates the resolution and approval |
+| execute, validate, close | the executor and validator services |
+| step log, run row | `store.py` (`AgentStore`: `agent_steps`, `agent_runs`, evidence and findings tables, realtime events) |
 
-**Proving parity.** `pnpm eval:python` runs all 15 golden scenarios through the Python service against an in-process API and compares each with the TypeScript run on status, verdict, tier, root cause, actions, tools, tool calls, attempts and grounding violations. It also reports how many cassette lookups matched exactly and how many needed the nearest-recording fallback (the aim is zero).
+The graph keeps Jev (J2 to J6), Gemini, context building, grounding rules, risk scoring, routing, the budget guard and the LangGraph checkpoints (`checkpoints_py` schema). Rules 2 and 3 still hold: the model never touches the database and never authorizes or executes.
 
+**Recordings.** REPLAY reads `fixtures/cassettes/*.jsonl`. A key is a hash of the exact prompt, so `python/agents/src/payops_agents/context.py` builds prompts character for character as they were recorded, and `jsonutil.py` prints numbers and JSON the way `JSON.stringify` did. A test pins hashes that were computed by the TypeScript code. Changing prompt, question or tool-description wording therefore needs a re-recording.
+
+**Evidence of equivalence with the old TypeScript graph.** `python -m payops.evals` runs the 15 golden scenarios through the real API process: 15 of 15 pass, 83 replay lookups match exactly and 0 use the nearest-recording fallback. The comparison with live TypeScript runs was done before the TypeScript code was removed (tag `ts-backend-final`).
+
+**Idempotency.** `AgentRunner.investigate` and `resume` return the thread's status if it already finished or is running, so a redelivered queue job does not run the graph twice.

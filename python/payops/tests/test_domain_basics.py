@@ -78,8 +78,20 @@ def test_seeded_output_matches_the_typescript_generator_exactly() -> None:
     rng = mulberry32(42)
     assert [rng(), rng(), rng()] == [0.6011037519201636, 0.44829055899754167, 0.8524657934904099]
     g = seeded_ids("scenario-1")
-    assert [g.next("order"), g.next("payment"), g.int(1, 100), g.pick(["a", "b", "c", "d"]), g.float(), g.next("case")] == [
-        "ord_1c9ephp3ahv76f", "pay_mf0yrd9dvgw4ht", 17, "c", 0.22284113359637558, "case_pfva3faf34hdhd",
+    assert [
+        g.next("order"),
+        g.next("payment"),
+        g.int(1, 100),
+        g.pick(["a", "b", "c", "d"]),
+        g.float(),
+        g.next("case"),
+    ] == [
+        "ord_1c9ephp3ahv76f",
+        "pay_mf0yrd9dvgw4ht",
+        17,
+        "c",
+        0.22284113359637558,
+        "case_pfva3faf34hdhd",
     ]
     n = seeded_ids(1234)
     assert [n.next("refund"), n.int(5, 9), n.float()] == ["rfd_2pwz135sc4hazh", 6, 0.41534881736151874]
@@ -128,4 +140,8 @@ def test_due_label_counts_down_up_and_says_due_now() -> None:
 
 
 def test_age_label() -> None:
-    assert age_label(at(seconds=-20), NOW) == "now" and age_label(at(hours=-3), NOW) == "3h" and age_label(at(days=-9), NOW) == "9d"
+    assert (
+        age_label(at(seconds=-20), NOW) == "now"
+        and age_label(at(hours=-3), NOW) == "3h"
+        and age_label(at(days=-9), NOW) == "9d"
+    )

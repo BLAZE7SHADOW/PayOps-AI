@@ -20,7 +20,9 @@ def _email(value: str) -> str:
 
 Email = Annotated[str, AfterValidator(_email)]
 #: A 6-digit code as typed from an authenticator app; a space in the middle is allowed ("123 456").
-OneTimeCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=6, max_length=8, pattern=r"^\d{3}\s?\d{3}$")]
+OneTimeCode = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=6, max_length=8, pattern=r"^\d{3}\s?\d{3}$")
+]
 
 
 class LoginBody(CamelModel):

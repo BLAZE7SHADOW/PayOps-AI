@@ -58,7 +58,9 @@ def js_dumps(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return "[" + ",".join(js_dumps(v) for v in value) + "]"
     if isinstance(value, dict):
-        return "{" + ",".join(json.dumps(str(k), ensure_ascii=False) + ":" + js_dumps(v) for k, v in value.items()) + "}"
+        return (
+            "{" + ",".join(json.dumps(str(k), ensure_ascii=False) + ":" + js_dumps(v) for k, v in value.items()) + "}"
+        )
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 

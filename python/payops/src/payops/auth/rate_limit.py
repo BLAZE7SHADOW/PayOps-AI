@@ -1,5 +1,6 @@
-"""Fixed-window rate limiter kept in the database, so limits survive a restart and hold across several server processes. One atomic upsert per attempt:
-it starts a new window when the old one has ended, otherwise adds one, and returns the new count."""
+"""Fixed-window rate limiter kept in the database, so limits survive a restart and hold across several server processes.
+One atomic upsert per attempt: it starts a new window when the old one has ended, otherwise adds one, and returns the
+new count."""
 
 from __future__ import annotations
 
@@ -20,7 +21,8 @@ class RateLimiter:
         self._clock = clock
 
     async def hit(self, key: str, limit: int, window_ms: int, message: str) -> None:
-        """Counts one attempt for `key`; raises RATE_LIMITED once more than `limit` happen in `window_ms`. Commits on its own, so a refused attempt counts."""
+        """Counts one attempt for `key`; raises RATE_LIMITED once more than `limit` happen in `window_ms`. Commits on
+        its own, so a refused attempt counts."""
         now = self._clock.now()
         reset_at = now + timedelta(milliseconds=window_ms)
         stmt = text(

@@ -18,8 +18,10 @@ def mask_phone(phone: str) -> str:
     return f"+91 ******{digits[-4:]}"
 
 
-# Free-text scrubber (docs/07-security.md, D078). The field maskers above only help when a value sits under a known key. This one looks at the text itself, so an
-# email or phone number that a customer typed into a note is still removed before the text leaves for Gemini or Jev. A safety net, not a PII detector: it catches
+# Free-text scrubber (docs/07-security.md, D078). The field maskers above only help when a value sits under a known key.
+# This one looks at the text itself, so an
+# email or phone number that a customer typed into a note is still removed before the text leaves for Gemini or Jev. A
+# safety net, not a PII detector: it catches
 # emails, Indian-style mobile numbers and long digit runs (card or account numbers). Names are not caught.
 _EMAIL_IN_TEXT = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _PHONE_IN_TEXT = re.compile(r"(?<![\w.])(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)")

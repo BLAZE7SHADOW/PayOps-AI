@@ -1,9 +1,9 @@
-"""The one role and permission table. Routes, services and the UI all read it, and docs/02-architecture.md §7 is checked against it in a test, so
-the code and the docs cannot drift.
+"""The one role and permission table. Routes, services and the UI all read it, and docs/02-architecture.md §7 is checked
+against it in a test, so the code and the docs cannot drift.
 
-Roles are ranked VIEWER < OPS < MANAGER < ADMIN. A permission names the lowest role that has it; higher roles have it too. Some permissions carry
-an extra rule that code enforces on top of the role (four-eyes, tier, ownership). Those are written in `extra` so a reader sees them in one place.
-"""
+Roles are ranked VIEWER < OPS < MANAGER < ADMIN. A permission names the lowest role that has it; higher roles have it
+too. Some permissions carry an extra rule that code enforces on top of the role (four-eyes, tier, ownership). Those are
+written in `extra` so a reader sees them in one place."""
 
 from __future__ import annotations
 
@@ -47,12 +47,16 @@ PERMISSIONS: Final[dict[str, PermissionDef]] = {
     "resolution.undo": PermissionDef("OPS", "Propose an undo of a ledger post", "Goes through the normal approval"),
     "webhook.replay": PermissionDef("OPS", "Replay a webhook event"),
     "approval.decide": PermissionDef(
-        "OPS", "Approve or reject a resolution", "MANAGER-tier approvals need MANAGER or ADMIN. Four-eyes: never your own proposal"
+        "OPS",
+        "Approve or reject a resolution",
+        "MANAGER-tier approvals need MANAGER or ADMIN. Four-eyes: never your own proposal",
     ),
     "approval.bulk": PermissionDef("OPS", "Bulk approve low-risk approvals", "Same tier and four-eyes rules per item"),
     # Control
     "agent.control": PermissionDef("MANAGER", "Pause or limit the agent"),
-    "simulator.use": PermissionDef("ADMIN", "Use the simulator: scenarios, reset, undo reset", "OPS when DEMO_MODE is on"),
+    "simulator.use": PermissionDef(
+        "ADMIN", "Use the simulator: scenarios, reset, undo reset", "OPS when DEMO_MODE is on"
+    ),
     # Administration
     "user.mfaReset": PermissionDef("ADMIN", "Reset another user's MFA"),
     "user.sessionsRevoke": PermissionDef("ADMIN", "Sign a user out of every browser"),

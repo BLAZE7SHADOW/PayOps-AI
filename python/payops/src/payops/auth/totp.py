@@ -1,5 +1,5 @@
-"""Time-based one-time passwords (RFC 6238) on the standard library. An authenticator app and this server share a secret; both compute HMAC-SHA1 over
-"the number of 30-second steps since 1970" and show the last 6 digits."""
+"""Time-based one-time passwords (RFC 6238) on the standard library. An authenticator app and this server share a
+secret; both compute HMAC-SHA1 over "the number of 30-second steps since 1970" and show the last 6 digits."""
 
 from __future__ import annotations
 
@@ -48,8 +48,11 @@ def totp_code(secret: str, now_ms: float, digits: int = 6) -> str:
     return _hotp(base32_decode(secret), _step_at(now_ms), digits)
 
 
-def verify_totp(secret: str, code: str, now_ms: float, last_used_step: int | None = None, window: int = 1) -> int | None:
-    """The matching step number (store it as last_used_step), or None when the code is wrong. A step at or before the last used one is refused."""
+def verify_totp(
+    secret: str, code: str, now_ms: float, last_used_step: int | None = None, window: int = 1
+) -> int | None:
+    """The matching step number (store it as last_used_step), or None when the code is wrong. A step at or before the
+    last used one is refused."""
     digits = re.sub(r"\s", "", code)
     if not re.fullmatch(r"\d{6}", digits):
         return None
@@ -65,5 +68,7 @@ def verify_totp(secret: str, code: str, now_ms: float, last_used_step: int | Non
 
 def otpauth_url(secret: str, account: str, issuer: str) -> str:
     label = quote(f"{issuer}:{account}", safe="")
-    query = urlencode({"secret": secret, "issuer": issuer, "algorithm": "SHA1", "digits": "6", "period": str(STEP_SECONDS)})
+    query = urlencode(
+        {"secret": secret, "issuer": issuer, "algorithm": "SHA1", "digits": "6", "period": str(STEP_SECONDS)}
+    )
     return f"otpauth://totp/{label}?{query}"

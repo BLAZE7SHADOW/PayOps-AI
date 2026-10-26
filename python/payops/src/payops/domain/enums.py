@@ -1,4 +1,5 @@
-"""Domain vocabulary shared with the web app (packages/shared enums.ts). Values are the strings stored in the database and sent as JSON."""
+"""Domain vocabulary shared with the web app (packages/shared enums.ts). Values are the strings stored in the database
+and sent as JSON."""
 
 from __future__ import annotations
 
@@ -6,7 +7,13 @@ from typing import Final
 
 GW_PAYMENT_STATUS: Final = ("CREATED", "AUTHORIZED", "CAPTURED", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED")
 GW_REFUND_STATUS: Final = ("PENDING", "PROCESSED", "FAILED")
-WEBHOOK_EVENT_TYPES: Final = ("payment.authorized", "payment.captured", "payment.failed", "refund.processed", "refund.failed")
+WEBHOOK_EVENT_TYPES: Final = (
+    "payment.authorized",
+    "payment.captured",
+    "payment.failed",
+    "refund.processed",
+    "refund.failed",
+)
 WEBHOOK_DELIVERY_STATUS: Final = ("DELIVERED", "FAILED", "PENDING")
 
 ORDER_STATUS: Final = ("PENDING", "PAID", "FAILED", "CANCELLED", "FULFILLED")

@@ -1,5 +1,6 @@
-"""Detection rules D1 to D8 (docs/04-data-model.md, Detection rules). Each rule is a pure function of an OrderSnapshot and returns at
-most one hit. D7 works on settlement batches and lives in settlement.py. Thresholds are named constants so tests and docs can point at them."""
+"""Detection rules D1 to D8 (docs/04-data-model.md, Detection rules). Each rule is a pure function of an OrderSnapshot
+and returns at most one hit. D7 works on settlement batches and lives in settlement.py. Thresholds are named constants
+so tests and docs can point at them."""
 
 from __future__ import annotations
 
@@ -85,7 +86,10 @@ def d1_captured_not_paid(s: OrderSnapshot) -> RuleHit | None:
     if ms_since(s.now, gw.captured_at) <= RULE_THRESHOLDS.capture_grace_ms:
         return None
     return RuleHit(
-        "D1_CAPTURED_NOT_PAID", "PAYMENT_MISMATCH", _payment_entity(s), gw.amount_minor,
+        "D1_CAPTURED_NOT_PAID",
+        "PAYMENT_MISMATCH",
+        _payment_entity(s),
+        gw.amount_minor,
         f"Gateway captured {format_money(gw.amount_minor)} but the order is {s.order.status}.",
     )
 
@@ -94,7 +98,10 @@ def d2_paid_not_captured(s: OrderSnapshot) -> RuleHit | None:
     if s.order.status not in PAID_ORDER_STATUSES or captured_gw(s):
         return None
     return RuleHit(
-        "D2_PAID_NOT_CAPTURED", "PAYMENT_MISMATCH", _payment_entity(s), s.order.amount_minor,
+        "D2_PAID_NOT_CAPTURED",
+        "PAYMENT_MISMATCH",
+        _payment_entity(s),
+        s.order.amount_minor,
         f"Order is {s.order.status} but the gateway shows {s.primary_gw.status if s.primary_gw else 'no payment'}.",
         severity_floor="HIGH",
     )
@@ -110,7 +117,10 @@ def d3_ledger_missing(s: OrderSnapshot) -> RuleHit | None:
     if ms_since(s.now, gw.captured_at) <= RULE_THRESHOLDS.capture_grace_ms:
         return None
     return RuleHit(
-        "D3_LEDGER_MISSING", "PAYMENT_MISMATCH", _payment_entity(s), gw.amount_minor - credit,
+        "D3_LEDGER_MISSING",
+        "PAYMENT_MISMATCH",
+        _payment_entity(s),
+        gw.amount_minor - credit,
         f"Ledger capture credit is {format_money(credit)} for a {format_money(gw.amount_minor)} capture.",
         severity_floor="MEDIUM",
     )
@@ -129,7 +139,10 @@ def d4_duplicate_capture(s: OrderSnapshot) -> RuleHit | None:
 
     extra = sum(held(g) for g in captured) - held(keep)
     return RuleHit(
-        "D4_DUPLICATE_CAPTURE", "DUPLICATE", ("order", s.order.id), extra,
+        "D4_DUPLICATE_CAPTURE",
+        "DUPLICATE",
+        ("order", s.order.id),
+        extra,
         f"{len(captured)} captures recorded for one order; {format_money(extra)} captured more than once.",
         severity_floor="HIGH",
     )
@@ -137,7 +150,11 @@ def d4_duplicate_capture(s: OrderSnapshot) -> RuleHit | None:
 
 def d5_refund_pending_sla(s: OrderSnapshot) -> RuleHit | None:
     stale = sorted(
-        (r for r in s.refunds if r.status in ("REQUESTED", "PENDING") and ms_since(s.now, r.requested_at) > RULE_THRESHOLDS.refund_sla_ms),
+        (
+            r
+            for r in s.refunds
+            if r.status in ("REQUESTED", "PENDING") and ms_since(s.now, r.requested_at) > RULE_THRESHOLDS.refund_sla_ms
+        ),
         key=lambda r: r.requested_at,
     )
     if not stale:
@@ -145,7 +162,10 @@ def d5_refund_pending_sla(s: OrderSnapshot) -> RuleHit | None:
     oldest = stale[0]
     days = int(ms_since(s.now, oldest.requested_at) // DAY_MS)
     return RuleHit(
-        "D5_REFUND_PENDING_SLA", "REFUND_EXCEPTION", _payment_entity(s), oldest.amount_minor,
+        "D5_REFUND_PENDING_SLA",
+        "REFUND_EXCEPTION",
+        _payment_entity(s),
+        oldest.amount_minor,
         f"Refund of {format_money(oldest.amount_minor)} has been {oldest.status} for {days} days.",
         severity_floor="MEDIUM",
     )
@@ -165,7 +185,10 @@ def d6_refund_missing(s: OrderSnapshot) -> RuleHit | None:
         return None
     owed = captured - refunded
     return RuleHit(
-        "D6_REFUND_MISSING", "REFUND_EXCEPTION", _payment_entity(s), owed,
+        "D6_REFUND_MISSING",
+        "REFUND_EXCEPTION",
+        _payment_entity(s),
+        owed,
         f"Order was cancelled but {format_money(owed)} captured has no refund.",
     )
 
@@ -184,7 +207,10 @@ def d8_risk_velocity(s: OrderSnapshot) -> RuleHit | None:
         return None
     countries = {a.card_country for a in failed if a.card_country is not None}
     return RuleHit(
-        "D8_RISK_VELOCITY", "RISK_CASE", _payment_entity(s), gw.amount_minor,
+        "D8_RISK_VELOCITY",
+        "RISK_CASE",
+        _payment_entity(s),
+        gw.amount_minor,
         f"{len(failed)} failed attempts across {len(countries)} card countries in 24h before a {format_money(gw.amount_minor)} capture.",
         severity_floor="HIGH",
     )

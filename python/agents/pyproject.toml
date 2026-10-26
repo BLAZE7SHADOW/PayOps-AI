@@ -1,11 +1,9 @@
 [project]
 name = "payops-agents"
 version = "0.1.0"
-description = "PayOps AI agent service: the LangGraph investigation graph, ported from packages/agents (D085)."
+description = "PayOps AI agents: the LangGraph investigation graph, run in process by the backend (D085, D090)."
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi>=0.115",
-  "uvicorn>=0.32",
   "pydantic>=2.9",
   "httpx>=0.27",
   "langgraph>=0.2",
@@ -30,12 +28,14 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 150
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["UP046", "UP047"]
+# E501 is off on purpose: `ruff format` wraps code at 120 columns, and the only lines left over are long message strings,
+# which cannot be split without changing readability. Comments and docstrings are wrapped to 120. Prompt text is hashed into REPLAY keys, so it is never re-wrapped.
+ignore = ["E501", "UP046", "UP047"]
 
 [tool.pyright]
 include = ["src", "tests"]
@@ -43,12 +43,13 @@ typeCheckingMode = "standard"
 reportMissingTypeStubs = false
 pythonVersion = "3.12"
 
-[tool.ruff.lint.per-file-ignores]
-# Prompt text is hashed into REPLAY keys, so it can't be re-wrapped to fit a line length.
-"src/payops_agents/tools_catalog.py" = ["E501"]
-"src/payops_agents/narratives.py" = ["E501"]
-"src/payops_agents/grounding.py" = ["E501"]
-"src/payops_agents/risk.py" = ["E501"]
-"src/payops_agents/context.py" = ["E501"]
-"src/payops_agents/nodes/*.py" = ["E501"]
-"tests/*" = ["E501"]
+
+# Tests build small partial fixtures (a dict with only the keys a function reads), so argument-shape checks are off there.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src", "."]
+reportArgumentType = false
+reportTypedDictNotRequiredAccess = false
+
+[[tool.pyright.executionEnvironments]]
+root = "."

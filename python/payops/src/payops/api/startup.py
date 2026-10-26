@@ -1,5 +1,5 @@
-"""What the API does once when it starts: bring the database schema up to date, make sure the demo accounts exist, and give a hash to audit rows written before
-the chain existed. Each step is safe to repeat. (apps/server main.ts)"""
+"""What the API does once when it starts: bring the database schema up to date, make sure the demo accounts exist, and
+give a hash to audit rows written before the chain existed. Each step is safe to repeat. (apps/server main.ts)"""
 
 from __future__ import annotations
 

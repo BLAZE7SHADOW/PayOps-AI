@@ -12,8 +12,9 @@ def build_grounding_node(ctx: NodeContext) -> dict[str, Node]:
     decision, on_event, guard_budget = ctx.decision, ctx.on_event, ctx.guard_budget
 
     async def ground_check(state: State) -> Update:
-        """`state.findings` only grows, so a dropped finding is not removed: `grounding.violations` records the drop and `resolve`
-        filters by it. If Jev fails, only the structural pass applies, the report asks for human review, and no extra round is requested (D041)."""
+        """`state.findings` only grows, so a dropped finding is not removed: `grounding.violations` records the drop and
+        `resolve` filters by it. If Jev fails, only the structural pass applies, the report asks for human review, and
+        no extra round is requested (D041)."""
         await on_event("groundCheck", "NODE_STARTED", {})
         findings = state.get("findings", [])
         evidence_by_id = {e["id"]: e for e in state.get("evidence", [])}
@@ -30,28 +31,57 @@ def build_grounding_node(ctx: NodeContext) -> dict[str, Node]:
 
         try:
             result = await decision.ask("J4_GROUND", jev_state, questions)
-            await on_event("groundCheck", "DECISION_MADE", {"tag": "J4_GROUND", "answers": result["answers"], "usage": result["usage"]})
+            await on_event(
+                "groundCheck",
+                "DECISION_MADE",
+                {"tag": "J4_GROUND", "answers": result["answers"], "usage": result["usage"]},
+            )
             semantic: list[dict[str, Any]] = []
             for f in structural["sound"]:
                 answer = result["answers"].get(support_key(f["id"]))
                 if answer and answer.get("type") == "choice":
-                    semantic.append({"findingId": f["id"], "choice": answer["choice"], "confidence": answer["confidence"]})
+                    semantic.append(
+                        {"findingId": f["id"], "choice": answer["choice"], "confidence": answer["confidence"]}
+                    )
                 else:
                     semantic.append({"findingId": f["id"], "choice": "not_enough_evidence", "confidence": 0})
             sufficient = result["answers"].get("sufficient")
             rules = apply_grounding_rules(
-                findings, structural["violations"], semantic, sufficient["noul"] if sufficient and sufficient.get("type") == "noul" else 1,
-                state.get("agentsVisited", []), state.get("investigationRound", 0),
+                findings,
+                structural["violations"],
+                semantic,
+                sufficient["noul"] if sufficient and sufficient.get("type") == "noul" else 1,
+                state.get("agentsVisited", []),
+                state.get("investigationRound", 0),
             )
             grounding = report(rules)
-            await on_event("groundCheck", "NODE_COMPLETED", {"violations": grounding["violations"], "sufficient": rules["sufficient"], "gaps": rules["gaps"]})
-            return await guard_budget("groundCheck", state, {"grounding": grounding, "gaps": rules["gaps"], "budget": jev_budget(result["usage"])})
+            await on_event(
+                "groundCheck",
+                "NODE_COMPLETED",
+                {"violations": grounding["violations"], "sufficient": rules["sufficient"], "gaps": rules["gaps"]},
+            )
+            return await guard_budget(
+                "groundCheck",
+                state,
+                {"grounding": grounding, "gaps": rules["gaps"], "budget": jev_budget(result["usage"])},
+            )
         except Exception as err:  # noqa: BLE001 - J4 fallback
             rules = apply_grounding_rules(
-                findings, structural["violations"], None, None, state.get("agentsVisited", []), state.get("investigationRound", 0)
+                findings,
+                structural["violations"],
+                None,
+                None,
+                state.get("agentsVisited", []),
+                state.get("investigationRound", 0),
             )
             grounding = report(rules)
-            await on_event("groundCheck", "NODE_COMPLETED", {"violations": grounding["violations"], "fallback": True, "error": str(err)})
-            return await guard_budget("groundCheck", state, {"grounding": grounding, "gaps": [], "budget": failed_jev_budget()})
+            await on_event(
+                "groundCheck",
+                "NODE_COMPLETED",
+                {"violations": grounding["violations"], "fallback": True, "error": str(err)},
+            )
+            return await guard_budget(
+                "groundCheck", state, {"grounding": grounding, "gaps": [], "budget": failed_jev_budget()}
+            )
 
     return {"groundCheck": ground_check}

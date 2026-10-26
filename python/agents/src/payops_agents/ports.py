@@ -44,7 +44,9 @@ class LlmResult(Generic[M]):
 
 
 class LlmPort(Protocol):
-    async def invoke_structured(self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta) -> LlmResult[M]: ...
+    async def invoke_structured(
+        self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta
+    ) -> LlmResult[M]: ...
 
 
 class DecisionPort(Protocol):
@@ -58,7 +60,9 @@ class ReplayLlm:
     def __init__(self, scenario_key: str, directory: Path | None = None) -> None:
         self.reader = CassetteReader(replay_cassette_paths(scenario_key, directory))
 
-    async def invoke_structured(self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta) -> LlmResult[M]:
+    async def invoke_structured(
+        self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta
+    ) -> LlmResult[M]:
         key = cassette_key(meta.node, meta.call_index, stable_hash(messages))
         recorded = self.reader.read(key, "llm", meta.node)
         usage = recorded.get("usage") or {}
@@ -78,7 +82,9 @@ class GeminiLlm:
         self._model = ChatGoogleGenerativeAI(model=model, google_api_key=api_key, temperature=0, max_retries=0)
         self._on_retry = on_retry
 
-    async def invoke_structured(self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta) -> LlmResult[M]:
+    async def invoke_structured(
+        self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta
+    ) -> LlmResult[M]:
         structured = self._model.with_structured_output(schema, include_raw=True)
         pairs = [(m["role"], m["content"]) for m in messages]
         out = cast(
@@ -89,7 +95,9 @@ class GeminiLlm:
         if parsed is None:
             raise ValueError(f"Gemini output did not match the {schema.__name__} schema: {out.get('parsing_error')}")
         usage = getattr(out["raw"], "usage_metadata", None) or {}
-        return LlmResult(schema.model_validate(parsed), int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0)))
+        return LlmResult(
+            schema.model_validate(parsed), int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
+        )
 
 
 class RecordingLlm:
@@ -98,7 +106,9 @@ class RecordingLlm:
         self._scenario_key = scenario_key
         self._directory = directory
 
-    async def invoke_structured(self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta) -> LlmResult[M]:
+    async def invoke_structured(
+        self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta
+    ) -> LlmResult[M]:
         result = await self._inner.invoke_structured(schema, messages, meta)
         key = cassette_key(meta.node, meta.call_index, stable_hash(messages))
         append_cassette(
@@ -187,11 +197,15 @@ class FixtureOptions:
     root_cause: str
     consistent: float = 0.99
     replan_strategy: str = "escalate_to_human"
+    #: Every Jev call raises, as an outage would. Each decision point must then use its deterministic fallback.
+    fail: bool = False
 
 
 def fixture_decision(opts: FixtureOptions) -> DecisionPort:
     class _Fixture:
         async def ask(self, tag: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+            if opts.fail:
+                raise ConnectionError("Jev is unavailable (fixture)")
             if tag == "J5_REPLAN":
                 return {
                     "answers": {"strategy": {"type": "choice", "choice": opts.replan_strategy, "confidence": 0.9}},
@@ -212,7 +226,9 @@ def fixture_decision(opts: FixtureOptions) -> DecisionPort:
 class NoLlm:
     """A fixture scenario that reaches the full path fails loudly instead of returning junk."""
 
-    async def invoke_structured(self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta) -> LlmResult[M]:
+    async def invoke_structured(
+        self, schema: type[M], messages: list[dict[str, str]], meta: LlmCallMeta
+    ) -> LlmResult[M]:
         raise RuntimeError("Eval fixture: unexpected LLM call. This scenario is fast-path only.")
 
 

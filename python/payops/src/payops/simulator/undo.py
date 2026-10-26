@@ -1,6 +1,7 @@
-"""The "undo last reset" for the public demo. Before a reset wipes the demo data, the current rows are copied into a side schema (`demo_undo`) with plain SQL;
-undo truncates the live tables and copies them back in foreign-key order. Users are never touched. One level of undo: the next reset replaces the
-snapshot. The snapshot lives in the database, so it survives an API restart. (packages/simulator undo.ts)"""
+"""The "undo last reset" for the public demo. Before a reset wipes the demo data, the current rows are copied into a
+side schema (`demo_undo`) with plain SQL; undo truncates the live tables and copies them back in foreign-key order.
+Users are never touched. One level of undo: the next reset replaces the snapshot. The snapshot lives in the database, so
+it survives an API restart. (packages/simulator undo.ts)"""
 
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ from ..domain.timeutil import to_iso
 from ..ports import Clock
 
 SNAPSHOT_SCHEMA = "demo_undo"
-#: Tables that hold accounts or migration state, never snapshotted or wiped. `auth_rate_limits` and `sessions` stay so a reset does not sign anyone out.
+#: Tables that hold accounts or migration state, never snapshotted or wiped. `auth_rate_limits` and `sessions` stay so a
+#: reset does not sign anyone out.
 KEEP = frozenset({"users", "sessions", "auth_rate_limits", "alembic_version"})
 #: Job queue tables are kept too; they belong to the runtime, not to the demo data.
 _KEEP_PREFIXES = ("procrastinate_",)
@@ -25,7 +27,9 @@ def _quote(name: str) -> str:
 
 
 async def demo_tables(s: AsyncSession) -> list[str]:
-    rows = (await s.execute(text("select tablename from pg_tables where schemaname = current_schema()"))).scalars().all()
+    rows = (
+        (await s.execute(text("select tablename from pg_tables where schemaname = current_schema()"))).scalars().all()
+    )
     return sorted(t for t in rows if t not in KEEP and not t.startswith(_KEEP_PREFIXES))
 
 
@@ -102,7 +106,15 @@ async def undo_last_reset(sessions: async_sessionmaker[AsyncSession]) -> None:
         if not (await undo_status(s)).can_undo:
             raise RuntimeError("There is no reset to undo.")
         tables = await demo_tables(s)
-        snapshotted = set((await s.execute(text("select tablename from pg_tables where schemaname = :schema"), {"schema": SNAPSHOT_SCHEMA})).scalars().all())
+        snapshotted = set(
+            (
+                await s.execute(
+                    text("select tablename from pg_tables where schemaname = :schema"), {"schema": SNAPSHOT_SCHEMA}
+                )
+            )
+            .scalars()
+            .all()
+        )
         restorable = [t for t in tables if t in snapshotted]
         await s.execute(text(f"truncate {', '.join(_quote(t) for t in restorable)} cascade"))
         for t in await insert_order(s, restorable):

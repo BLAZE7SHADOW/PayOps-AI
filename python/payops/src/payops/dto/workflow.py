@@ -94,7 +94,8 @@ MAX_SAVED_VIEWS_PER_USER = 20
 
 
 class SavedViewFilters(CamelModel):
-    """A named set of queue filters. `assignee_id` may be a user id, `unassigned`, or `me` (resolved to the viewer when the view is applied)."""
+    """A named set of queue filters. `assignee_id` may be a user id, `unassigned`, or `me` (resolved to the viewer when
+    the view is applied)."""
 
     model_config = ConfigDict(extra="forbid")
     omit_when_none = frozenset({"status", "type", "severity", "scope", "assignee_id", "overdue", "q"})

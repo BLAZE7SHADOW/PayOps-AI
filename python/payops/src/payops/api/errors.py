@@ -1,4 +1,5 @@
-"""Turns every failure into `{ "error": { "code", "message", "details"?, "requestId" } }`, the shape the web app reads."""
+"""Turns every failure into `{ "error": { "code", "message", "details"?, "requestId" } }`, the shape the web app
+reads."""
 
 from __future__ import annotations
 
@@ -39,9 +40,13 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request: Request, err: StarletteHTTPException) -> JSONResponse:
         if err.status_code == 404:
-            return JSONResponse(_body("NOT_FOUND", f"No route for {request.method} {request.url.path}"), status_code=404)
+            return JSONResponse(
+                _body("NOT_FOUND", f"No route for {request.method} {request.url.path}"), status_code=404
+            )
         if err.status_code == 405:
-            return JSONResponse(_body("NOT_FOUND", f"No route for {request.method} {request.url.path}"), status_code=404)
+            return JSONResponse(
+                _body("NOT_FOUND", f"No route for {request.method} {request.url.path}"), status_code=404
+            )
         return JSONResponse(_body("INTERNAL", str(err.detail)), status_code=err.status_code)
 
     @app.exception_handler(Exception)

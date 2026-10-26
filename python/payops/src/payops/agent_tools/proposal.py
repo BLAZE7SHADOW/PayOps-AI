@@ -1,5 +1,6 @@
-"""The concrete proposal for a diagnosis, fast or full path alike: the actions come from the same recommendations a person sees in the manual form, so a
-proposed action always carries valid ids and params for this case. `UNKNOWN` always escalates. (packages/agents proposal.ts, templates.ts)"""
+"""The concrete proposal for a diagnosis, fast or full path alike: the actions come from the same recommendations a
+person sees in the manual form, so a proposed action always carries valid ids and params for this case. `UNKNOWN` always
+escalates. (packages/agents proposal.ts, templates.ts)"""
 
 from __future__ import annotations
 
@@ -18,7 +19,9 @@ def _escalate_action(state: CaseState, history: Sequence[AttemptHistory]) -> Cat
         return option.action
     from pydantic import TypeAdapter
 
-    return TypeAdapter(CatalogAction).validate_python({"type": "ESCALATE_TO_HUMAN", "params": {"reason": "Needs a person to review", "to": "MANAGER"}})
+    return TypeAdapter(CatalogAction).validate_python(
+        {"type": "ESCALATE_TO_HUMAN", "params": {"reason": "Needs a person to review", "to": "MANAGER"}}
+    )
 
 
 def template_actions(root_cause: str, state: CaseState, history: Sequence[AttemptHistory] = ()) -> list[CatalogAction]:
@@ -32,12 +35,19 @@ def template_actions(root_cause: str, state: CaseState, history: Sequence[Attemp
     return [by_type[t].action for t in recommended]
 
 
-def build_proposal(diagnosis: dict[str, Any], state: CaseState, history: Sequence[AttemptHistory] = ()) -> dict[str, Any]:
+def build_proposal(
+    diagnosis: dict[str, Any], state: CaseState, history: Sequence[AttemptHistory] = ()
+) -> dict[str, Any]:
     actions = template_actions(diagnosis["rootCause"], state, history)
     expected = [c.description for i, a in enumerate(actions) for c in postconditions_of(a, state, i)]
-    return {"actions": [a.to_json() for a in actions], "rationale": diagnosis["narrative"], "expectedPostconditions": expected}
+    return {
+        "actions": [a.to_json() for a in actions],
+        "rationale": diagnosis["narrative"],
+        "expectedPostconditions": expected,
+    }
 
 
 def to_attempt_history(history: Sequence[dict[str, Any]]) -> list[AttemptHistory]:
-    """The agent's attempt summaries as the recommendations expect them. Every entry comes from `replan`, which only runs after a validated attempt (D047)."""
+    """The agent's attempt summaries as the recommendations expect them. Every entry comes from `replan`, which only
+    runs after a validated attempt (D047)."""
     return [AttemptHistory([a["type"] for a in h["actions"]], "VALIDATED", h["verdict"]) for h in history]

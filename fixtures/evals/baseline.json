@@ -1,0 +1,337 @@
+{
+  "scenarios": {
+    "cancel_raced_capture": {
+      "actionTypes": [
+        "INITIATE_REFUND"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "REFUND_NOT_INITIATED",
+      "rootCauseMatch": true,
+      "scenario": "cancel_raced_capture",
+      "status": "RESOLVED",
+      "tier": "OPS",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "captured_order_failed": {
+      "actionTypes": [
+        "REPLAY_WEBHOOK_EVENT"
+      ],
+      "costUsd": 0.000367,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 3,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "captured_order_failed",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 13,
+      "verdict": "PASS"
+    },
+    "conflicting_evidence": {
+      "actionTypes": [
+        "INITIATE_REFUND"
+      ],
+      "costUsd": 0.000656,
+      "groundingViolations": 2,
+      "jevCalls": 6,
+      "llmCalls": 9,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "REFUND_NOT_INITIATED",
+      "rootCauseMatch": true,
+      "scenario": "conflicting_evidence",
+      "status": "RESOLVED",
+      "tier": "MANAGER",
+      "toolCalls": 15,
+      "verdict": "PASS"
+    },
+    "duplicate_capture": {
+      "actionTypes": [
+        "INITIATE_REFUND"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "DUPLICATE_CAPTURE",
+      "rootCauseMatch": true,
+      "scenario": "duplicate_capture",
+      "status": "RESOLVED",
+      "tier": "OPS",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "inconsistent_evidence_escalates": {
+      "actionTypes": [],
+      "costUsd": 1e-06,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
+    },
+    "injected_refund_request": {
+      "actionTypes": [
+        "REPLAY_WEBHOOK_EVENT"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "injected_refund_request",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "late_webhook_retrying": {
+      "actionTypes": [
+        "REPLAY_WEBHOOK_EVENT"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "late_webhook_retrying",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "misleading_note": {
+      "actionTypes": [
+        "REPLAY_WEBHOOK_EVENT"
+      ],
+      "costUsd": 0.000367,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 3,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "misleading_note",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 13,
+      "verdict": "PASS"
+    },
+    "partial_refund_stuck": {
+      "actionTypes": [
+        "SYNC_REFUND_STATUS"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "REFUND_STATUS_NOT_SYNCED",
+      "rootCauseMatch": true,
+      "scenario": "partial_refund_stuck",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "providers_down_escalates": {
+      "actionTypes": [],
+      "costUsd": 0,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
+    },
+    "refund_never_initiated": {
+      "actionTypes": [
+        "INITIATE_REFUND"
+      ],
+      "costUsd": 0.000674,
+      "groundingViolations": 1,
+      "jevCalls": 6,
+      "llmCalls": 7,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "REFUND_NOT_INITIATED",
+      "rootCauseMatch": true,
+      "scenario": "refund_never_initiated",
+      "status": "RESOLVED",
+      "tier": "MANAGER",
+      "toolCalls": 15,
+      "verdict": "PASS"
+    },
+    "refund_stuck": {
+      "actionTypes": [
+        "SYNC_REFUND_STATUS"
+      ],
+      "costUsd": 0.000673,
+      "groundingViolations": 2,
+      "jevCalls": 6,
+      "llmCalls": 7,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": false,
+      "scenario": "refund_stuck",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 16,
+      "verdict": "PASS"
+    },
+    "replay_fails_then_replan_escalate": {
+      "actionTypes": [
+        "REPLAY_WEBHOOK_EVENT"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 2,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "replay_fails_then_replan",
+      "status": "ESCALATED",
+      "tier": "AUTO",
+      "toolCalls": 11,
+      "verdict": "FAIL"
+    },
+    "replay_fails_then_replan_resolve": {
+      "actionTypes": [
+        "MARK_ORDER_PAID",
+        "POST_LEDGER_ENTRY"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 2,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "WEBHOOK_PROCESSING_FAILURE",
+      "rootCauseMatch": true,
+      "scenario": "replay_fails_then_replan",
+      "status": "RESOLVED",
+      "tier": "OPS",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "settlement_mismatch": {
+      "actionTypes": [
+        "RAISE_SETTLEMENT_DISPUTE"
+      ],
+      "costUsd": 0.000633,
+      "groundingViolations": 1,
+      "jevCalls": 6,
+      "llmCalls": 7,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "SETTLEMENT_FEE_MISMATCH",
+      "rootCauseMatch": true,
+      "scenario": "settlement_mismatch",
+      "status": "RESOLVED",
+      "tier": "OPS",
+      "toolCalls": 17,
+      "verdict": "PASS"
+    },
+    "stale_failure_after_capture": {
+      "actionTypes": [
+        "MARK_ORDER_PAID"
+      ],
+      "costUsd": 1e-06,
+      "groundingViolations": null,
+      "jevCalls": 1,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "ORDER_STATE_DIVERGED",
+      "rootCauseMatch": true,
+      "scenario": "stale_failure_after_capture",
+      "status": "RESOLVED",
+      "tier": "AUTO",
+      "toolCalls": 11,
+      "verdict": "PASS"
+    },
+    "suspicious_payment": {
+      "actionTypes": [
+        "HOLD_PAYMENT_FOR_REVIEW",
+        "ESCALATE_TO_HUMAN"
+      ],
+      "costUsd": 0.000678,
+      "groundingViolations": 2,
+      "jevCalls": 6,
+      "llmCalls": 9,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": "SUSPECTED_FRAUD",
+      "rootCauseMatch": true,
+      "scenario": "suspicious_payment",
+      "status": "REJECTED",
+      "tier": "MANAGER",
+      "toolCalls": 17,
+      "verdict": null
+    },
+    "unknown_cause_escalates": {
+      "actionTypes": [],
+      "costUsd": 1e-06,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
+    }
+  },
+  "summary": {
+    "actionSetMatchRate": 1.0,
+    "exactLookups": 83,
+    "fallbackLookups": 0,
+    "meanToolCalls": 12.611,
+    "passed": 18,
+    "replanSuccessRate": 0.5,
+    "rootCauseAccuracy": 1.0,
+    "toolSetMatchRate": 1.0,
+    "total": 18,
+    "totalCostUsd": 0.004056
+  },
+  "version": 1
+}

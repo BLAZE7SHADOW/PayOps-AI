@@ -36,8 +36,14 @@ async def test_steps_are_recorded_in_graph_order_and_the_run_is_synced_once() ->
     api = FakeNodeApi()
     await runner(api).investigate("run_b", api.data["caseId"], "captured_order_failed", "REPLAY")
     nodes = [n for n, _ in api.steps]
-    assert nodes[0] == "loadCase" and nodes.index("triage") < nodes.index("diagnose") < nodes.index("resolve") < nodes.index("policyGate")
-    assert ("validate", "VALIDATION_COMPLETED") in api.steps and api.steps[-1] == ("close", "RUN_COMPLETED") or ("closeResolved", "RUN_COMPLETED") == api.steps[-1]
+    assert nodes[0] == "loadCase" and nodes.index("triage") < nodes.index("diagnose") < nodes.index(
+        "resolve"
+    ) < nodes.index("policyGate")
+    assert (
+        ("validate", "VALIDATION_COMPLETED") in api.steps
+        and api.steps[-1] == ("close", "RUN_COMPLETED")
+        or ("closeResolved", "RUN_COMPLETED") == api.steps[-1]
+    )
     assert len(api.synced) == 1 and api.synced[0][1] is False
     assert api.synced[0][0]["status"] == "RESOLVED"
 
@@ -48,7 +54,13 @@ async def test_a_manager_tier_run_pauses_for_approval_and_resumes_on_the_decisio
     paused = await r.investigate("run_c", api.data["caseId"], "captured_order_failed", "REPLAY")
     assert paused.interrupted and paused.status == "AWAITING_APPROVAL"
     assert "execute" not in api.calls and api.synced[0][1] is True
-    done = await r.resume("run_c", api.data["caseId"], "captured_order_failed", "REPLAY", {"approvalId": "apr_fake", "decision": "APPROVE"})
+    done = await r.resume(
+        "run_c",
+        api.data["caseId"],
+        "captured_order_failed",
+        "REPLAY",
+        {"approvalId": "apr_fake", "decision": "APPROVE"},
+    )
     assert done.status == "RESOLVED" and not done.interrupted and "execute" in api.calls
 
 
@@ -56,7 +68,9 @@ async def test_a_rejected_approval_closes_the_run_without_executing() -> None:
     api = FakeNodeApi(tier="OPS")
     r = runner(api)
     await r.investigate("run_d", api.data["caseId"], "captured_order_failed", "REPLAY")
-    done = await r.resume("run_d", api.data["caseId"], "captured_order_failed", "REPLAY", {"approvalId": "apr_fake", "decision": "REJECT"})
+    done = await r.resume(
+        "run_d", api.data["caseId"], "captured_order_failed", "REPLAY", {"approvalId": "apr_fake", "decision": "REJECT"}
+    )
     assert done.status == "REJECTED" and "execute" not in api.calls
 
 

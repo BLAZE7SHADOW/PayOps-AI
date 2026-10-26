@@ -1,9 +1,9 @@
-"""Inbound webhooks: our consumer (what the gateway calls when something happens to a payment) and the event log with replay and retry.
-(packages/core webhook-consumer.ts, webhook-event.service.ts)
+"""Inbound webhooks: our consumer (what the gateway calls when something happens to a payment) and the event log with
+replay and retry. (packages/core webhook-consumer.ts, webhook-event.service.ts)
 
-The consumer answers like an HTTP handler (2xx processed, 409 conflict, 5xx error) and works in its OWN transaction, so the gateway can record the
-delivery attempt only after it returns. A failed event is retried on the schedule in `domain/webhook_retry.py`; after the last attempt it is DEAD and
-only a person can replay it."""
+The consumer answers like an HTTP handler (2xx processed, 409 conflict, 5xx error) and works in its OWN transaction, so
+the gateway can record the delivery attempt only after it returns. A failed event is retried on the schedule in
+`domain/webhook_retry.py`; after the last attempt it is DEAD and only a person can replay it."""
 
 from __future__ import annotations
 
@@ -53,8 +53,14 @@ def _consumer_audit(action: str, entity_type: str, entity_id: str, summary: str)
 
 class WebhookConsumer:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], gateway: PaymentGateway, audit: AuditService, orders: OrderService, payments: PaymentWriteService,
-        ledger: LedgerWriteService, refunds: RefundWriteService,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        gateway: PaymentGateway,
+        audit: AuditService,
+        orders: OrderService,
+        payments: PaymentWriteService,
+        ledger: LedgerWriteService,
+        refunds: RefundWriteService,
     ) -> None:
         self._sessions = sessions
         self._gateway = gateway
@@ -83,27 +89,47 @@ class WebhookConsumer:
         if gw is None or not is_captured(gw):
             return _noop(f"Gateway payment {event.gw_payment_id} is not captured")
         async with transaction(self._sessions) as s:
-            payment = (await s.scalars(select(Payment).where(Payment.gw_payment_id == gw.id).with_for_update().limit(1))).first()
+            payment = (
+                await s.scalars(select(Payment).where(Payment.gw_payment_id == gw.id).with_for_update().limit(1))
+            ).first()
             if payment is None:
                 return _noop(f"No internal payment for {gw.id}; ignored")
             order = await s.get(Order, payment.order_id)
             if order is None:
                 return _noop(f"Order {payment.order_id} not found; ignored")
             if order.locked_reason:
-                # Injected fault (replay_fails_then_replan): the order service rejects webhook-driven transitions. Nothing is written.
-                return ConsumerResult(409, "ORDER_VERSION_CONFLICT", f"Order {order.id} rejected the update: {order.locked_reason}")
+                # Injected fault (replay_fails_then_replan): the order service rejects webhook-driven transitions.
+                # Nothing is written.
+                return ConsumerResult(
+                    409, "ORDER_VERSION_CONFLICT", f"Order {order.id} rejected the update: {order.locked_reason}"
+                )
             changes: list[str] = []
             if payment.status not in CAPTURE_KNOWN_STATUSES:
                 await self._payments.set_status(s, payment.id, "CAPTURED", f"payment.captured {event.id}", _CTX)
                 changes.append("payment CAPTURED")
             if order.status in ("PENDING", "FAILED"):
                 previous = order.status
-                await self._orders.transition(s, order.id, "PAID", TransitionOptions(by="webhook-consumer", reason=f"payment.captured {event.id}", payment_id=payment.id), _CTX)
+                await self._orders.transition(
+                    s,
+                    order.id,
+                    "PAID",
+                    TransitionOptions(
+                        by="webhook-consumer", reason=f"payment.captured {event.id}", payment_id=payment.id
+                    ),
+                    _CTX,
+                )
                 changes.append(f"order {previous} to PAID")
             if order.payment_id is None or order.payment_id == payment.id:
                 entries = await self._ledger.entries_for_payment(s, payment.id)
                 if capture_credit_minor(_Ledger(entries)) == 0:
-                    await self._ledger.post_capture(s, payment_id=payment.id, merchant_id=payment.merchant_id, amount_minor=gw.amount_minor, source="SYSTEM", ctx=_CTX)
+                    await self._ledger.post_capture(
+                        s,
+                        payment_id=payment.id,
+                        merchant_id=payment.merchant_id,
+                        amount_minor=gw.amount_minor,
+                        source="SYSTEM",
+                        ctx=_CTX,
+                    )
                     changes.append("capture posted")
             message = f"Processed {event.id}: {', '.join(changes)}" if changes else f"{event.id} already reflected"
             await self._audit.record(s, _consumer_audit("webhook.processed", "payment", payment.id, message))
@@ -150,7 +176,12 @@ _SOURCE: ContextVar[str] = ContextVar("webhook_attempt_source", default="GATEWAY
 
 class WebhookEventService:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], clock: Clock, audit: AuditService, consumer: WebhookConsumer, gateway: PaymentGateway,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Clock,
+        audit: AuditService,
+        consumer: WebhookConsumer,
+        gateway: PaymentGateway,
         scheduler: RetryScheduler | None = None,
     ) -> None:
         self._sessions = sessions
@@ -164,7 +195,8 @@ class WebhookEventService:
         self._scheduler = scheduler
 
     async def receive(self, event: GatewayWebhookDelivery) -> int:
-        """The gateway's webhook sink: run the consumer, log the attempt, queue a retry if it failed. Returns the HTTP status."""
+        """The gateway's webhook sink: run the consumer, log the attempt, queue a retry if it failed. Returns the HTTP
+        status."""
         result = await self._consumer.handle(event)
         row = await self._record(event, result, _SOURCE.get())
         if row.next_retry_at is not None and self._scheduler is not None:
@@ -197,7 +229,12 @@ class WebhookEventService:
             await self._audit.record(
                 s,
                 AuditInput(
-                    "USER", by_id, by_name, "webhook.replayed", "webhook_event", event_id,
+                    "USER",
+                    by_id,
+                    by_name,
+                    "webhook.replayed",
+                    "webhook_event",
+                    event_id,
                     f"Replayed {row.event} {event_id} from the event log: {after.last_message} ({before} to {after.status})",
                 ),
             )
@@ -219,7 +256,12 @@ class WebhookEventService:
                 p = row.payload
                 await self.receive(
                     GatewayWebhookDelivery(
-                        id=p["id"], event=p["event"], gw_payment_id=p["gwPaymentId"], gw_refund_id=p.get("gwRefundId"), attempts=[], final_status="FAILED",
+                        id=p["id"],
+                        event=p["event"],
+                        gw_payment_id=p["gwPaymentId"],
+                        gw_refund_id=p.get("gwRefundId"),
+                        attempts=[],
+                        final_status="FAILED",
                         created_at=parse_iso(p["createdAt"]),
                     )
                 )
@@ -229,32 +271,68 @@ class WebhookEventService:
     async def _record(self, event: GatewayWebhookDelivery, result: ConsumerResult, source: str) -> WebhookEvent:
         now = self._clock.now()
         async with transaction(self._sessions) as s:
-            existing = (await s.scalars(select(WebhookEvent).where(WebhookEvent.id == event.id).with_for_update())).one_or_none()
+            existing = (
+                await s.scalars(select(WebhookEvent).where(WebhookEvent.id == event.id).with_for_update())
+            ).one_or_none()
             was_dead = existing is not None and existing.status == "DEAD"
-            attempts = [*(existing.attempts if existing else []), {"at": to_iso(now), "source": source, "httpStatus": result.http_status, "outcome": result.outcome, "message": result.message}]
+            attempts = [
+                *(existing.attempts if existing else []),
+                {
+                    "at": to_iso(now),
+                    "source": source,
+                    "httpStatus": result.http_status,
+                    "outcome": result.outcome,
+                    "message": result.message,
+                },
+            ]
             ok = is_webhook_success(result.http_status)
             delay = None if ok or was_dead else webhook_retry_delay_seconds(len(attempts))
             status = "PROCESSED" if ok else "DEAD" if delay is None else "FAILED"
             next_retry = None if delay is None else now + timedelta(seconds=delay)
             if existing is None:
                 row = WebhookEvent(
-                    id=event.id, event=event.event, gw_payment_id=event.gw_payment_id, gw_refund_id=event.gw_refund_id,
-                    payload={"id": event.id, "event": event.event, "gwPaymentId": event.gw_payment_id, "gwRefundId": event.gw_refund_id, "createdAt": to_iso(event.created_at)},
-                    first_received_at=now, status=status, attempts=attempts, attempt_count=len(attempts), last_http_status=result.http_status,
-                    last_message=result.message, next_retry_at=next_retry, updated_at=now,
+                    id=event.id,
+                    event=event.event,
+                    gw_payment_id=event.gw_payment_id,
+                    gw_refund_id=event.gw_refund_id,
+                    payload={
+                        "id": event.id,
+                        "event": event.event,
+                        "gwPaymentId": event.gw_payment_id,
+                        "gwRefundId": event.gw_refund_id,
+                        "createdAt": to_iso(event.created_at),
+                    },
+                    first_received_at=now,
+                    status=status,
+                    attempts=attempts,
+                    attempt_count=len(attempts),
+                    last_http_status=result.http_status,
+                    last_message=result.message,
+                    next_retry_at=next_retry,
+                    updated_at=now,
                 )
                 s.add(row)
             else:
                 row = existing
                 row.status, row.attempts, row.attempt_count = status, attempts, len(attempts)
-                row.last_http_status, row.last_message, row.next_retry_at, row.updated_at = result.http_status, result.message, next_retry, now
+                row.last_http_status, row.last_message, row.next_retry_at, row.updated_at = (
+                    result.http_status,
+                    result.message,
+                    next_retry,
+                    now,
+                )
             await s.flush()
             if status == "DEAD" and not was_dead:
                 a = WEBHOOK_CONSUMER_ACTOR
                 await self._audit.record(
                     s,
                     AuditInput(
-                        a.actor_type, a.actor_id, a.actor_name, "webhook.dead", "webhook_event", event.id,
+                        a.actor_type,
+                        a.actor_id,
+                        a.actor_name,
+                        "webhook.dead",
+                        "webhook_event",
+                        event.id,
                         f"{event.event} {event.id} failed {len(attempts)} times and is out of automatic retries: {result.message}",
                     ),
                 )

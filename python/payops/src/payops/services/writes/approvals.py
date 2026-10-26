@@ -1,6 +1,7 @@
-"""Approval decisions. Enforces the role needed for the tier and four-eyes (whoever proposed a resolution cannot approve it). On APPROVE the resolution
-continues through the continuation: a person's proposal executes and validates directly, an agent's resumes its graph thread so its own execute,
-validate and close nodes run. (packages/core approval.service.ts)"""
+"""Approval decisions. Enforces the role needed for the tier and four-eyes (whoever proposed a resolution cannot approve
+it). On APPROVE the resolution continues through the continuation: a person's proposal executes and validates directly,
+an agent's resumes its graph thread so its own execute, validate and close nodes run. (packages/core
+approval.service.ts)"""
 
 from __future__ import annotations
 
@@ -12,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ...db.engine import transaction
 from ...db.models import Approval, Case, Resolution
-from ...domain.bulk_approve import BulkApprovalBody, BulkApprovalResult, BulkApprovalResultItem, BulkApproveInput, bulk_approve_block_reason
+from ...domain.bulk_approve import (
+    BulkApprovalBody,
+    BulkApprovalResult,
+    BulkApprovalResultItem,
+    BulkApproveInput,
+    bulk_approve_block_reason,
+)
 from ...dto.resolution import ApprovalDecisionBody, ApprovalItem
 from ...errors import AppError
 from ...ports import Clock, EventPublisher
@@ -34,8 +41,14 @@ class AgentResumer(Protocol):
 
 class ApprovalService:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], clock: Clock, audit: AuditService, events: EventPublisher, cases: CaseWriteService,
-        queries: ApprovalQueryService, resolutions: ResolutionService,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Clock,
+        audit: AuditService,
+        events: EventPublisher,
+        cases: CaseWriteService,
+        queries: ApprovalQueryService,
+        resolutions: ResolutionService,
     ) -> None:
         self._sessions = sessions
         self._clock = clock
@@ -71,12 +84,24 @@ class ApprovalService:
         write = replace(user_write_context(viewer), case_id=c.id, run_id=r.run_id)
 
         async with transaction(self._sessions) as s:
-            locked = (await s.scalars(select(Approval).where(Approval.id == approval_id).with_for_update().execution_options(populate_existing=True))).one_or_none()
+            locked = (
+                await s.scalars(
+                    select(Approval)
+                    .where(Approval.id == approval_id)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
+            ).one_or_none()
             if locked is None or locked.status != "PENDING":
                 raise AppError("CONFLICT", "This approval was already decided.")
             now = self._clock.now()
             status = {"APPROVE": "APPROVED", "REJECT": "REJECTED", "ESCALATE": "ESCALATED"}[body.decision]
-            locked.status, locked.decided_by, locked.comment, locked.decided_at = status, user_actor(viewer), body.comment or None, now
+            locked.status, locked.decided_by, locked.comment, locked.decided_at = (
+                status,
+                user_actor(viewer),
+                body.comment or None,
+                now,
+            )
             resolution = await s.get(Resolution, r.id, populate_existing=True)
             assert resolution is not None
             resolution.status = {"APPROVE": "EXECUTING", "REJECT": "REJECTED", "ESCALATE": "ESCALATED"}[body.decision]
@@ -86,13 +111,19 @@ class ApprovalService:
             await self._audit.record(
                 s,
                 audit_from(
-                    write, action="approval.decided", entity_type="approval", entity_id=approval_id,
+                    write,
+                    action="approval.decided",
+                    entity_type="approval",
+                    entity_id=approval_id,
                     summary=f"{viewer.name} {status.lower()} {actions_summary(r.actions)} for {c.display_id}{tail}",
-                    before={"status": "PENDING"}, after={"status": status, "comment": body.comment or None},
+                    before={"status": "PENDING"},
+                    after={"status": status, "comment": body.comment or None},
                 ),
             )
             case_status = {"APPROVE": "EXECUTING", "REJECT": "OPEN", "ESCALATE": "ESCALATED"}[body.decision]
-            await self._cases.set_status(s, c.id, case_status, f"{c.display_id}: approval {status.lower()} by {viewer.name}", write)
+            await self._cases.set_status(
+                s, c.id, case_status, f"{c.display_id}: approval {status.lower()} by {viewer.name}", write
+            )
 
         async with self._sessions() as s:
             decided = await self._load(s, approval_id)
@@ -113,8 +144,9 @@ class ApprovalService:
         return to_approval_item(after[0], after[1], after[2], viewer)
 
     async def bulk_approve(self, body: BulkApprovalBody, viewer: SessionUser) -> BulkApprovalResult:
-        """Approves several pending approvals in one call (D069). Each item is checked against `bulk_approve_block_reason` and the usual decide rules, then
-        approved through `decide`, so the executor, validator and audit trail are the same as for a single click. One item failing does not stop the others."""
+        """Approves several pending approvals in one call (D069). Each item is checked against
+        `bulk_approve_block_reason` and the usual decide rules, then approved through `decide`, so the executor,
+        validator and audit trail are the same as for a single click. One item failing does not stop the others."""
         comment = body.comment or "Bulk approved as low risk"
         items: list[BulkApprovalResultItem] = []
         for approval_id in dict.fromkeys(body.ids):
@@ -126,19 +158,37 @@ class ApprovalService:
                 item = to_approval_item(a, c, r, viewer)
                 blocked = item.cannot_decide_reason or bulk_approve_block_reason(
                     BulkApproveInput(
-                        tier=item.tier, risk_tier=item.risk_tier, money_moving_minor=item.money_moving_minor, rule_ids=item.rule_ids,
-                        action_types=item.action_types, quarantined=(c.signals or {}).get("quarantined") is True,
+                        tier=item.tier,
+                        risk_tier=item.risk_tier,
+                        money_moving_minor=item.money_moving_minor,
+                        rule_ids=item.rule_ids,
+                        action_types=item.action_types,
+                        quarantined=(c.signals or {}).get("quarantined") is True,
                     )
                 )
                 if blocked:
-                    items.append(BulkApprovalResultItem(approval_id=approval_id, display_id=display_id, outcome="SKIPPED", message=blocked))
+                    items.append(
+                        BulkApprovalResultItem(
+                            approval_id=approval_id, display_id=display_id, outcome="SKIPPED", message=blocked
+                        )
+                    )
                     continue
                 await self.decide(approval_id, ApprovalDecisionBody(decision="APPROVE", comment=comment), viewer)
-                items.append(BulkApprovalResultItem(approval_id=approval_id, display_id=display_id, outcome="APPROVED", message="Approved."))
+                items.append(
+                    BulkApprovalResultItem(
+                        approval_id=approval_id, display_id=display_id, outcome="APPROVED", message="Approved."
+                    )
+                )
             except Exception as err:  # noqa: BLE001 - one failing item must not stop the rest
                 message = err.message if isinstance(err, AppError) else (str(err) or "Failed.")
-                items.append(BulkApprovalResultItem(approval_id=approval_id, display_id=display_id, outcome="FAILED", message=message))
+                items.append(
+                    BulkApprovalResultItem(
+                        approval_id=approval_id, display_id=display_id, outcome="FAILED", message=message
+                    )
+                )
         return BulkApprovalResult(
-            approved=sum(i.outcome == "APPROVED" for i in items), skipped=sum(i.outcome == "SKIPPED" for i in items),
-            failed=sum(i.outcome == "FAILED" for i in items), items=items,
+            approved=sum(i.outcome == "APPROVED" for i in items),
+            skipped=sum(i.outcome == "SKIPPED" for i in items),
+            failed=sum(i.outcome == "FAILED" for i in items),
+            items=items,
         )

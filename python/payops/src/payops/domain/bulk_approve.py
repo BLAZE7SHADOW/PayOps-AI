@@ -1,6 +1,6 @@
-"""Bulk approve (D069). One rule decides which pending approvals may be approved in a batch, so the server and the Exceptions page agree. Bulk
-approve is only a shortcut for clicking Approve on each item: every item still goes through the normal decision path (role, four-eyes, executor,
-validator). Anything that needs a closer look is left out."""
+"""Bulk approve (D069). One rule decides which pending approvals may be approved in a batch, so the server and the
+Exceptions page agree. Bulk approve is only a shortcut for clicking Approve on each item: every item still goes through
+the normal decision path (role, four-eyes, executor, validator). Anything that needs a closer look is left out."""
 
 from __future__ import annotations
 

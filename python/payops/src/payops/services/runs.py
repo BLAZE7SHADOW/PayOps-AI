@@ -1,5 +1,5 @@
-"""Agent run reads: the run list and detail, the step timeline a reconnecting client rebuilds from, and operator feedback on diagnoses.
-(apps/server runs.ts, packages/core feedback.service.ts)"""
+"""Agent run reads: the run list and detail, the step timeline a reconnecting client rebuilds from, and operator
+feedback on diagnoses. (apps/server runs.ts, packages/core feedback.service.ts)"""
 
 from __future__ import annotations
 
@@ -24,7 +24,11 @@ class RunQueryService:
             # The resolution is the source of truth once it exists; the run's own snapshot is only the fallback.
             item = await self._resolutions.item(session, row.resolution_id)
             executions = item.executions
-            validation = RunValidation(verdict=item.validation.verdict, checks=item.validation.checks) if item.validation else None
+            validation = (
+                RunValidation(verdict=item.validation.verdict, checks=item.validation.checks)
+                if item.validation
+                else None
+            )
             policy = item.policy
         return AgentRunItem(
             id=row.id,
@@ -66,12 +70,25 @@ class RunQueryService:
         return await self._to_item(session, row)
 
     async def steps(self, session: AsyncSession, run_id: str) -> Page[AgentStepItem]:
-        rows = (await session.scalars(select(AgentStep).where(AgentStep.run_id == run_id).order_by(AgentStep.seq))).all()
-        items = [AgentStepItem(id=r.id, run_id=r.run_id, seq=r.seq, node=r.node, kind=r.kind, payload=r.payload, at=to_iso(r.at)) for r in rows]
+        rows = (
+            await session.scalars(select(AgentStep).where(AgentStep.run_id == run_id).order_by(AgentStep.seq))
+        ).all()
+        items = [
+            AgentStepItem(
+                id=r.id, run_id=r.run_id, seq=r.seq, node=r.node, kind=r.kind, payload=r.payload, at=to_iso(r.at)
+            )
+            for r in rows
+        ]
         return Page[AgentStepItem](items=items, next_cursor=None, total=len(items))
 
     async def feedback(self, session: AsyncSession, run_id: str) -> Page[DiagnosisFeedbackItem]:
-        rows = (await session.scalars(select(DiagnosisFeedback).where(DiagnosisFeedback.run_id == run_id).order_by(desc(DiagnosisFeedback.updated_at)))).all()
+        rows = (
+            await session.scalars(
+                select(DiagnosisFeedback)
+                .where(DiagnosisFeedback.run_id == run_id)
+                .order_by(desc(DiagnosisFeedback.updated_at))
+            )
+        ).all()
         items = [
             DiagnosisFeedbackItem(
                 id=r.id,

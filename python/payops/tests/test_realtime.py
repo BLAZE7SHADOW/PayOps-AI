@@ -62,7 +62,13 @@ async def connect(live: Live, cookie: str | None) -> tuple[socketio.AsyncClient,
     received: list[tuple[str, Any]] = []
     for name in ("case.created", "case.updated", "resolution.updated"):
         client.on(name, lambda payload, name=name: received.append((name, payload)))
-    await client.connect(live.url, headers={"Cookie": cookie} if cookie else {}, socketio_path="/socket.io", transports=["websocket"], wait_timeout=5)
+    await client.connect(
+        live.url,
+        headers={"Cookie": cookie} if cookie else {},
+        socketio_path="/socket.io",
+        transports=["websocket"],
+        wait_timeout=5,
+    )
     return client, received
 
 

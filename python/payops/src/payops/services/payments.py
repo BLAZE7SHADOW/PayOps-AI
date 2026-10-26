@@ -1,5 +1,6 @@
-"""Read side of the payments explorer. Pages are selected with one keyset query, then every row is built from batched OrderSnapshots, so the list's
-ledger, settlement and mismatch columns are computed by the same code as the case page's state matrix. (packages/core payment-query.service.ts)"""
+"""Read side of the payments explorer. Pages are selected with one keyset query, then every row is built from batched
+OrderSnapshots, so the list's ledger, settlement and mismatch columns are computed by the same code as the case page's
+state matrix. (packages/core payment-query.service.ts)"""
 
 from __future__ import annotations
 
@@ -16,7 +17,16 @@ from ..domain.reconciliation.lifecycle import build_lifecycle
 from ..domain.reconciliation.matrix import LEDGER_CODES, SETTLEMENT_CODES, build_matrix
 from ..domain.snapshot import OrderSnapshot
 from ..domain.timeutil import to_iso
-from ..dto.api import CardInfo, MerchantRef, OpenCaseRef, Page, PaymentDetail, PaymentListItem, PaymentListQuery, PersonRef
+from ..dto.api import (
+    CardInfo,
+    MerchantRef,
+    OpenCaseRef,
+    Page,
+    PaymentDetail,
+    PaymentListItem,
+    PaymentListQuery,
+    PersonRef,
+)
 from ..dto.matrix import StateMatrix
 from ..errors import not_found
 from ..infra.snapshots import load_order_snapshots
@@ -64,10 +74,14 @@ class PaymentQueryService:
         q = (query.q or "").strip()
         if q:
             pattern = f"{escape_like(q)}%"
-            conditions.append(or_(Payment.id.ilike(pattern), Payment.gw_payment_id.ilike(pattern), Payment.order_id.ilike(pattern)))
+            conditions.append(
+                or_(Payment.id.ilike(pattern), Payment.gw_payment_id.ilike(pattern), Payment.order_id.ilike(pattern))
+            )
         if query.gateway_status:
             # A read-side filter on the gateway mirror table; writes still go only through the adapter.
-            conditions.append(Payment.gw_payment_id.in_(select(GwPayment.id).where(GwPayment.status == query.gateway_status)))
+            conditions.append(
+                Payment.gw_payment_id.in_(select(GwPayment.id).where(GwPayment.status == query.gateway_status))
+            )
         if query.order_status:
             conditions.append(Payment.order_id.in_(select(Order.id).where(Order.status == query.order_status)))
         if query.mismatch_only == "true":
@@ -82,17 +96,28 @@ class PaymentQueryService:
             conditions.append(or_(Payment.created_at < c, and_(Payment.created_at == c, Payment.id < cursor["i"])))
 
         rows = list(
-            (await session.scalars(select(Payment).where(*conditions).order_by(desc(Payment.created_at), desc(Payment.id)).limit(query.limit + 1))).all()
+            (
+                await session.scalars(
+                    select(Payment)
+                    .where(*conditions)
+                    .order_by(desc(Payment.created_at), desc(Payment.id))
+                    .limit(query.limit + 1)
+                )
+            ).all()
         )
         page = rows[: query.limit]
         items = await self._build_items(session, page)
         last = page[-1] if page else None
-        next_cursor = encode_cursor({"c": to_iso(last.created_at), "i": last.id}) if len(rows) > query.limit and last else None
+        next_cursor = (
+            encode_cursor({"c": to_iso(last.created_at), "i": last.id}) if len(rows) > query.limit and last else None
+        )
         return Page[PaymentListItem](items=items, next_cursor=next_cursor)
 
     async def get(self, session: AsyncSession, id_: str) -> PaymentDetail:
         """Accepts our payment id or the gateway payment id."""
-        payment = (await session.scalars(select(Payment).where(or_(Payment.id == id_, Payment.gw_payment_id == id_)).limit(1))).first()
+        payment = (
+            await session.scalars(select(Payment).where(or_(Payment.id == id_, Payment.gw_payment_id == id_)).limit(1))
+        ).first()
         if payment is None:
             raise not_found("Payment", id_)
         snapshots = await load_order_snapshots(session, self._gateway, [payment.order_id], self._clock.now())
@@ -102,7 +127,11 @@ class PaymentQueryService:
         open_cases = await self._cases.open_cases_by_payment(session, [payment.id])
         item, matrix = self._to_item(payment, snapshot, open_cases.get(payment.id))
         gw = next((g for g in snapshot.gateway if g.id == payment.gw_payment_id), None)
-        card = CardInfo(last4=gw.card["last4"], network=gw.card["network"], country=gw.card["country"]) if gw and gw.card else None
+        card = (
+            CardInfo(last4=gw.card["last4"], network=gw.card["network"], country=gw.card["country"])
+            if gw and gw.card
+            else None
+        )
         return PaymentDetail(**item.model_dump(), card=card, lifecycle=build_lifecycle(snapshot), matrix=matrix)
 
     async def _build_items(self, session: AsyncSession, page: list[Payment]) -> list[PaymentListItem]:
@@ -113,8 +142,14 @@ class PaymentQueryService:
         by_order = {s.order.id: s for s in snapshots}
         return [self._to_item(p, by_order[p.order_id], open_cases.get(p.id))[0] for p in page if p.order_id in by_order]
 
-    def _to_item(self, payment: Payment, snapshot: OrderSnapshot, open_case: tuple[str, str] | None) -> tuple[PaymentListItem, StateMatrix]:
-        view = snapshot if snapshot.payment is not None and snapshot.payment.id == payment.id else replace(snapshot, payment=payment)
+    def _to_item(
+        self, payment: Payment, snapshot: OrderSnapshot, open_case: tuple[str, str] | None
+    ) -> tuple[PaymentListItem, StateMatrix]:
+        view = (
+            snapshot
+            if snapshot.payment is not None and snapshot.payment.id == payment.id
+            else replace(snapshot, payment=payment)
+        )
         matrix = build_matrix(view)
         gw = next((g for g in view.gateway if g.id == payment.gw_payment_id), None) or view.primary_gw
         item = PaymentListItem(

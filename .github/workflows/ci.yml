@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   typescript:
-    name: TypeScript (typecheck, lint, tests, evals)
+    name: Web and shared (typecheck, lint, tests)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -33,7 +33,6 @@ jobs:
       - run: pnpm test
         env:
           VITE_API_URL: ""
-      - run: pnpm eval
 
   python:
     name: Python ${{ matrix.project }} (ruff, pyright, pytest)
@@ -54,28 +53,20 @@ jobs:
           cache-dependency-glob: python/${{ matrix.project }}/uv.lock
       - run: uv sync --frozen
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest -q
-
-  parity:
-    name: Parity (Python graph against the TypeScript graph)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      # The 18 golden scenarios through the real API process, replaying recorded model responses, held to the committed
+      # baseline (fixtures/evals/baseline.json). Writes a summary table to the run page and a JSON record kept as an artifact.
+      - run: uv run python -m payops.evals --report eval-report.json
+        if: matrix.project == 'payops'
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.project == 'payops'
         with:
-          node-version: 22
-          cache: pnpm
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: python/agents/uv.lock
-      - run: pnpm install --frozen-lockfile
-      - run: uv sync --frozen
-        working-directory: python/agents
-      - run: pnpm eval:python
+          name: eval-report
+          path: python/payops/eval-report.json
+          if-no-files-found: ignore
+          retention-days: 90
 
   audit:
     name: Dependency audit

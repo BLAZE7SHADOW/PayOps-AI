@@ -36,7 +36,12 @@ class MutableClock:
 
 def event(event_id: str = "evt_1") -> GatewayWebhookDelivery:
     return GatewayWebhookDelivery(
-        id=event_id, event="payment.captured", gw_payment_id="gwpay_1", gw_refund_id=None, attempts=[], final_status="PENDING",
+        id=event_id,
+        event="payment.captured",
+        gw_payment_id="gwpay_1",
+        gw_refund_id=None,
+        attempts=[],
+        final_status="PENDING",
         created_at=datetime(2026, 9, 29, 9, 59, tzinfo=UTC),
     )
 
@@ -84,7 +89,11 @@ async def test_logs_a_processed_event_with_its_payload_and_no_retry(h: Harness) 
     d = await h.get("evt_1")
     assert (d.status, d.attempt_count, d.next_retry_at) == ("PROCESSED", 1, None)
     assert d.payload["id"] == "evt_1" and d.payload["gwPaymentId"] == "gwpay_1"
-    assert d.attempts[0]["source"] == "GATEWAY" and d.attempts[0]["httpStatus"] == 200 and d.attempts[0]["message"] == "Processed evt_1"
+    assert (
+        d.attempts[0]["source"] == "GATEWAY"
+        and d.attempts[0]["httpStatus"] == 200
+        and d.attempts[0]["message"] == "Processed evt_1"
+    )
     assert h.scheduled == []
 
 

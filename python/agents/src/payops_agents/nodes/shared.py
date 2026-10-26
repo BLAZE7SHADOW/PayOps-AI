@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from ..budget import add_budgets, check_budget_guard, zero_budget
 from ..constants import estimate_call_cost_usd
 from ..node_api import NodeApiPort
 from ..ports import DecisionPort, LlmPort
 from ..runids import next_evidence_id, next_finding_id
+from ..shapes import Evidence
 
 State = dict[str, Any]
 Update = dict[str, Any]
@@ -39,7 +40,8 @@ class NodeContext:
 
 
 def create_budget_guard(on_event: EventSink) -> GuardBudget:
-    """The budget guard (D049): when a run's total goes over a limit the node still completes, and the graph routes to `closeEscalated` next."""
+    """The budget guard (D049): when a run's total goes over a limit the node still completes, and the graph routes to
+    `closeEscalated` next."""
 
     async def guard_budget(node_name: str, state: State, update: Update) -> Update:
         total = add_budgets(state.get("budget") or zero_budget(), update.get("budget") or zero_budget())
@@ -52,13 +54,13 @@ def create_budget_guard(on_event: EventSink) -> GuardBudget:
     return guard_budget
 
 
-def evidence_from(existing: list[dict[str, Any]], results: list[dict[str, Any]], step_id: str) -> list[dict[str, Any]]:
+def evidence_from(existing: Sequence[Evidence], results: list[dict[str, Any]], step_id: str) -> list[Evidence]:
     """Turns the API's tool results into evidence items with run-scoped ids, in tool order."""
-    created: list[dict[str, Any]] = []
+    created: list[Evidence] = []
     pool = list(existing)
     for result in results:
         for draft in result["drafts"]:
-            item = {"id": next_evidence_id(pool), "stepId": step_id, **draft}
+            item = cast(Evidence, {"id": next_evidence_id(pool), "stepId": step_id, **draft})
             created.append(item)
             pool.append(item)
     return created
@@ -92,8 +94,11 @@ def decision_state(brief: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_findings(drafts: Any, agent: str, valid_ids: set[str], existing: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """A finding must cite evidence its own agent gathered: other citations are dropped, and a finding left with none is discarded."""
+def build_findings(
+    drafts: Any, agent: str, valid_ids: set[str], existing: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """A finding must cite evidence its own agent gathered: other citations are dropped, and a finding left with none is
+    discarded."""
     pool = list(existing)
     findings: list[dict[str, Any]] = []
     for draft in drafts:
@@ -101,8 +106,12 @@ def build_findings(drafts: Any, agent: str, valid_ids: set[str], existing: list[
         if not evidence_ids:
             continue
         finding = {
-            "id": next_finding_id(pool), "agent": agent, "code": draft.code,
-            "statement": draft.statement, "evidenceIds": evidence_ids, "confidence": draft.confidence,
+            "id": next_finding_id(pool),
+            "agent": agent,
+            "code": draft.code,
+            "statement": draft.statement,
+            "evidenceIds": evidence_ids,
+            "confidence": draft.confidence,
         }
         findings.append(finding)
         pool.append(finding)

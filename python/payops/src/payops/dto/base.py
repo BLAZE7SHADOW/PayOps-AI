@@ -9,8 +9,8 @@ from pydantic.alias_generators import to_camel
 
 
 class CamelModel(BaseModel):
-    """`null` fields are sent as null. A field named in `omit_when_none` is left out of the JSON when it is None, which is how the TypeScript API
-    treats optional properties (`paymentId?: string`): absent, not null."""
+    """`null` fields are sent as null. A field named in `omit_when_none` is left out of the JSON when it is None, which
+    is how the TypeScript API treats optional properties (`paymentId?: string`): absent, not null."""
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 

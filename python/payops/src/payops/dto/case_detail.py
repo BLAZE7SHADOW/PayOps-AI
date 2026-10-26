@@ -1,4 +1,5 @@
-"""Shapes that combine the list items with the resolution view: the case page, the approval page, and the source records tab."""
+"""Shapes that combine the list items with the resolution view: the case page, the approval page, and the source records
+tab."""
 
 from __future__ import annotations
 
@@ -19,7 +20,9 @@ class CaseNote(CamelModel):
 
 
 class CaseEntityRefs(CamelModel):
-    omit_when_none = frozenset({"payment_id", "gw_payment_id", "order_id", "customer_id", "merchant_id", "refund_id", "batch_id"})
+    omit_when_none = frozenset(
+        {"payment_id", "gw_payment_id", "order_id", "customer_id", "merchant_id", "refund_id", "batch_id"}
+    )
 
     payment_id: str | None = None
     gw_payment_id: str | None = None
@@ -69,8 +72,11 @@ class CaseSourceDetail(CamelModel):
     value: str
 
 
+SourceSystem = Literal["GATEWAY", "ORDER", "LEDGER", "WEBHOOK", "SETTLEMENT", "REFUND", "DISPUTE"]
+
+
 class CaseSourceRecord(CamelModel):
-    system: Literal["GATEWAY", "ORDER", "LEDGER", "WEBHOOK", "SETTLEMENT", "REFUND", "DISPUTE"]
+    system: SourceSystem
     kind: str
     id: str
     status: str

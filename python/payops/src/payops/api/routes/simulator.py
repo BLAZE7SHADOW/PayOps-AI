@@ -1,4 +1,5 @@
-"""The simulator routes: scenarios, reset and undo for the public demo. ADMIN only, or OPS in demo mode so visitors can generate scenarios."""
+"""The simulator routes: scenarios, reset and undo for the public demo. ADMIN only, or OPS in demo mode so visitors can
+generate scenarios."""
 
 from __future__ import annotations
 
@@ -46,5 +47,3 @@ def make_router(demo_mode: bool) -> APIRouter:
         return await services.simulator.undo()
 
     return router
-
-

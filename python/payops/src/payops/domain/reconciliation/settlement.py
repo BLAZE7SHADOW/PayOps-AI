@@ -1,5 +1,5 @@
-"""D7: settlement batch check. Recomputes each line's net from the merchant contract and compares the batch total with what the gateway
-reported. Pure; the service loads the inputs."""
+"""D7: settlement batch check. Recomputes each line's net from the merchant contract and compares the batch total with
+what the gateway reported. Pure; the service loads the inputs."""
 
 from __future__ import annotations
 
@@ -35,14 +35,18 @@ class BatchCheck:
 
 
 def covering_dispute(disputes: Sequence[Dispute], diff_minor: int) -> Dispute | None:
-    """D7 is suppressed while an OPEN dispute covers exactly the batch's difference: the shortfall is claimed and waiting on the acquirer."""
+    """D7 is suppressed while an OPEN dispute covers exactly the batch's difference: the shortfall is claimed and
+    waiting on the acquirer."""
     if diff_minor == 0:
         return None
     return next((d for d in disputes if d.status == "OPEN" and d.amount_minor == abs(diff_minor)), None)
 
 
 def check_batch(
-    settlement_id: str, lines: Sequence[GatewaySettlementLine], merchant: FeeTerms | Merchant, disputes: Sequence[Dispute] = ()
+    settlement_id: str,
+    lines: Sequence[GatewaySettlementLine],
+    merchant: FeeTerms | Merchant,
+    disputes: Sequence[Dispute] = (),
 ) -> BatchCheck:
     ordered = sorted(lines, key=lambda line: line.line_no)
     offending: list[OffendingLine] = []
@@ -60,7 +64,10 @@ def check_batch(
     hit: RuleHit | None = None
     if diff != 0 and dispute_id is None:
         hit = RuleHit(
-            "D7_SETTLEMENT_DIFF", "SETTLEMENT_MISMATCH", ("batch", settlement_id), magnitude,
+            "D7_SETTLEMENT_DIFF",
+            "SETTLEMENT_MISMATCH",
+            ("batch", settlement_id),
+            magnitude,
             f"Batch net is {'short' if diff < 0 else 'over'} by {format_money(magnitude)} across {len(offending)} line{'' if len(offending) == 1 else 's'}.",
             severity_floor="MEDIUM",
         )

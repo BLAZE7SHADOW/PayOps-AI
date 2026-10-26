@@ -1,4 +1,5 @@
-"""The read side of cases: the queue list, list items for a few cases, and the open case behind a payment. (packages/core case.service.ts)"""
+"""The read side of cases: the queue list, list items for a few cases, and the open case behind a payment.
+(packages/core case.service.ts)"""
 
 from __future__ import annotations
 
@@ -47,7 +48,11 @@ def to_case_list_item(row: Case, assignee_name: str | None, now: datetime) -> Ca
         amount_minor=row.amount_minor,
         rule_ids=row.rule_ids,
         mismatched=row.mismatched,
-        signals=CaseSignals(complaint_type=signals.get("complaintType"), urgent=signals.get("urgent"), quarantined=signals.get("quarantined")),
+        signals=CaseSignals(
+            complaint_type=signals.get("complaintType"),
+            urgent=signals.get("urgent"),
+            quarantined=signals.get("quarantined"),
+        ),
         opened_at=to_iso(row.opened_at),
         updated_at=to_iso(row.updated_at),
         assignee=AssigneeRef(id=row.assignee_id, name=assignee_name) if row.assignee_id and assignee_name else None,
@@ -62,7 +67,12 @@ def to_case_list_item(row: Case, assignee_name: str | None, now: datetime) -> Ca
 
 
 def _is_case_cursor(v: object) -> bool:
-    return is_record(v) and isinstance(v.get("p"), (int, float)) and isinstance(v.get("o"), str) and isinstance(v.get("i"), str)  # type: ignore[union-attr]
+    return (
+        is_record(v)
+        and isinstance(v.get("p"), (int, float))
+        and isinstance(v.get("o"), str)
+        and isinstance(v.get("i"), str)
+    )
 
 
 class CaseQueryService:
@@ -125,8 +135,14 @@ class CaseQueryService:
         total = (await session.execute(select(func.count()).select_from(Case).where(*filters))).scalar_one()
         page = rows[: query.limit]
         last = page[-1][0] if page else None
-        next_cursor = encode_cursor({"p": last.priority, "o": to_iso(last.opened_at), "i": last.id}) if len(rows) > query.limit and last is not None else None
-        return Page[CaseListItem](items=[to_case_list_item(r, name, now) for r, name in page], next_cursor=next_cursor, total=total)
+        next_cursor = (
+            encode_cursor({"p": last.priority, "o": to_iso(last.opened_at), "i": last.id})
+            if len(rows) > query.limit and last is not None
+            else None
+        )
+        return Page[CaseListItem](
+            items=[to_case_list_item(r, name, now) for r, name in page], next_cursor=next_cursor, total=total
+        )
 
     async def open_cases_by_payment(self, session: AsyncSession, payment_ids: list[str]) -> dict[str, tuple[str, str]]:
         """Highest-priority open case per internal payment id, as (case id, display id)."""
@@ -149,13 +165,21 @@ class CaseQueryService:
         """List items for specific cases, in the order asked. Unknown ids are skipped."""
         if not ids:
             return []
-        rows = (await session.execute(select(Case, User.name).join(User, User.id == Case.assignee_id, isouter=True).where(Case.id.in_(ids)))).all()
+        rows = (
+            await session.execute(
+                select(Case, User.name).join(User, User.id == Case.assignee_id, isouter=True).where(Case.id.in_(ids))
+            )
+        ).all()
         now = self._clock.now()
         by_id = {c.id: to_case_list_item(c, name, now) for c, name in rows}
         return [by_id[i] for i in ids if i in by_id]
 
     async def get(self, session: AsyncSession, case_id: str, viewer: SessionUser | None = None) -> CaseDetail:
-        found = (await session.execute(select(Case, User.name).join(User, User.id == Case.assignee_id, isouter=True).where(Case.id == case_id))).first()
+        found = (
+            await session.execute(
+                select(Case, User.name).join(User, User.id == Case.assignee_id, isouter=True).where(Case.id == case_id)
+            )
+        ).first()
         if found is None:
             raise not_found("Case", case_id)
         row, assignee_name = found
@@ -171,10 +195,20 @@ class CaseQueryService:
             )
             if f is not None
         ]
-        notes = (await session.scalars(select(SupportNote).where(or_(*note_filters)).order_by(asc(SupportNote.created_at)))).all() if note_filters else []
+        notes = (
+            (
+                await session.scalars(
+                    select(SupportNote).where(or_(*note_filters)).order_by(asc(SupportNote.created_at))
+                )
+            ).all()
+            if note_filters
+            else []
+        )
         customer = await session.get(Customer, refs["customerId"]) if refs.get("customerId") else None
         merchant = await session.get(Merchant, refs["merchantId"]) if refs.get("merchantId") else None
-        snapshots = await load_order_snapshots(session, self._gateway, [refs["orderId"]], now) if refs.get("orderId") else []
+        snapshots = (
+            await load_order_snapshots(session, self._gateway, [refs["orderId"]], now) if refs.get("orderId") else []
+        )
         snapshot = snapshots[0] if snapshots else None
         resolution_view = await self.resolutions.view(session, row, viewer) if self.resolutions else _empty_view()
 
@@ -190,14 +224,26 @@ class CaseQueryService:
             **base,
             matrix=matrix,
             entity_refs=CaseEntityRefs.model_validate(
-                {k: refs.get(k) for k in ("paymentId", "gwPaymentId", "orderId", "customerId", "merchantId", "refundId", "batchId")}
+                {
+                    k: refs.get(k)
+                    for k in ("paymentId", "gwPaymentId", "orderId", "customerId", "merchantId", "refundId", "batchId")
+                }
             ),
-            customer=CaseCustomer(id=customer.id, name=customer.name, email_masked=customer.email_masked) if customer else None,
+            customer=CaseCustomer(id=customer.id, name=customer.name, email_masked=customer.email_masked)
+            if customer
+            else None,
             merchant=CaseMerchant(id=merchant.id, name=merchant.name) if merchant else None,
-            notes=[CaseNote(id=n.id, author_type=n.author_type, text=n.text_, quarantined=n.quarantined, at=to_iso(n.created_at)) for n in notes],
+            notes=[
+                CaseNote(
+                    id=n.id, author_type=n.author_type, text=n.text_, quarantined=n.quarantined, at=to_iso(n.created_at)
+                )
+                for n in notes
+            ],
             lifecycle=build_lifecycle(snapshot) if snapshot else [],
             resolved_at=to_iso(row.resolved_at) if row.resolved_at else None,
-            resolution=CaseResolutionSummary(by=row.resolution["by"], summary=row.resolution["summary"]) if row.resolution else None,
+            resolution=CaseResolutionSummary(by=row.resolution["by"], summary=row.resolution["summary"])
+            if row.resolution
+            else None,
             resolution_view=resolution_view,
         )
 
@@ -206,5 +252,9 @@ def _empty_view():  # type: ignore[no-untyped-def]
     from ..dto.resolution import CaseResolutionView
 
     return CaseResolutionView(
-        action_options=[], resolutions=[], pending_approval_id=None, can_propose=False, cannot_propose_reason="Resolution is not available."
+        action_options=[],
+        resolutions=[],
+        pending_approval_id=None,
+        can_propose=False,
+        cannot_propose_reason="Resolution is not available.",
     )
