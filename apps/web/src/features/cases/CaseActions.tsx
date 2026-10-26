@@ -12,6 +12,7 @@ import { ErrorState } from '../../ui/ErrorState';
 import { Tag } from '../../ui/Tag';
 import { HandoffCard } from '../runs/HandoffCard';
 import { describeHandoff } from '../runs/handoff';
+import { approvalAccess } from './case-progress';
 
 /** A single place for the next permitted case action. Server permissions still decide what runs. */
 export function CaseActions({ c }: { c: CaseDetail }) {
@@ -28,6 +29,7 @@ export function CaseActions({ c }: { c: CaseDetail }) {
   const paused = control?.mode === 'PAUSED';
   const mayStart = mayPropose && !paused && c.status !== 'RESOLVED' && !busy && !runs.isPending && !runs.isError && !start.isPending;
   const approvalId = c.resolutionView.pendingApprovalId;
+  const access = approvalId ? approvalAccess(c, user) : null;
   const lastValidation = c.resolutionView.resolutions.find((r) => r.validation)?.validation;
 
   useEffect(() => {
@@ -41,18 +43,23 @@ export function CaseActions({ c }: { c: CaseDetail }) {
     description = 'The resolution history and validator results are available below.';
   } else if (approvalId || c.status === 'AWAITING_APPROVAL') {
     title = 'Approval required';
-    description = 'Review the proposed operation, evidence, and policy before a decision.';
+    description = 'A fix is proposed and waiting for a decision. Open it to see the operation, evidence and policy, then approve or reject.';
   } else if (c.status === 'EXECUTING') {
     title = 'Resolution in progress';
     description = 'Execution and independent verification are running.';
   } else if (busy || c.status === 'INVESTIGATING') {
     title = 'Investigation in progress';
     description = 'Evidence and findings will update as the investigation runs.';
+  } else if (c.status === 'ESCALATED') {
+    title = 'A person needs to take over';
+    description = mayResolve
+      ? 'The agent could not propose a safe fix, so there is nothing to approve yet. Choose a fix yourself with Resolve manually. If policy needs a second person, it then goes to Approvals.'
+      : 'The agent could not propose a safe fix. A person with an Ops or manager account needs to take over.';
   } else if (mayPropose && paused && control) {
     title = 'Review the next step';
     description = `${limitSentence(control)} You can still resolve this case manually.`;
   } else if (mayStart) {
-    title = c.status === 'ESCALATED' || c.status === 'REJECTED' ? 'Review the next step' : 'Investigate the mismatch';
+    title = c.status === 'REJECTED' ? 'Review the next step' : 'Investigate the mismatch';
     description = 'Collect evidence and receive a proposed resolution, or choose actions manually.';
   } else if (!mayResolve) {
     description = VIEW_ONLY_NOTE;
@@ -72,16 +79,16 @@ export function CaseActions({ c }: { c: CaseDetail }) {
         ) : approvalId ? (
           <Link to={`/approvals?approval=${encodeURIComponent(approvalId)}`} className="transition-color inline-flex min-h-10 items-center justify-center rounded-md border border-accent bg-accent px-4 text-14 font-medium text-surface hover:bg-accent-hover max-md:min-h-11">Review approval</Link>
         ) : mayStart ? (
-          <Button variant="primary" onClick={() => start.mutate()} disabled={start.isPending}>
-            {start.isPending ? 'Starting investigation…' : 'Start investigation'}
+          <Button variant={c.status === 'ESCALATED' ? 'secondary' : 'primary'} onClick={() => start.mutate()} disabled={start.isPending}>
+            {start.isPending ? 'Starting investigation…' : c.status === 'ESCALATED' ? 'Run the investigation again' : 'Start investigation'}
           </Button>
         ) : null}
-        {mayPropose && c.status !== 'RESOLVED' ? <Button variant="secondary" onClick={() => setManualOpen(true)}>Resolve manually</Button> : null}
+        {mayPropose && c.status !== 'RESOLVED' ? <Button variant={c.status === 'ESCALATED' ? 'primary' : 'secondary'} onClick={() => setManualOpen(true)}>Resolve manually</Button> : null}
       </div>
 
       {handoff ? <HandoffCard handoff={handoff} className="mt-5" /> : null}
       {lastValidation && c.status === 'RESOLVED' ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">Independent verification <Tag tone={lastValidation.verdict === 'PASS' ? 'ok' : 'bad'}>{lastValidation.verdict}</Tag></p> : null}
-      {approvalId ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">Approvals use the existing role and requester checks.</p> : null}
+      {approvalId ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">{access?.text ?? 'Approvals use role and requester checks.'}</p> : null}
       {start.isError && mayStart ? <ErrorState className="mt-4" title="Could not start investigation." error={start.error} onRetry={() => start.mutate()} /> : null}
       {runs.isError ? <ErrorState className="mt-4" title="Could not load investigations." error={runs.error} onRetry={() => void runs.refetch()} /> : null}
       {mayResolve ? <ResolveDrawer c={c} open={manualOpen && mayPropose} onOpenChange={setManualOpen} /> : null}

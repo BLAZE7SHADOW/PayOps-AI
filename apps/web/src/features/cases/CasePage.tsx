@@ -15,6 +15,7 @@ import { CaseHeader, CaseHeaderSkeleton } from './CaseHeader';
 import { CaseActions } from './CaseActions';
 import { CaseNotes } from './CaseNotes';
 import { CaseSourceRecords } from './CaseSourceRecords';
+import { CaseProgress } from './CaseProgress';
 import { CaseStory, StorySkeleton } from './CaseStory';
 import { caseVerdict } from './case-verdict';
 import { UndoResolution } from './UndoResolution';
@@ -63,6 +64,7 @@ export function CasePage() {
     <article aria-busy={!c || undefined}>
       {c ? <CaseHeader c={c} /> : <CaseHeaderSkeleton />}
       {c ? <VerdictLine c={c} /> : null}
+      {c ? <CaseProgress c={c} /> : null}
       {c ? <UndoResolution c={c} /> : null}
 
       <section aria-labelledby="matrix-title" className="mb-6 min-w-0">

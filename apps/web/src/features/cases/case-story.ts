@@ -373,15 +373,15 @@ export function buildCaseStory({ c, run, steps, records }: StoryInput): StoryEnt
   } else {
     const waitingRole = approval?.status === 'WAITING' ? approval.role : null;
     const summary = c.status === 'RESOLVED' ? 'Closed after a verified resolution. No one needs to act.'
-      : c.status === 'ESCALATED' ? 'Escalated for human review. A person needs to act.'
+      : c.status === 'ESCALATED' ? 'Escalated to a person. No fix was proposed, so there is nothing to approve. Choose a fix with Resolve manually in the Next step panel.'
       : c.status === 'REJECTED' ? 'Closed after the proposal was rejected.'
-      : c.status === 'AWAITING_APPROVAL' ? `Open. Waiting for ${waitingRole ?? 'an approver'} approval.`
+      : c.status === 'AWAITING_APPROVAL' ? `Open. Waiting for ${waitingRole ?? 'an approver'} approval under Approvals.`
       : c.status === 'EXECUTING' ? 'Open. The approved action is running.'
       : c.status === 'INVESTIGATING' ? 'Open. An investigation is running.'
       : 'Open. Needs an investigation or a manual resolution.';
     const open = !['RESOLVED', 'REJECTED'].includes(c.status);
     entries.push({
-      kind: 'outcome', key: 'outcome', actors: ['CODE'], jev: [], title: open ? 'Case status' : 'Case closed', summary,
+      kind: 'outcome', key: 'outcome', actors: ['CODE'], jev: [], title: open ? 'What happens next' : 'Case closed', summary,
       details: c.status === 'RESOLVED' && c.resolution ? [c.resolution.summary] : [], state: open ? 'WAITING' : 'DONE', at: c.resolvedAt ?? null, open,
     });
   }

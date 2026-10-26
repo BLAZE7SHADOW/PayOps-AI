@@ -30,7 +30,7 @@ const scopeOptions = [
 ] as const;
 
 const EMPTY: Record<ApprovalScope, string> = {
-  pending: 'Nothing is waiting for approval.',
+  pending: 'Nothing is waiting for approval. A fix reaches this page only when policy requires a person to approve it. An escalated case has no proposed fix: open it and use Resolve manually.',
   decided: 'No approvals have been decided yet.',
   all: 'No approvals yet.',
 };
