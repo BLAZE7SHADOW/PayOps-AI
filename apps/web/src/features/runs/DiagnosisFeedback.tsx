@@ -4,7 +4,7 @@ import { statusLabel } from '../../lib/format';
 import { can } from '../../lib/permissions';
 import { useUser } from '../../lib/session';
 import { Button } from '../../ui/Button';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Field } from '../../ui/Field';
 import { Segmented } from '../../ui/Segmented';
 import { Select } from '../../ui/Select';
@@ -116,7 +116,7 @@ export function DiagnosisFeedback({ run }: { run: AgentRunItem }) {
         <h2 id="feedback-title" className="text-16 font-semibold">Your feedback on this diagnosis</h2>
       </header>
       {list.isError ? (
-        <ErrorState title="Could not load feedback." error={list.error} onRetry={() => void list.refetch()} />
+        <QueryError title="Could not load feedback." query={list} />
       ) : list.isPending ? (
         <div className="px-5 py-4" aria-hidden="true"><Skeleton height={44} width="100%" /></div>
       ) : (

@@ -2,7 +2,7 @@ import { formatMoney, type PaymentDetail } from '@payops/shared';
 import { Link } from 'react-router';
 import { formatFullDateTime } from '../../lib/format';
 import { Drawer } from '../../ui/Drawer';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Mono } from '../../ui/Mono';
 import { Skeleton } from '../../ui/Skeleton';
 import { StateMatrix, StateMatrixSkeleton } from '../../ui/StateMatrix';
@@ -20,7 +20,7 @@ export function PaymentDrawer({ paymentId, onClose }: Props) {
   return (
     <Drawer open={Boolean(paymentId)} onOpenChange={(o) => !o && onClose()} title={paymentId ? `Payment ${paymentId}` : 'Payment'}>
       {q.isError ? (
-        <ErrorState className="pt-12" title="Could not load this payment." error={q.error} onRetry={() => void q.refetch()} />
+        <QueryError className="pt-12" title="Could not load this payment." query={q} />
       ) : (
         <>
           <DrawerHeader p={q.data} />

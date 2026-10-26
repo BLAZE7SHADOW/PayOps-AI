@@ -3,7 +3,7 @@ import type { CaseListItem } from '@payops/shared';
 import { formatTime } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { PageHeader } from '../../ui/PageHeader';
 import { Table } from '../../ui/Table';
 import { caseColumns } from '../exceptions/case-cells';
@@ -33,7 +33,7 @@ export function OverviewPage() {
       />
       {q.isError ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load the overview." error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError title="Could not load the overview." query={q} />
         </div>
       ) : (
         <>

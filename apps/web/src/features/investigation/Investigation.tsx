@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { CONTEXT_BUDGET, formatMoney, type AgentName, type AgentRunItem, type AgentStepItem, type CaseDetail, type Finding, type GroundingViolation } from '@payops/shared';
 import { formatDateTime, formatDecisionAnswer, statusLabel } from '../../lib/format';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { EvidenceRef, evidenceAnchor } from '../../ui/EvidenceRef';
 import { Section } from '../../ui/Section';
 import { Select } from '../../ui/Select';
@@ -39,13 +39,13 @@ export function Investigation({ c }: { c: CaseDetail }) {
             options={runs.data!.items.map((r) => ({ value: r.id, label: `${formatDateTime(r.createdAt)} · ${r.status}` }))} /> : null}
         </div>
       </header>
-      {runs.isError ? <ErrorState title="Could not load investigations." error={runs.error} onRetry={() => void runs.refetch()} /> : (
+      {runs.isError ? <QueryError title="Could not load investigations." query={runs} /> : (
         <div className="flex flex-col">
           <details className="order-2 border-t border-rule">
             <summary className="cursor-pointer px-5 py-4 text-14 font-medium hover:bg-surface-sunk">Investigation steps{run ? ` · ${run.budget.toolCalls} tools` : ''}</summary>
           <Section title="Investigation trace" titleId="investigation-title" className="border-t border-rule">
             <p className="sr-only" role="status">{run ? `Investigation ${statusLabel(run.status)}. ${steps.data?.items.length ?? 0} steps recorded.` : 'No investigation started.'}</p>
-            {runs.isPending || (run && steps.isPending) ? <InvestigationSkeleton /> : steps.isError ? <ErrorState title="Could not load steps." error={steps.error} onRetry={() => void steps.refetch()} /> : run ? <Trace steps={steps.data?.items ?? []} run={run} /> : <EmptyState message="Start an investigation to collect evidence and propose a resolution." />}
+            {runs.isPending || (run && steps.isPending) ? <InvestigationSkeleton /> : steps.isError ? <QueryError title="Could not load steps." query={steps} /> : run ? <Trace steps={steps.data?.items ?? []} run={run} /> : <EmptyState message="Start an investigation to collect evidence and propose a resolution." />}
           </Section>
           </details>
           <Section title="Diagnosis and proposal" titleId="findings-title" className="order-1" bodyClassName="space-y-5 p-5 text-15 leading-relaxed">

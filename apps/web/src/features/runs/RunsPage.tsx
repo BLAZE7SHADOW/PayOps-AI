@@ -5,7 +5,7 @@ import { useDocumentTitle } from '../../lib/use-document-title';
 import { pickEnum, useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { Mono } from '../../ui/Mono';
 import { PageHeader } from '../../ui/PageHeader';
@@ -132,7 +132,7 @@ export function RunsPage() {
       </FilterBar>
       {q.isError && !q.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load agent runs." error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError title="Could not load agent runs." query={q} />
         </div>
       ) : (
         <Table<AgentRunItem>

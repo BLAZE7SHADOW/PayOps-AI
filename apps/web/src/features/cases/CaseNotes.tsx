@@ -4,7 +4,7 @@ import { ageLabel } from '../../lib/format';
 import { can } from '../../lib/permissions';
 import { useUser } from '../../lib/session';
 import { Button } from '../../ui/Button';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Field } from '../../ui/Field';
 import { Skeleton } from '../../ui/Skeleton';
 import { Textarea } from '../../ui/Textarea';
@@ -91,7 +91,7 @@ export function CaseNotes({ caseId }: { caseId: string }) {
       )}
       <div className="border-t border-rule">
         {list.isError ? (
-          <ErrorState title="Could not load notes." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load notes." query={list} />
         ) : list.isPending ? (
           <div className="px-5 py-4" aria-hidden="true"><Skeleton height={44} width="100%" /></div>
         ) : (

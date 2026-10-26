@@ -7,7 +7,7 @@ import { useDocumentTitle } from '../../lib/use-document-title';
 import { pickEnum, useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { Input } from '../../ui/Input';
 import { LoadMore } from '../../ui/Pagination';
@@ -72,7 +72,7 @@ export function PaymentsPage() {
 
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load payments." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load payments." query={list} />
         </div>
       ) : (
         <>

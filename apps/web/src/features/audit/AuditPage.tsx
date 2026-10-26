@@ -7,7 +7,7 @@ import { useDocumentTitle } from '../../lib/use-document-title';
 import { useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { Input } from '../../ui/Input';
 import { Mono } from '../../ui/Mono';
@@ -86,7 +86,7 @@ export function AuditPage() {
       </FilterBar>
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load the audit log." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load the audit log." query={list} />
         </div>
       ) : (
         <>

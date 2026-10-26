@@ -6,7 +6,7 @@ import { qk } from '../../lib/query-keys';
 import { resolutionTone } from '../../lib/resolution';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { AgentControlPanel } from '../agent-control/AgentControl';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { PageHeader } from '../../ui/PageHeader';
 import { Skeleton } from '../../ui/Skeleton';
 import { Table, type Column } from '../../ui/Table';
@@ -59,7 +59,7 @@ export function PolicyPage() {
       />
       {q.isError ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load the policy." error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError title="Could not load the policy." query={q} />
         </div>
       ) : (
         <>

@@ -36,3 +36,15 @@ export function ErrorState({ title, error, onRetry, className }: ErrorStateProps
     </div>
   );
 }
+
+interface QueryErrorProps {
+  title: string;
+  /** Any TanStack Query result (or the part of it that matters here). Retry refetches it. */
+  query: { error: unknown; refetch: () => unknown };
+  className?: string;
+}
+
+/** The failed-load state for a query: the same message and a Retry that refetches, wired once. */
+export function QueryError({ title, query, className }: QueryErrorProps) {
+  return <ErrorState title={title} error={query.error} onRetry={() => void query.refetch()} className={className} />;
+}

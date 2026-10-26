@@ -8,7 +8,7 @@ import { limitSentence } from '../agent-control/AgentControl';
 import { activeRun, useRuns, useStartRun } from '../investigation/api';
 import { ResolveDrawer } from '../resolution/ResolveDrawer';
 import { Button } from '../../ui/Button';
-import { ErrorState } from '../../ui/ErrorState';
+import { ErrorState, QueryError } from '../../ui/ErrorState';
 import { Tag } from '../../ui/Tag';
 import { HandoffCard } from '../runs/HandoffCard';
 import { describeHandoff } from '../runs/handoff';
@@ -90,7 +90,7 @@ export function CaseActions({ c }: { c: CaseDetail }) {
       {lastValidation && c.status === 'RESOLVED' ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">Independent verification <Tag tone={lastValidation.verdict === 'PASS' ? 'ok' : 'bad'}>{lastValidation.verdict}</Tag></p> : null}
       {approvalId ? <p className="mt-5 border-t border-rule pt-4 text-13 text-ink-2">{access?.text ?? 'Approvals use role and requester checks.'}</p> : null}
       {start.isError && mayStart ? <ErrorState className="mt-4" title="Could not start investigation." error={start.error} onRetry={() => start.mutate()} /> : null}
-      {runs.isError ? <ErrorState className="mt-4" title="Could not load investigations." error={runs.error} onRetry={() => void runs.refetch()} /> : null}
+      {runs.isError ? <QueryError className="mt-4" title="Could not load investigations." query={runs} /> : null}
       {mayResolve ? <ResolveDrawer c={c} open={manualOpen && mayPropose} onOpenChange={setManualOpen} /> : null}
     </aside>
   );

@@ -5,7 +5,7 @@ import { formatDateTime, formatFullDateTime, plural } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Field } from '../../ui/Field';
 import { Input } from '../../ui/Input';
 import { Mono } from '../../ui/Mono';
@@ -34,7 +34,7 @@ export function SecurityPage() {
       <PageHeader title="Security" meta="Sign-in protection and the browsers signed in to your account." />
       {q.isError ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load security settings." error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError title="Could not load security settings." query={q} />
         </div>
       ) : (
         <div className="flex flex-col gap-6">

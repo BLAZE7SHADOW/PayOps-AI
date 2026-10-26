@@ -5,7 +5,7 @@ import { useDocumentTitle } from '../../lib/use-document-title';
 import { pickEnum, useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { FilterBar } from '../../ui/FilterBar';
 import { LoadMore } from '../../ui/Pagination';
 import { PageHeader } from '../../ui/PageHeader';
@@ -116,7 +116,7 @@ export function ExceptionsPage() {
 
       {list.isError && !list.data ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load exceptions." error={list.error} onRetry={() => void list.refetch()} />
+          <QueryError title="Could not load exceptions." query={list} />
         </div>
       ) : (
         <>

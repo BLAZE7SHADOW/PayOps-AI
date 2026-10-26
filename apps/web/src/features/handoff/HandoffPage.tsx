@@ -5,7 +5,7 @@ import { ageLabel, plural } from '../../lib/format';
 import { useDocumentTitle } from '../../lib/use-document-title';
 import { pickEnum, useUrlState } from '../../lib/use-url-state';
 import { Button } from '../../ui/Button';
-import { ErrorState } from '../../ui/ErrorState';
+import { QueryError } from '../../ui/ErrorState';
 import { Money } from '../../ui/Money';
 import { PageHeader } from '../../ui/PageHeader';
 import { Section } from '../../ui/Section';
@@ -143,7 +143,7 @@ export function HandoffPage() {
       </div>
       {q.isError && !h ? (
         <div className="border border-rule bg-surface">
-          <ErrorState title="Could not load the handoff." error={q.error} onRetry={() => void q.refetch()} />
+          <QueryError title="Could not load the handoff." query={q} />
         </div>
       ) : h ? (
         <>
