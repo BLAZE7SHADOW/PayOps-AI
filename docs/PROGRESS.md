@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B6 batch 1: evals in process, startup and health
+- `python -m payops.evals` (and `tests/test_evals.py`) runs the 15 golden scenarios in the Python API's own process in REPLAY: 15 of 15 pass their gates, root-cause accuracy 100%, and 83 exact replay lookups with 0 by fallback, the same gate `pnpm eval:python` held for the two-service setup. J1 signal intake now uses the agents' decision port; the evals answer it with the same fixture the TypeScript harness used.
+- The API prepares its database at start (migrations, demo users, audit seal; `MIGRATE_ON_START=0` for tests) and `/api/health` reports the database and the agent checkpoint store. 533 tests, ruff and pyright clean.
+- Next in B6: a browser pass on the real web app against this API, the Render blueprint for one Python service, and the bandwidth measurement.
+
 ### 2026-10-26 · Phase B5 done: the agents run inside the Python API
 - The graph in `python/agents` is now a local dependency of `python/payops` and runs in the API process. `payops/agent_tools/` holds what the graph may read and do: the 15 evidence tools, the case brief, the proposal builder, the run, step, evidence and finding store, and `InProcessNodeApi`, which answers every call the graph used to make over `/internal/agent` with a direct service call. No second service, no shared secret, no HTTP hop.
 - Tested against TypeScript: for all 20 demo cases the brief, the output of every tool and the proposal for every root cause equal what the TypeScript code computed (`tests/fixtures/agent_tools.json.gz`, made by `packages/evals/scripts/export-agent-tools.ts`). End to end in REPLAY over HTTP: the three recorded scenarios reach the same status, path, root cause, evidence and finding counts and policy tier as the TypeScript runs; an approval by a manager resumes the paused run and resolves it; a rejection ends it without executing.

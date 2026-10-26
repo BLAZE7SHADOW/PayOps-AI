@@ -26,6 +26,7 @@ from .routes import auth, ops, read, simulator, write
 from .security import public_route
 from .session_middleware import install_session_middleware
 from .socket import Realtime
+from .startup import prepare_database
 
 
 def create_app(
@@ -40,6 +41,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         owned = engine is None
+        if settings.migrate_on_start:
+            await prepare_database(settings)
         app.state.engine = engine or create_engine(settings)
         handlers = JobHandlers()
         queue: JobQueue
@@ -94,9 +97,13 @@ def create_app(
 
     @api.get("/health", dependencies=[Depends(public_route())])
     async def health(response: Response) -> dict[str, object]:
-        up = await ping(app.state.engine)
-        response.status_code = 200 if up else 503
-        return {"status": "ok" if up else "degraded", "checks": {"database": "ok" if up else "down"}, "aiMode": settings.ai_mode}
+        """Ready when the database answers and the agent's checkpoint store does (a run cannot pause or resume without it)."""
+        database = await ping(app.state.engine)
+        agents = await app.state.agents.ready()
+        ok = database and agents
+        response.status_code = 200 if ok else 503
+        checks = {"database": "ok" if database else "down", "agents": "ok" if agents else "down"}
+        return {"status": "ok" if ok else "degraded", "checks": checks, "aiMode": settings.ai_mode}
 
     api.include_router(auth.router)
     api.include_router(read.router)

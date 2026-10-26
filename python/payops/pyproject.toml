@@ -69,6 +69,7 @@ pythonVersion = "3.12"
 "src/payops/dto/*.py" = ["E501"]
 "src/payops/simulator/*.py" = ["E501"]
 "src/payops/agent_tools/*.py" = ["E501"]
+"src/payops/evals/*.py" = ["E501"]
 "src/payops/services/writes/*.py" = ["E501"]
 "src/payops/auth/*.py" = ["E501"]
 

@@ -25,6 +25,7 @@ from payops.db.migrate import upgrade
 # Tests build the app many times and have no job worker: jobs run inline in the background of the same process.
 os.environ.setdefault("JOBS", "inline")
 os.environ.setdefault("CHECKPOINTER", "memory")
+os.environ.setdefault("MIGRATE_ON_START", "0")
 
 # pgserver logs from an exit hook after pytest has closed stderr; the failure is harmless and only noisy.
 logging.raiseExceptions = False

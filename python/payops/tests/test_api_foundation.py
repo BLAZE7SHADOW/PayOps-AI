@@ -29,10 +29,10 @@ async def client(engine: AsyncEngine) -> AsyncIterator[httpx.AsyncClient]:
         yield c
 
 
-async def test_health_checks_the_database(client: httpx.AsyncClient) -> None:
+async def test_health_checks_the_database_and_the_agent_store(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "checks": {"database": "ok"}, "aiMode": "REPLAY"}
+    assert res.json() == {"status": "ok", "checks": {"database": "ok", "agents": "ok"}, "aiMode": "REPLAY"}
     assert len(res.headers["x-request-id"]) >= 8
 
 
@@ -63,3 +63,23 @@ async def test_unexpected_errors_do_not_leak_details(client: httpx.AsyncClient) 
     assert res.status_code == 500
     assert res.json()["error"]["message"] == "Unexpected server error"
     assert "secret detail" not in res.text
+
+
+async def test_startup_builds_an_empty_database_and_is_safe_to_repeat(pg_uri: str) -> None:
+    """What the hosted API does at boot: migrate, create the demo accounts, seal old audit rows."""
+    import psycopg
+
+    from payops.api.startup import prepare_database
+    from payops.settings import Settings
+    from tests.conftest import _with_database
+
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute('CREATE DATABASE "fresh_start"')
+    url = _with_database(pg_uri, "fresh_start")
+    settings = Settings(database_url=url, database_pool_max=2)
+    await prepare_database(settings)
+    await prepare_database(settings)
+    with psycopg.connect(url) as conn:
+        assert conn.execute("select count(*) from users").fetchone() == (5,)
+        assert conn.execute("select version_num from alembic_version").fetchone() == ("0002",)
+        assert conn.execute("select count(*) from procrastinate_jobs").fetchone() == (0,)
