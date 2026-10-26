@@ -13,8 +13,9 @@ Run before you push: `pnpm py:test` (ruff, format check, pyright, pytest for bot
 3. **Wire it.** If it is a new service, build it in `src/payops/container.py` (`build_services`). Routes reach it through `ServicesDep`.
 4. **Route.** Add a three-line handler in `src/payops/api/routes/{read,write,ops,auth,simulator}.py`. Every route names a permission with `Depends(require_permission("..."))` (or `public_route()`); a test fails if one has neither.
 5. **Permission.** If it is new, add it once to `src/payops/domain/permissions.py`, then update the table between the `permissions:start` and `permissions:end` markers in `docs/02-architecture.md` (a test compares the two), and add it to `packages/shared/src/permissions.ts` for the web.
-6. **Tests.** Add API tests next to `tests/test_write_api.py` (writes) or `tests/test_contract.py` (reads against recorded responses).
-7. **Web.** Add the response type to `packages/shared/src/dto/`, a hook in `apps/web/src/features/<feature>/api.ts` that calls `api<T>()` from `lib/api.ts`, and a key in `lib/query-keys.ts`. Lists use `useCursorList`.
+6. **Contract.** Run `cd python/payops && uv run python scripts/export_openapi.py` and read the diff of `tests/contract/openapi.json`: it is the list of API changes the web has to follow. Two tests guard it: `tests/test_openapi_contract.py` (the backend still matches the snapshot) and `apps/web/src/lib/api-contract.test.ts` (every call the web makes exists in it, with the right method).
+7. **Tests.** Add API tests next to `tests/test_write_api.py` (writes) or `tests/test_contract.py` (reads against recorded responses).
+8. **Web.** Add the response type to `packages/shared/src/dto/`, a hook in `apps/web/src/features/<feature>/api.ts` that calls `api<T>()` from `lib/api.ts`, and a key in `lib/query-keys.ts`. Lists use `useCursorList`.
 
 ## Add or change an action (the closed catalog)
 
