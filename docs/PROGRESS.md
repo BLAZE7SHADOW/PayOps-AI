@@ -109,6 +109,7 @@ Shivam's Mac directly, same as task 9 did.
 - Tagged `ts-backend-final` (pushed). Deleted `apps/server`, `packages/{core,agents,simulator,evals}`, the Node blueprint and the TS-only scripts; trimmed root scripts, vitest and ESLint config, `.env.example`, lockfile; CI has no parity job and runs `python -m payops.evals`.
 - Checks on the branch: web and shared typecheck, lint, 241 tests; 534 backend tests; 43 agent tests; evals 15 of 15, 83 exact, 0 fallback.
 - Docs: README, CLAUDE.md, D090, DEPLOY, OPERATIONS rewritten or bannered. `docs/02` is rewritten for the Python layout and `docs/03` has its paths and §18 (runtime) updated; both keep a small old-to-new path map at the top.
+- Cleanup 1: removed the unused standalone agent service from `python/agents` (`app.py`, `logging_setup.py`, the HTTP `NodeApi` client, its test, the secret and URL settings, the fastapi and uvicorn dependencies). `OPERATIONS.md` rewritten for one backend process. Agents tests 36, backend 538, evals 15 of 15 with 83 exact lookups.
 - Merge only after the bandwidth check on Render passes (master is what Render deploys; a deploy of the old Node service needs the tag).
 - Added the Python cassette recorder `payops/evals/record.py` (`pnpm cassette:record`, flags `--all`, `--only`). Its run, approval and manifest handling is tested by replaying the original three scenarios; a real RECORD run has not been done (needs the keys and billed calls), so the first one should be a single scenario with `--only`.
 ### 2026-10-26 · Case page: a clear next step for every status

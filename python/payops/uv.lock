@@ -1549,7 +1549,6 @@ name = "payops-agents"
 version = "0.1.0"
 source = { editable = "../agents" }
 dependencies = [
-    { name = "fastapi" },
     { name = "httpx" },
     { name = "langchain-google-genai" },
     { name = "langgraph" },
@@ -1557,12 +1556,10 @@ dependencies = [
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "langchain-google-genai", specifier = ">=2.0" },
     { name = "langgraph", specifier = ">=0.2" },
@@ -1570,7 +1567,6 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.16.1" },
-    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [package.metadata.requires-dev]
