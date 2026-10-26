@@ -23,6 +23,7 @@ Owner: Shivam (fresh B.Tech graduate). This is a portfolio project that should r
 | `docs/05-ui-design.md` | **Any** UI work |
 | `docs/07-security.md` | Data sent to Gemini or Jev, masking, auth, audit, or a new threat |
 | `docs/DECISIONS.md` | Before changing an existing design choice |
+| `docs/HOWTO.md` | Adding an endpoint, action, page or migration |
 
 If code and docs disagree, stop and ask Shivam. Do not silently "fix" either.
 
