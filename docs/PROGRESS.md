@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B4 batch 1: the write core in Python
+- Ported the services every write goes through: order, internal payment, ledger, refund, dispute and case status writes (`services/writes/`), the gateway's write side (replay, create refund, delivery log), the webhook consumer with the event log (receive, retry, manual replay, DEAD after five tries), the nine action executors, the idempotent executor and the validator against the database.
+- 12 new execution tests run on the recorded scenarios (a database seeded from the contract dump): fix a payment mismatch and validate PASS, replay never acts twice, a stale precondition stops the rest, hold, escalate, refund through the gateway, sync, dispute, reverse a journal, webhook 409 on a locked order. 15 webhook-log tests ported from `webhook-event.service.test.ts`. 389 tests, ruff and pyright clean.
+- Next in B4: resolution propose, preview and undo; approval decide and bulk approve; case assign and notes; saved views; feedback submit; agent control; then the write routes, auth and the simulator.
+
 ### 2026-10-26 · Phase B3 done: the read API in Python (contract-tested)
 - All 208 recorded TypeScript responses (policy, overview, payments, cases and case detail, source records, notes, audit and CSV, runs, steps, feedback, approvals, webhooks, handoff, views) now come back identical from FastAPI. 362 pytest cases, no skips, ruff and pyright clean.
 - New: `services/{resolutions,approvals,runs}.py`, case detail and `list_items` in `services/cases.py`, `domain/source_records.py`, DTOs `resolution`, `case_detail`, `runs`. Run internals and resolution actions pass through as the stored JSON.

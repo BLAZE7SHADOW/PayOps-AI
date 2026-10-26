@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -80,6 +81,10 @@ class CaptureSummary:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+#: Where the gateway delivers webhooks. In production an HTTP endpoint; with the simulator our in-process consumer. It answers like an HTTP handler.
+WebhookSink = Callable[[GatewayWebhookDelivery], Awaitable[int]]
+
+
 class PaymentGateway(Protocol):
     """The calls the simulator (over the gw_* tables) or a real gateway adapter must answer."""
 
@@ -93,3 +98,12 @@ class PaymentGateway(Protocol):
         self, batch_ids: list[str] | None = None, gw_payment_ids: list[str] | None = None
     ) -> list[GatewaySettlementLine]: ...
     async def summarize_captures(self, start: datetime, end: datetime) -> CaptureSummary: ...
+
+    # Writes. Called only by the executor and the webhook log, never inside a database transaction.
+    async def replay_webhook(self, event_id: str) -> WebhookDeliveryResult:
+        """Ask the gateway to deliver an event again. Returns what our consumer answered."""
+        ...
+
+    async def create_refund(self, gw_payment_id: str, amount_minor: int) -> GatewayRefund:
+        """Create a refund against a captured payment. The gateway rejects amounts above the refundable balance."""
+        ...

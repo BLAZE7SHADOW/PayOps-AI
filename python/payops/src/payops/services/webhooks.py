@@ -1,4 +1,4 @@
-"""The raw inbound webhook log (D072): the read side. Receiving, replay and the retry queue come with the jobs."""
+"""The raw inbound webhook log (D072): the read side. Receiving, replay and retry are in `writes/webhooks.py`."""
 
 from __future__ import annotations
 
@@ -27,12 +27,16 @@ def _is_list_cursor(v: object) -> bool:
     return is_record(v) and isinstance(v.get("at"), str) and isinstance(v.get("id"), str)  # type: ignore[union-attr]
 
 
+def to_detail(row: WebhookEvent) -> WebhookLogDetail:
+    return WebhookLogDetail(**_item(row), payload=row.payload, attempts=row.attempts)  # type: ignore[arg-type]
+
+
 class WebhookQueryService:
     async def get(self, session: AsyncSession, id_: str) -> WebhookLogDetail:
         row = await session.get(WebhookEvent, id_)
         if row is None:
             raise not_found("Webhook event", id_)
-        return WebhookLogDetail(**_item(row), payload=row.payload, attempts=row.attempts)  # type: ignore[arg-type]
+        return to_detail(row)
 
     async def list(self, session: AsyncSession, query: WebhookLogListQuery) -> Page[WebhookLogItem]:
         """Newest activity first, keyset-paginated on (updated_at, id)."""

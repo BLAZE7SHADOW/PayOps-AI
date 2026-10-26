@@ -19,6 +19,16 @@ from .services.resolutions import ResolutionQueryService
 from .services.runs import RunQueryService
 from .services.webhooks import WebhookQueryService
 from .services.workflow import CaseNoteQueryService, HandoffService, SavedViewQueryService
+from .services.writes.action_runtime import ExecDeps
+from .services.writes.cases import CaseWriteService
+from .services.writes.disputes import DisputeWriteService
+from .services.writes.executor import ExecutorService
+from .services.writes.ledger import LedgerWriteService
+from .services.writes.orders import OrderService
+from .services.writes.payments import PaymentWriteService
+from .services.writes.refunds import RefundWriteService
+from .services.writes.validator import ValidatorService
+from .services.writes.webhooks import WebhookConsumer, WebhookEventService
 
 
 @dataclass
@@ -39,26 +49,40 @@ class Services:
     resolutions: ResolutionQueryService
     approvals: ApprovalQueryService
     runs: RunQueryService
+    executor: ExecutorService
+    validator: ValidatorService
+    webhook_events: WebhookEventService
 
 
 def build_services(
     sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None
 ) -> Services:
     clock = clock or SystemClock()
-    gateway = gateway or SimulatorGateway(sessions)
+    gateway = gateway or SimulatorGateway(sessions, clock)
     cases = CaseQueryService(clock, gateway)
     resolutions = ResolutionQueryService(clock, gateway)
     cases.resolutions = resolutions
+    audit = AuditService(clock)
+    orders, payments = OrderService(clock, audit), PaymentWriteService(clock, audit)
+    ledger = LedgerWriteService(clock, audit)
+    refunds = RefundWriteService(clock, audit, ledger, payments)
+    deps = ExecDeps(sessions, clock, gateway, orders, ledger, payments, refunds, DisputeWriteService(clock, audit), CaseWriteService(clock, audit))
+    events = events or NoopPublisher()
+    consumer = WebhookConsumer(sessions, gateway, audit, orders, payments, ledger, refunds)
+    webhook_events = WebhookEventService(sessions, clock, audit, consumer, gateway)
+    if isinstance(gateway, SimulatorGateway):
+        # The simulated gateway delivers webhooks to our log, which runs the consumer and records the attempt.
+        gateway.set_webhook_sink(webhook_events.receive)
     return Services(
         sessions=sessions,
         clock=clock,
-        events=events or NoopPublisher(),
+        events=events,
         gateway=gateway,
         cases=cases,
         payments=PaymentQueryService(clock, gateway, cases),
         overview=OverviewService(clock, gateway),
         agent_control=AgentControlService(),
-        audit=AuditService(clock),
+        audit=audit,
         webhooks=WebhookQueryService(),
         handoff=HandoffService(clock),
         notes=CaseNoteQueryService(),
@@ -66,4 +90,7 @@ def build_services(
         resolutions=resolutions,
         approvals=ApprovalQueryService(clock, cases, resolutions),
         runs=RunQueryService(resolutions),
+        executor=ExecutorService(deps, audit, events, resolutions),
+        validator=ValidatorService(sessions, clock, gateway, audit, resolutions),
+        webhook_events=webhook_events,
     )

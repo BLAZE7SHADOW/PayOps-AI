@@ -15,35 +15,24 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import psycopg
 import pytest
 import pytest_asyncio
-from psycopg.types.json import Jsonb
 
 from payops.api.app import create_app
 from payops.api.security import SessionUser
 from payops.db.engine import create_engine
 from payops.ports import FixedClock
 from payops.settings import Settings
-from tests.conftest import _with_database
+from tests.conftest import load_contract_dump
 
 HERE = Path(__file__).parent / "contract"
-DB = json.loads(gzip.open(HERE / "db.json.gz").read())
+DB = load_contract_dump()
 ROUTES: list[dict[str, Any]] = json.loads(gzip.open(HERE / "routes.json.gz").read())
 
 
 @pytest.fixture(scope="session")
-def contract_url(pg_uri: str, template_uri: str) -> str:
-    with psycopg.connect(pg_uri, autocommit=True) as conn:
-        conn.execute("CREATE DATABASE contract TEMPLATE payops_template")
-    url = _with_database(pg_uri, "contract")
-    with psycopg.connect(url, autocommit=True) as conn:
-        # The dump is consistent, but tables load in alphabetical order, so foreign keys are not checked while it loads.
-        conn.execute("SET session_replication_role = replica")
-        for table, rows in DB["tables"].items():
-            for row in rows:
-                conn.execute(f'INSERT INTO "{table}" SELECT * FROM jsonb_populate_record(NULL::"{table}", %s)', [Jsonb(row)])
-    return url
+def contract_url(seeded_template_uri: str) -> str:
+    return seeded_template_uri
 
 
 @pytest_asyncio.fixture(scope="session")

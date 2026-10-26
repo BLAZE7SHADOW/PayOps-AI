@@ -3,15 +3,19 @@
 
 from __future__ import annotations
 
+import gzip
 import itertools
+import json
 import logging
 import tempfile
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 
 import psycopg
 import pytest
 import pytest_asyncio
 from pgserver.postgres_server import get_server
+from psycopg.types.json import Jsonb
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from payops.db.engine import create_engine
@@ -45,6 +49,41 @@ def template_uri(pg_uri: str) -> str:
     uri = _with_database(pg_uri, "payops_template")
     upgrade(uri)
     return uri
+
+
+CONTRACT_DIR = Path(__file__).parent / "contract"
+
+
+def load_contract_dump() -> dict:  # type: ignore[type-arg]
+    return json.loads(gzip.open(CONTRACT_DIR / "db.json.gz").read())  # type: ignore[no-any-return]
+
+
+@pytest.fixture(scope="session")
+def seeded_template_uri(pg_uri: str, template_uri: str) -> str:
+    """A database holding the recorded TypeScript scenarios (20 cases, runs, approvals), cloned by tests that need realistic data."""
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("CREATE DATABASE payops_seeded TEMPLATE payops_template")
+    url = _with_database(pg_uri, "payops_seeded")
+    with psycopg.connect(url, autocommit=True) as conn:
+        # The dump is consistent, but tables load in alphabetical order, so foreign keys are not checked while it loads.
+        conn.execute("SET session_replication_role = replica")
+        for table, rows in load_contract_dump()["tables"].items():
+            for row in rows:
+                conn.execute(f'INSERT INTO "{table}" SELECT * FROM jsonb_populate_record(NULL::"{table}", %s)', [Jsonb(row)])
+    return url
+
+
+@pytest_asyncio.fixture
+async def seeded_url(pg_uri: str, seeded_template_uri: str) -> AsyncIterator[str]:
+    """A private copy of the seeded database for one test that changes data."""
+    name = f"seeded_{next(_counter)}"
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute(f'CREATE DATABASE "{name}" TEMPLATE payops_seeded')
+    try:
+        yield _with_database(pg_uri, name)
+    finally:
+        with psycopg.connect(pg_uri, autocommit=True) as conn:
+            conn.execute(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
 
 
 @pytest_asyncio.fixture
