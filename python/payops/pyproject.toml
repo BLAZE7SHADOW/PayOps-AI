@@ -55,3 +55,4 @@ pythonVersion = "3.12"
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
 "migrations/*" = ["I001"]
+"src/payops/db/models.py" = ["E501"]
