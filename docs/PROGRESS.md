@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B3 done: the read API in Python (contract-tested)
+- All 208 recorded TypeScript responses (policy, overview, payments, cases and case detail, source records, notes, audit and CSV, runs, steps, feedback, approvals, webhooks, handoff, views) now come back identical from FastAPI. 362 pytest cases, no skips, ruff and pyright clean.
+- New: `services/{resolutions,approvals,runs}.py`, case detail and `list_items` in `services/cases.py`, `domain/source_records.py`, DTOs `resolution`, `case_detail`, `runs`. Run internals and resolution actions pass through as the stored JSON.
+- Not yet ported (needs writes, so B4): executor and validator against the database, approval decisions and bulk approve, feedback submit, the write-side gateway, `seal_legacy_audit_rows` at startup, the route-guard test.
+- Next: B4, the write API and auth (case actions, resolutions, approvals decide, notes, saved views, agent control, simulator reset and undo, sessions, MFA, rate limits).
+
 ### 2026-10-26 · Phase B2 done: the pure domain in Python (D088)
 - 154 pytest cases in `python/payops`: ids, money, time and SLA; reconciliation rules, matrix, lifecycle, candidates, settlement check; policy P0 to P12; action pre and postconditions, options, idempotency; validator invariants; audit hash chain (byte-identical to TypeScript); metrics, retry, cursors, permissions (checked against docs/02), bulk approve, handoff text.
 - Also: CI now green with the audit job (zod and body-parser patched).

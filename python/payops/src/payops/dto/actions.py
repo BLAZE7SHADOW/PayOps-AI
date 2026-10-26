@@ -49,6 +49,8 @@ class PostLedgerEntryParams(CamelModel):
 
 
 class ReverseLedgerEntryParams(CamelModel):
+    omit_when_none = frozenset({"undo_of"})
+
     journal_id: Id
     #: Id of the resolution this reversal undoes. Set only by the Undo flow (D070); it changes the validator's expectation
     #: from "net capture equals the gateway capture" to "no capture credit remains".
@@ -66,6 +68,8 @@ class SyncRefundStatusParams(CamelModel):
 
 
 class RaiseSettlementDisputeParams(CamelModel):
+    omit_when_none = frozenset({"gw_payment_id"})
+
     batch_id: Id
     gw_payment_id: Id | None = None
     amount_minor: Minor
@@ -154,27 +158,19 @@ ACTION_META: Final[dict[str, ActionMeta]] = {
     "REPLAY_WEBHOOK_EVENT": ActionMeta(
         "Replay webhook event", "Ask the gateway to deliver the event again so our consumer processes it.", "STATE_CORRECTION", False, False
     ),
-    "MARK_ORDER_PAID": ActionMeta(
-        "Mark order paid", "Move the order to PAID and link the captured payment.", "STATE_CORRECTION", False, True
-    ),
+    "MARK_ORDER_PAID": ActionMeta("Mark order paid", "Move the order to PAID and link the captured payment.", "STATE_CORRECTION", False, True),
     "POST_LEDGER_ENTRY": ActionMeta(
         "Post capture to ledger", "Post the missing capture journal for a payment the gateway captured.", "STATE_CORRECTION", False, True
     ),
     "REVERSE_LEDGER_ENTRY": ActionMeta(
         "Reverse ledger journal", "Post an equal and opposite journal. The original entry stays.", "STATE_CORRECTION", False, False
     ),
-    "INITIATE_REFUND": ActionMeta(
-        "Refund customer", "Create a refund at the gateway for a captured payment.", "MONEY_MOVEMENT", True, False
-    ),
+    "INITIATE_REFUND": ActionMeta("Refund customer", "Create a refund at the gateway for a captured payment.", "MONEY_MOVEMENT", True, False),
     "SYNC_REFUND_STATUS": ActionMeta(
         "Sync refund status", "Copy the gateway refund status to our refund record and post it to the ledger.", "STATE_CORRECTION", False, False
     ),
-    "RAISE_SETTLEMENT_DISPUTE": ActionMeta(
-        "Raise settlement dispute", "Open a dispute with the acquirer for the settlement shortfall.", "CLAIM", False, False
-    ),
-    "HOLD_PAYMENT_FOR_REVIEW": ActionMeta(
-        "Hold payment", "Freeze the payment so it is excluded from payouts until reviewed.", "CONTROL", False, True
-    ),
+    "RAISE_SETTLEMENT_DISPUTE": ActionMeta("Raise settlement dispute", "Open a dispute with the acquirer for the settlement shortfall.", "CLAIM", False, False),
+    "HOLD_PAYMENT_FOR_REVIEW": ActionMeta("Hold payment", "Freeze the payment so it is excluded from payouts until reviewed.", "CONTROL", False, True),
     "ESCALATE_TO_HUMAN": ActionMeta("Escalate", "Route the case to a person with the reason attached.", "CONTROL", False, True),
 }
 

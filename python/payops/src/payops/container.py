@@ -10,10 +10,13 @@ from .domain.gateway import PaymentGateway
 from .infra.gateway import SimulatorGateway
 from .ports import Clock, EventPublisher, NoopPublisher, SystemClock
 from .services.agent_control import AgentControlService
+from .services.approvals import ApprovalQueryService
 from .services.audit import AuditService
 from .services.cases import CaseQueryService
 from .services.overview import OverviewService
 from .services.payments import PaymentQueryService
+from .services.resolutions import ResolutionQueryService
+from .services.runs import RunQueryService
 from .services.webhooks import WebhookQueryService
 from .services.workflow import CaseNoteQueryService, HandoffService, SavedViewQueryService
 
@@ -33,6 +36,9 @@ class Services:
     handoff: HandoffService
     notes: CaseNoteQueryService
     views: SavedViewQueryService
+    resolutions: ResolutionQueryService
+    approvals: ApprovalQueryService
+    runs: RunQueryService
 
 
 def build_services(
@@ -40,7 +46,9 @@ def build_services(
 ) -> Services:
     clock = clock or SystemClock()
     gateway = gateway or SimulatorGateway(sessions)
-    cases = CaseQueryService(clock)
+    cases = CaseQueryService(clock, gateway)
+    resolutions = ResolutionQueryService(clock, gateway)
+    cases.resolutions = resolutions
     return Services(
         sessions=sessions,
         clock=clock,
@@ -55,4 +63,7 @@ def build_services(
         handoff=HandoffService(clock),
         notes=CaseNoteQueryService(),
         views=SavedViewQueryService(),
+        resolutions=resolutions,
+        approvals=ApprovalQueryService(clock, cases, resolutions),
+        runs=RunQueryService(resolutions),
     )

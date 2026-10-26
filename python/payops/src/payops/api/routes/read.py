@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from ...domain.money import format_money
+from ...domain.source_records import project_case_source_records
 from ...dto.api import AgentControlItem, CaseListItem, CaseListQuery, OverviewMetrics, Page, PaymentDetail, PaymentListItem, PaymentListQuery
+from ...dto.case_detail import ApprovalDetail, CaseDetail, CaseSourceRecords
 from ...dto.policy import APPROVER_ROLE, POLICY_RULES, POLICY_THRESHOLDS, POLICY_VERSION
+from ...dto.resolution import ApprovalItem, ApprovalListQuery
+from ...dto.runs import AgentRunItem, AgentStepItem, DiagnosisFeedbackItem, RunListQuery
+from ...infra.snapshots import load_case_state
 from ..deps import ServicesDep, SessionDep
-from ..security import require_permission
+from ..security import current_user, require_permission
 
 router = APIRouter()
 
@@ -60,3 +65,44 @@ async def list_cases(query: Annotated[CaseListQuery, Query()], services: Service
 @router.get("/agent-control", dependencies=[Depends(require_permission("agent.view"))])
 async def agent_control(services: ServicesDep, session: SessionDep) -> AgentControlItem:
     return await services.agent_control.get(session)
+
+
+@router.get("/cases/{case_id}", dependencies=[Depends(require_permission("case.view"))])
+async def get_case(case_id: str, request: Request, services: ServicesDep, session: SessionDep) -> CaseDetail:
+    return await services.cases.get(session, case_id, current_user(request))
+
+
+@router.get("/cases/{case_id}/records", dependencies=[Depends(require_permission("case.view"))])
+async def case_records(case_id: str, services: ServicesDep, session: SessionDep) -> CaseSourceRecords:
+    state = await load_case_state(session, services.gateway, case_id, services.clock.now())
+    return project_case_source_records(state)
+
+
+@router.get("/runs", dependencies=[Depends(require_permission("run.view"))])
+async def list_runs(query: Annotated[RunListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[AgentRunItem]:
+    return await services.runs.list(session, query)
+
+
+@router.get("/runs/{run_id}", dependencies=[Depends(require_permission("run.view"))])
+async def get_run(run_id: str, services: ServicesDep, session: SessionDep) -> AgentRunItem:
+    return await services.runs.get(session, run_id)
+
+
+@router.get("/runs/{run_id}/steps", dependencies=[Depends(require_permission("run.view"))])
+async def run_steps(run_id: str, services: ServicesDep, session: SessionDep) -> Page[AgentStepItem]:
+    return await services.runs.steps(session, run_id)
+
+
+@router.get("/runs/{run_id}/feedback", dependencies=[Depends(require_permission("run.view"))])
+async def run_feedback(run_id: str, services: ServicesDep, session: SessionDep) -> Page[DiagnosisFeedbackItem]:
+    return await services.runs.feedback(session, run_id)
+
+
+@router.get("/approvals", dependencies=[Depends(require_permission("approval.view"))])
+async def list_approvals(query: Annotated[ApprovalListQuery, Query()], request: Request, services: ServicesDep, session: SessionDep) -> Page[ApprovalItem]:
+    return await services.approvals.list(session, query, current_user(request))
+
+
+@router.get("/approvals/{approval_id}", dependencies=[Depends(require_permission("approval.view"))])
+async def get_approval(approval_id: str, request: Request, services: ServicesDep, session: SessionDep) -> ApprovalDetail:
+    return await services.approvals.get(session, approval_id, current_user(request))
