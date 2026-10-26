@@ -123,6 +123,11 @@ class ApprovalQueryService:
         next_cursor = encode_cursor({"at": to_iso(last.requested_at), "id": last.id}) if len(rows) > query.limit and last is not None else None
         return Page[ApprovalItem](items=[to_approval_item(a, c, r, viewer) for a, c, r in page], next_cursor=next_cursor, total=total)
 
+    async def item(self, session: AsyncSession, approval_id: str, viewer: SessionUser | None = None) -> ApprovalItem:
+        """One approval as a list item (viewer-independent when viewer is None, for realtime fan-out)."""
+        a, c, r = await self._load(session, approval_id)
+        return to_approval_item(a, c, r, viewer)
+
     async def get(self, session: AsyncSession, approval_id: str, viewer: SessionUser | None) -> ApprovalDetail:
         a, c, r = await self._load(session, approval_id)
         resolution = await self._resolutions.item(session, r.id)

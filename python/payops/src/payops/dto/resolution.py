@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints, model_validator
 
+from .actions import CatalogAction
 from .base import CamelModel
-from .validation import ActionOption, ValidationCheck
+from .policy import PolicyDecision
+from .validation import ActionOption, PreconditionFailure, ValidationCheck
 
 #: PENDING, APPROVED, REJECTED or ESCALATED; OPS or MANAGER. Plain strings because they come straight from the database.
 ApprovalStatus = str
@@ -115,3 +117,32 @@ class ApprovalItem(CamelModel):
     #: Evaluated for the current viewer: role and four-eyes.
     can_decide: bool
     cannot_decide_reason: str | None
+
+
+# ── Proposals and decisions ──────────────────────────────────────────────────
+class ProposeActionsBody(CamelModel):
+    actions: Annotated[list[CatalogAction], Field(min_length=1, max_length=6)]
+    rationale: Annotated[str, StringConstraints(strip_whitespace=True, min_length=10, max_length=1000)]
+
+
+class PreviewActionsBody(CamelModel):
+    actions: Annotated[list[CatalogAction], Field(min_length=1, max_length=6)]
+
+
+class PolicyPreview(CamelModel):
+    decision: PolicyDecision
+    precondition_failures: list[PreconditionFailure]
+    #: Who could approve if approval is needed, e.g. "Another OPS user" / "A manager".
+    approver_hint: str | None
+    attempt: int
+
+
+class ApprovalDecisionBody(CamelModel):
+    decision: Literal["APPROVE", "REJECT", "ESCALATE"]
+    comment: Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)] = ""
+
+    @model_validator(mode="after")
+    def _needs_a_reason(self) -> ApprovalDecisionBody:
+        if self.decision != "APPROVE" and len(self.comment) < 5:
+            raise ValueError("A comment of at least 5 characters is required to reject or escalate")
+        return self

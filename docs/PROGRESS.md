@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B4 batch 2: resolutions, approvals and detection in Python
+- Ported the resolution flow (`services/writes/resolutions.py`): preview, propose (person and agent), undo, execute, validate, close, escalate without proposal; approval decide and bulk approve with four-eyes and tier rules (`writes/approvals.py`); case opening and merging from detection, auto-close, assign (`writes/cases.py`); the reconciliation service with sweep (`writes/reconciliation.py`).
+- 11 new flow tests on the recorded scenarios: policy picks the tier, a refund needs a manager other than the proposer, reject reopens, escalate hands over, undo goes through the same path, the audit chain verifies, and a sweep over the recorded data opens nothing new. 400 tests, ruff and pyright clean.
+- Hooks left for later batches: `screen_case` (J1 intake, B5 with the agents) and `agent_resumer` (resume a paused run, B5).
+
 ### 2026-10-26 · Phase B4 batch 1: the write core in Python
 - Ported the services every write goes through: order, internal payment, ledger, refund, dispute and case status writes (`services/writes/`), the gateway's write side (replay, create refund, delivery log), the webhook consumer with the event log (receive, retry, manual replay, DEAD after five tries), the nine action executors, the idempotent executor and the validator against the database.
 - 12 new execution tests run on the recorded scenarios (a database seeded from the contract dump): fix a payment mismatch and validate PASS, replay never acts twice, a stale precondition stops the rest, hold, escalate, refund through the gateway, sync, dispute, reverse a journal, webhook 409 on a locked order. 15 webhook-log tests ported from `webhook-event.service.test.ts`. 389 tests, ruff and pyright clean.
