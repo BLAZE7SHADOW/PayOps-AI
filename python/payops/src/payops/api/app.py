@@ -58,7 +58,7 @@ def create_app(
             queue = InlineJobs(handlers)
         else:
             queue = ProcrastinateJobs(
-                PsycopgConnector(conninfo=settings.database_url, min_size=1, max_size=4),
+                PsycopgConnector(conninfo=settings.database_url, min_size=1, max_size=settings.job_pool_max),
                 handlers,
                 sweep_enabled=settings.reconcile_sweep_ms > 0,
             )

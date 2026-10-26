@@ -88,3 +88,13 @@ async def test_startup_builds_an_empty_database_and_is_safe_to_repeat(pg_uri: st
         assert conn.execute("select count(*) from users").fetchone() == (5,)
         assert conn.execute("select version_num from alembic_version").fetchone() == ("0002",)
         assert conn.execute("select count(*) from procrastinate_jobs").fetchone() == (0,)
+
+
+def test_the_hosted_pool_sizes_keep_one_process_small_enough_for_the_free_pooler() -> None:
+    """Supabase's Session pooler allows 15 connections, and a deploy keeps the old process up until the new one is healthy.
+    These are the values render.yaml sets: at most 9 per process, and pools open lazily, so two processes normally hold
+    about 8 together. A bigger budget needs a bigger pooler plan."""
+    from payops.settings import Settings
+
+    hosted = Settings(database_pool_max=3, gateway_pool_max=2, checkpoint_pool_max=2, job_pool_max=2)
+    assert hosted.max_connections == 9

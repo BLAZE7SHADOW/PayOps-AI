@@ -105,6 +105,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Render deploy failures: pooler connection limit
+- Web-only commits redeployed the backend and the new process failed with `EMAXCONNSESSION max clients reached in session mode` (Supabase Session pooler: 15 clients; the old and new process overlap during a deploy). One process could hold 22.
+- Fix: `render.yaml` caps the pools (3 + 2 + 2 + 2 = 9, new `JOB_POOL_MAX`), adds `buildFilter` (backend redeploys only for `python/**` and `render.yaml`); test and `OPERATIONS.md` section added.
+
 ### 2026-10-26 · Phase B7 (on branch `b7-retire-typescript`, not merged)
 - Tagged `ts-backend-final` (pushed). Deleted `apps/server`, `packages/{core,agents,simulator,evals}`, the Node blueprint and the TS-only scripts; trimmed root scripts, vitest and ESLint config, `.env.example`, lockfile; CI has no parity job and runs `python -m payops.evals`.
 - Checks on the branch: web and shared typecheck, lint, 241 tests; 534 backend tests; 43 agent tests; evals 15 of 15, 83 exact, 0 fallback.

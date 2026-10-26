@@ -38,6 +38,7 @@ One service, `payops-backend` (`render.yaml`): API, job worker, Socket.IO and th
 | `RECONCILE_SWEEP_MS` | `0` disables the periodic sweep (saves bandwidth) |
 | `JOB_POLL_SECONDS` | job queue polling, 30 on Render; NOTIFY wakes the worker immediately |
 | `GATEWAY_POOL_MAX` | size of the separate pool for simulated gateway reads (D089) |
+| `DATABASE_POOL_MAX`, `CHECKPOINT_POOL_MAX`, `JOB_POOL_MAX` | the other three pools. With the gateway pool, one process holds at most their sum (9 on Render: 3 + 2 + 2 + 2) |
 | `MIGRATE_ON_START` | default on: migrations, demo users and audit sealing before serving |
 
 - **Health:** `GET /api/health` returns `database` and `agents` checks; Render uses it as the health check path.
@@ -65,3 +66,9 @@ On `SIGTERM` uvicorn stops taking requests, the job worker stops fetching, and p
 `pnpm typecheck && pnpm lint && pnpm test && pnpm py:test && pnpm eval` (CI runs the same). A change to prompt, Jev question or tool-description text also needs a billed re-recording (`pnpm cassette:record`), because cassette keys hash the exact text.
 
 Before pointing traffic at a new database, run `python/payops/scripts/check_listen_notify.py` against its Session pooler (port 5432): it sends one notification and waits for it, which is what the job queue relies on.
+
+### Database connection budget
+
+The free Supabase Session pooler allows **15 clients in total**. A deploy keeps the old process running until the new one is healthy, so two processes overlap. `render.yaml` therefore caps one process at 9 connections (pools open lazily, so it usually holds about half). If a deploy fails with `EMAXCONNSESSION max clients reached in session mode` and `PoolTimeout: pool initialization incomplete`, the budget was exceeded: lower the pool variables or move to a bigger pooler plan.
+
+`render.yaml` also sets `buildFilter` so the backend redeploys only when `python/` or `render.yaml` change; web-only commits (Vercel builds those) leave it running.
