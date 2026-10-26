@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import psycopg
 import pytest
 import pytest_asyncio
 
@@ -23,7 +24,7 @@ from payops.api.security import SessionUser
 from payops.db.engine import create_engine
 from payops.ports import FixedClock
 from payops.settings import Settings
-from tests.conftest import load_contract_dump
+from tests.conftest import _with_database, load_contract_dump
 
 HERE = Path(__file__).parent / "contract"
 DB = load_contract_dump()
@@ -31,8 +32,11 @@ ROUTES: list[dict[str, Any]] = json.loads(gzip.open(HERE / "routes.json.gz").rea
 
 
 @pytest.fixture(scope="session")
-def contract_url(seeded_template_uri: str) -> str:
-    return seeded_template_uri
+def contract_url(pg_uri: str, seeded_template_uri: str) -> str:
+    """The contract tests keep connections open for the whole run, so they get their own copy: a database cannot be cloned while someone is connected."""
+    with psycopg.connect(pg_uri, autocommit=True) as conn:
+        conn.execute("CREATE DATABASE contract TEMPLATE payops_seeded")
+    return _with_database(pg_uri, "contract")
 
 
 @pytest_asyncio.fixture(scope="session")
