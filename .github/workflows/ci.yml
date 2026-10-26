@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   typescript:
-    name: TypeScript (typecheck, lint, tests, evals)
+    name: Web and shared (typecheck, lint, tests)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -33,7 +33,6 @@ jobs:
       - run: pnpm test
         env:
           VITE_API_URL: ""
-      - run: pnpm eval
 
   python:
     name: Python ${{ matrix.project }} (ruff, pyright, pytest)
@@ -56,26 +55,9 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pyright
       - run: uv run pytest -q
-
-  parity:
-    name: Parity (Python graph against the TypeScript graph)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: python/agents/uv.lock
-      - run: pnpm install --frozen-lockfile
-      - run: uv sync --frozen
-        working-directory: python/agents
-      - run: pnpm eval:python
+      # The 15 golden scenarios through the real API process, replaying recorded model responses.
+      - run: uv run python -m payops.evals
+        if: matrix.project == 'payops'
 
   audit:
     name: Dependency audit

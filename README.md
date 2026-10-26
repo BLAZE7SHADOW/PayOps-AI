@@ -116,25 +116,22 @@ Every model-facing decision sits behind a port with a coded fallback, so a slow 
 
 ## Architecture
 
-Hexagonal monorepo in TypeScript. The domain core depends on ports; adapters implement them. The agent system is a client of the core.
+The backend is one Python service (FastAPI). The domain core depends on ports; adapters implement them. The agent system runs inside the same process and calls the services directly. The web app is the only TypeScript left.
 
 ```
-apps/web (React 19, Vite, Tailwind v4)  <-- REST + Socket.IO -->  apps/server (Express 5)
+apps/web (React 19, Vite, Tailwind v4)  <-- REST + Socket.IO -->  python/payops (FastAPI, job worker, python-socketio)
                                                                      |
-                     packages/agents (LangGraph)  ->  packages/core (domain, policy, executor, validator, ports)
+                  python/agents (LangGraph)  ->  domain, policy, executor, validator, services, ports
                                                                      |
-        adapters: Postgres/PGlite, Simulator gateway, Gemini LLM, Jev decisions, cassette record/replay
+        adapters: Postgres, Simulator gateway, Gemini LLM, Jev decisions, cassette record/replay
 ```
 
 | Package | Role |
 |---|---|
 | `apps/web` | Operator UI: overview, cases, approvals, agent runs, simulator, public landing |
-| `apps/server` | REST API, realtime events, auth, job queue |
-| `packages/core` | Domain services, policy engine, executor, validator, ports and adapters |
-| `packages/agents` | LangGraph investigation graph and nodes |
-| `packages/simulator` | Seeded fault generator for the 21 scenarios |
-| `packages/evals` | Golden-scenario eval harness |
-| `packages/shared` | DTOs and types shared by web and server |
+| `python/payops` | REST API, realtime events, auth, job queue, domain services, policy engine, executor, validator, simulator, evals |
+| `python/agents` | LangGraph investigation graph and nodes (`payops_agents`) |
+| `packages/shared` | DTOs and types for the web app |
 
 One database holds business data, the job queue and LangGraph checkpoints. There is no Redis and no separate worker process.
 
@@ -142,7 +139,7 @@ The investigation has a fixed safety spine and bounded choices. This is the impl
 
 ```mermaid
 flowchart TD
-  UI[React workbench] -->|REST + Socket.IO| API[Express API and job worker]
+  UI[React workbench] -->|REST + Socket.IO| API[FastAPI API and job worker]
   API --> GRAPH[LangGraph run with Postgres checkpoints]
   GRAPH --> BASE[Code loads case and gathers baseline evidence]
   BASE --> FAST{Jev: known cause with enough confidence?}
@@ -187,24 +184,25 @@ Seven golden scenarios, run against live models on 2026-09-28. Full report: [doc
 
 One scenario (`refund_stuck`) got the expected fix but named a neighbouring root cause. Grounding checks that a finding is supported by its cited evidence, not that it is causally right; this is documented in D045 and D046 and excluded from the accuracy metric.
 
-## The agents in Python
+## History: TypeScript to Python
 
-The investigation graph also runs as a Python service (`python/agents`: FastAPI, LangGraph Python, Pydantic, managed with `uv`). The TypeScript API stays the system of record; the Python graph asks it for tools, the policy decision, execution and validation. Set `AGENT_RUNTIME=python` on the API to use it. `pnpm eval:python` runs the 15 golden scenarios through the Python service and checks each one against the TypeScript result, and `pnpm py:test` runs its own tests. Design and limits: [D085](docs/DECISIONS.md) and [docs/03 §18](docs/03-agent-system.md).
+The backend was first written in TypeScript (Express, Drizzle, pg-boss). In October 2026 it moved to Python and the TypeScript backend was deleted (D085, D086, D089, D090). The move was checked against the old code: 208 recorded API responses, the simulator output row for row, and the 15 golden evals with 83 exact replay lookups. The last TypeScript commit is tagged `ts-backend-final`.
 
 ## Run it locally
 
-Requires Node 22 or newer and pnpm 10.
+Requires Node 22 and pnpm 10 (web), and Python 3.12 with [uv](https://docs.astral.sh/uv/) (backend).
 
-> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this README as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this README as `npx pnpm@10.28.0 ...`. To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc`.
 
 ```
 pnpm install
+(cd python/payops && uv sync)
 cp .env.example .env
-pnpm db:local        # terminal 1: in-process Postgres (PGlite) on :54329, leave it running
-pnpm db:migrate      # terminal 2: apply migrations (the database must be running first)
-pnpm seed            # migrate, then seed merchants, customers and one case per scenario
-pnpm dev             # server :4000 and web :5173 together
+pnpm db:local        # terminal 1: local Postgres with no Docker; prints a DATABASE_URL, put it in .env, leave it running
+pnpm dev             # API :4000 (applies migrations and creates the demo users on start) and web :5173
 ```
+
+Then open Simulator and use **Reset demo data** to load the demo cases.
 
 Open http://localhost:5173 and sign in. All demo accounts share the password `payops-demo`.
 
@@ -223,11 +221,10 @@ Open http://localhost:5173 and sign in. All demo accounts share the password `pa
 Other commands:
 
 ```
-pnpm test            # unit and integration tests
+pnpm test            # web and shared tests
 pnpm typecheck && pnpm lint
-pnpm eval            # golden scenarios from cassettes
-pnpm eval:live       # golden scenarios against live models
-pnpm cassette:record # re-record cassettes
+pnpm py:test         # ruff, pyright and pytest for both Python projects
+pnpm eval            # the 15 golden scenarios from cassettes
 pnpm --filter @payops/web dev:mock   # UI on fixtures, no backend
 ```
 

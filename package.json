@@ -7,26 +7,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "concurrently -k -n server,web -c blue,green \"pnpm --filter @payops/server dev\" \"pnpm --filter @payops/web dev\"",
+    "dev": "concurrently -k -n api,web -c blue,green \"pnpm api:dev\" \"pnpm --filter @payops/web dev\"",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:local": "tsx scripts/local-db.ts",
-    "db:migrate": "pnpm --filter @payops/core db:migrate",
-    "db:generate": "pnpm --filter @payops/core db:generate",
-    "seed": "pnpm --filter @payops/server seed",
-    "jev:ping": "tsx scripts/jev-ping.ts",
-    "cassette:record": "tsx packages/agents/scripts/record-cassettes.ts",
-    "eval": "tsx packages/evals/scripts/run-eval.ts",
-    "volume": "tsx packages/simulator/scripts/volume-test.ts",
-    "eval:live": "tsx packages/evals/scripts/run-eval.ts --mode=live",
-    "eval:python": "tsx packages/evals/scripts/run-eval-python.ts",
-    "py:dev": "cd python/agents && uv run --env-file ../../.env uvicorn payops_agents.app:app_factory --factory --port 8100 --reload",
     "py:test": "cd python/agents && uv run ruff check . && uv run pyright && uv run pytest -q && cd ../payops && uv run ruff check . && uv run pyright && uv run pytest -q",
-    "contract:export": "tsx packages/evals/scripts/export-contract.ts"
+    "api:dev": "cd python/payops && uv run --env-file ../../.env uvicorn payops.api.app:app_factory --factory --port 4000 --reload",
+    "db:local": "cd python/payops && uv run python scripts/dev_db.py",
+    "eval": "cd python/payops && uv run python -m payops.evals"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
@@ -36,12 +27,9 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.0.0",
     "prettier": "^3.6.0",
-    "tsx": "^4.20.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.0",
-    "vitest": "^3.2.0",
-    "@electric-sql/pglite": "^0.5.8",
-    "@electric-sql/pglite-socket": "^0.2.11"
+    "vitest": "^3.2.0"
   },
   "pnpm": {
     "overrides": {

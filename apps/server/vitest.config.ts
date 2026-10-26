@@ -1,2 +1,0 @@
-import { defineProject } from 'vitest/config';
-export default defineProject({ test: { name: 'server', environment: 'node', testTimeout: 20_000 } });

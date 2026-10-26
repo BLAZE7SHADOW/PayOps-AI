@@ -44,7 +44,7 @@ On Render set `AI_MODE=LIVE`, `GEMINI_API_KEY` and `TYPESAFE_JEV_API_KEY`, then 
 
 ## Python backend (B6, replaces the Node API)
 
-`render.yaml` now describes one Python service, `payops-backend` (API, job worker, Socket.IO and the agents in one process). The Node API is kept in `render.node.yaml` as a rollback until B7.
+`render.yaml` now describes one Python service, `payops-backend` (API, job worker, Socket.IO and the agents in one process). The Node API lives only in git history now (tag `ts-backend-final`).
 
 1. Reset the Supabase database password to letters and digits only (a `@` or `/` breaks the URL), then copy the **Session pooler** string (port 5432).
 2. Render: New > Blueprint > this repo > `render.yaml`. Set `DATABASE_URL` and `WEB_ORIGIN` (the Vercel URL). First boot runs the migrations and creates the demo users.
@@ -53,4 +53,4 @@ On Render set `AI_MODE=LIVE`, `GEMINI_API_KEY` and `TYPESAFE_JEV_API_KEY`, then 
 5. Suspend the old `payops-api` service (do not delete it until B7) and keep UptimeRobot paused until the bandwidth looks fine.
 6. After 3 to 4 days check Render, Billing, Included Usage. The target is under about 6.7 MB per awake hour.
 
-Rollback: resume the old service and point `vercel.json` back at it.
+Rollback: Render, Events, redeploy the previous deploy. The old Node service can only be revived from the tag `ts-backend-final`.

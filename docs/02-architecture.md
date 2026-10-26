@@ -1,5 +1,19 @@
 # 02 · System Architecture
 
+> **Backend moved to Python (D090).** The sections below still describe the original TypeScript layout. Where they name a TypeScript path, use this map; behaviour is the same, the code is in Python. The last TypeScript commit is the tag `ts-backend-final` (`git show ts-backend-final:<path>`).
+>
+> | Was | Now |
+> |---|---|
+> | `apps/server` (Express routes, auth, Socket.IO, pg-boss) | `python/payops/src/payops/api`, `auth`, `jobs`, `realtime.py` (FastAPI, python-socketio, Procrastinate) |
+> | `packages/core` (domain, services, executor, validator, adapters, Drizzle schema) | `payops/domain`, `services`, `services/writes`, `infra`, `db` (SQLAlchemy models, Alembic) |
+> | `packages/agents` and `python/agents` as a service | `python/agents/src/payops_agents` (the graph) and `payops/agent_tools` (tools, run store, in-process node API) |
+> | `packages/simulator` | `payops/simulator` |
+> | `packages/evals` | `payops/evals` (`pnpm eval`) |
+> | `/internal/agent/*`, `AGENT_RUNTIME`, `AGENT_INTERNAL_SECRET` | removed: agents call the services in process |
+> | Drizzle migrations | `python/payops/migrations` (SQL `0000` to `0012` kept as `migrations/sql`, then Alembic revisions) |
+> | `.env` read in `env.ts` | `payops/settings.py` |
+
+
 > **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
 
 ## 1. Shape

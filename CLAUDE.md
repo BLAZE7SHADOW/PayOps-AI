@@ -4,7 +4,7 @@ Read this file fully at the start of every session. Then read `docs/PROGRESS.md`
 
 ## What this project is
 
-PayOps AI is a full-stack TypeScript payment-operations product (React, Node/Express, Postgres on Supabase). It detects payments where the gateway, order service, ledger, webhooks and settlement disagree, and resolves them. A LangGraph multi-agent system investigates cases, cites evidence, proposes a fix from a closed action catalog, pauses for human approval when policy requires it, executes through deterministic code, and verifies the outcome with an independent validator. If the fix fails, it replans (within limits) or escalates.
+PayOps AI is a payment-operations product: a React web app and a Python backend (FastAPI, Postgres on Supabase). It detects payments where the gateway, order service, ledger, webhooks and settlement disagree, and resolves them. A LangGraph multi-agent system investigates cases, cites evidence, proposes a fix from a closed action catalog, pauses for human approval when policy requires it, executes through deterministic code, and verifies the outcome with an independent validator. If the fix fails, it replans (within limits) or escalates.
 
 **The product must work with AI turned off.** The agent is one actor proposing actions; humans are the other. Both use the same catalog, policy, executor and validator.
 
@@ -18,7 +18,7 @@ Owner: Shivam (fresh B.Tech graduate). This is a portfolio project that should r
 | `docs/06-phases.md` | Planning or finishing any task |
 | `docs/01-product.md` | Scenarios, users, scope |
 | `docs/02-architecture.md` | Repo layout, ports/adapters, API, env, flows |
-| `docs/03-agent-system.md` | Anything in `packages/agents`, policy, executor, validator, Jev, context, evidence |
+| `docs/03-agent-system.md` | Anything in `python/agents`, policy, executor, validator, Jev, context, evidence |
 | `docs/04-data-model.md` | Models, detection rules, state machines |
 | `docs/05-ui-design.md` | **Any** UI work |
 | `docs/07-security.md` | Data sent to Gemini or Jev, masking, auth, audit, or a new threat |
@@ -30,33 +30,35 @@ If code and docs disagree, stop and ask Shivam. Do not silently "fix" either.
 
 1. **Stay in the current phase** (see `PROGRESS.md`). Things from later phases go to `PROGRESS.md › Later`, not into code.
 2. **Models never touch the database.** LLMs and Jev see only context built by ContextBuilders from tool DTOs. Tools call domain services.
-3. **Models never authorize or execute.** Agents propose from the closed action catalog (`packages/shared/src/actions.ts`). Policy (code) decides the tier; executor (code) acts; validator (code) verifies by re-reading the data.
+3. **Models never authorize or execute.** Agents propose from the closed action catalog (`python/payops/src/payops/domain/actions`; the web copy is `packages/shared/src/actions.ts`). Policy (code) decides the tier; executor (code) acts; validator (code) verifies by re-reading the data.
 4. **Models never do arithmetic or date math.** Code computes and passes results as facts. Money is integer paise (`amountMinor`), formatted only via `shared/money.ts`.
 5. **Every finding cites evidence ids**, and grounding checks run before resolution.
-6. **Every Jev decision point has a deterministic fallback.** Every LLM output is Zod-validated.
+6. **Every Jev decision point has a deterministic fallback.** Every LLM output is Pydantic-validated.
 7. **Executor actions are idempotent** (idempotency key per action).
 8. **Everything auditable:** state changes write `audit_events`; agent steps write `agent_steps`.
 9. **Untrusted text** (customer/merchant notes) is screened (Jev J1) and never inserted into prompts unwrapped or when quarantined.
-10. **Dependency direction:** `shared ← core ← agents ← server`, `simulator → core`, `shared ← web`. `core` never imports `agents`. `web` never imports `core`.
+10. **Dependency direction:** `domain` imports nothing from `services`, `api` or `agents`; `payops_agents` never imports `payops` (it reaches the backend through the `NodeApiPort` interface); `web` imports only `packages/shared`.
 
 ## Stack (locked; ask before adding dependencies)
 
-pnpm workspaces · Node 22 · TypeScript strict · React 19 + Vite + React Router + TanStack Query + Zustand (UI state only) · Tailwind v4 with custom tokens · Radix UI primitives + `@radix-ui/react-icons` · Recharts (restyled) · Express 5 · Postgres (Supabase) via Drizzle ORM + `pg` · pg-boss (jobs in Postgres) · PGlite (local dev + tests) · Zod · Socket.IO (in-process) · pino · LangGraph JS + `@langchain/langgraph-checkpoint-postgres` · LangChain JS + `@langchain/google-genai` · `@typesafe-ai/sdk` (Jev) · Vitest · Playwright.
+**Web:** pnpm workspaces (`apps/web`, `packages/shared`) · Node 22 · TypeScript strict · React 19 + Vite + React Router + TanStack Query + Zustand (UI state only) · Tailwind v4 with custom tokens · Radix UI primitives + `@radix-ui/react-icons` · Recharts (restyled) · Zod · Vitest · Playwright.
 
-**Exception (D085, D086):** the agent system runs as a separate Python service in `python/agents` (FastAPI + LangGraph Python, managed with `uv`), switched by `AGENT_RUNTIME=ts|python`. The plan (D086) is to move the whole backend to Python (FastAPI) and delete the TypeScript backend once parity is proven; `apps/web` and `packages/shared` stay. Until then do not start new TypeScript backend features without asking.
+**Backend (`python/payops`, `python/agents`):** Python 3.12 managed with `uv` · FastAPI · SQLAlchemy 2 async + Alembic + psycopg 3 · Pydantic v2 · Procrastinate (jobs in Postgres, LISTEN/NOTIFY) · python-socketio (in-process) · LangGraph Python with the Postgres checkpointer · PyJWT, cryptography (auth) · pytest, ruff, pyright · `pgserver` (embedded Postgres for tests and local dev) · Postgres on Supabase.
 
-Do **not** add: MongoDB, Redis, BullMQ, any other worker service, Supabase Auth/RLS, Next.js, Redux, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, shadcn default styles, lucide-react, framer-motion, any icon pack with sparkles.
+History: the backend was TypeScript until D090 (last commit tagged `ts-backend-final`). Prompts, Jev questions and tool descriptions are pinned by cassette keys; changing their wording needs a billed re-recording.
+
+Do **not** add: MongoDB, Redis, BullMQ, Celery, any other worker service, Supabase Auth/RLS, Next.js, Redux, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, shadcn default styles, lucide-react, framer-motion, any icon pack with sparkles.
 
 ## AI configuration
 
 - LLM: `AI_PROVIDER=gemini`, `AI_MODEL` (currently `gemini-3.6-flash`), key `GEMINI_API_KEY`. Access only through `LlmPort`.
-- Jev (TypeSafe System One): key `TYPESAFE_JEV_API_KEY` (pass it explicitly to `new TypeSafeClient({ apiKey })`; the SDK default env name is different). Pin `JEV_MODEL`. Access only through `DecisionPort`. Docs: https://docs.typesafe.ai (API: `POST https://api.typesafe.ai/v1/systemone`, primitives Choice / Score / Noul, answers include probabilities and confidence).
+- Jev (TypeSafe System One): key `TYPESAFE_JEV_API_KEY` (read from settings and sent as a bearer token by the Python adapter in `payops_agents/ports.py`, which calls the REST API directly; the TypeScript SDK is gone). Pin `JEV_MODEL`. Access only through `DecisionPort`. Docs: https://docs.typesafe.ai (API: `POST https://api.typesafe.ai/v1/systemone`, primitives Choice / Score / Noul, answers include probabilities and confidence).
 - Jev is used at six points (J1 intake, J2 plan, J3 risk, J4 grounding, J5 replan, J6 fast-path diagnosis, see docs/03 §4a). Prefer Jev + code over an LLM call wherever a typed decision is enough; Gemini is for reasoning Jev cannot do. Do not add points without a `DECISIONS.md` entry. Never ask Jev to count, compare numbers or order dates.
 - `AI_MODE`: `LIVE` · `RECORD` · `REPLAY`. Tests and CI use `REPLAY`. Never call live APIs from unit tests.
 
 ## Secrets
 
-`.env` exists at the repo root with real keys. **Never print, log, commit, echo or paste its values**, never `cat .env`. Read config only through each app's `env.ts`. Keep `.env.example` in sync (names only). `.env` must stay in `.gitignore`.
+`.env` exists at the repo root with real keys. **Never print, log, commit, echo or paste its values**, never `cat .env`. Read config only through `python/payops/src/payops/settings.py` (backend) or `apps/web` env handling. Keep `.env.example` in sync (names only). `.env` must stay in `.gitignore`.
 
 ## UI rules (summary; full spec in `docs/05-ui-design.md`)
 
@@ -64,22 +66,18 @@ Internal ops tool, calm and dense. Warm paper background `#F5F2EA` (never pure w
 
 ## Commands
 
-> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...` (for example `npx pnpm@10.28.0 db:migrate`). To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal. In Claude's cloud shell `pnpm` is also missing: call `node_modules/.bin/vitest` and `node_modules/.bin/tsc` directly.
+> **pnpm on this machine.** Plain `pnpm` does not work here. Run every `pnpm ...` command in this file as `npx pnpm@10.28.0 ...`. To keep typing `pnpm`, add `alias pnpm='npx pnpm@10.28.0'` to `~/.zshrc` and open a new terminal.
 
 ```
-pnpm db:local       # zero-install Postgres (PGlite) on :54329, or set DATABASE_URL to Supabase
-pnpm db:migrate     # apply Drizzle migrations
-pnpm db:generate    # generate a migration after changing packages/core/src/db/schema
-pnpm dev            # server (API + jobs + sockets) + web
-pnpm test           # vitest, all packages
-pnpm typecheck
-pnpm lint
-pnpm eval           # evals in REPLAY (Phase 5)
-pnpm eval:python    # the same goldens through the Python agent service, compared with TypeScript (D085)
-pnpm py:test        # python/agents: ruff, pyright, pytest
-pnpm py:dev         # the Python agent service on :8100 (needs AGENT_RUNTIME=python and AGENT_INTERNAL_SECRET on the API)
-pnpm jev:ping       # Jev smoke test (Phase 4)
+pnpm db:local       # local Postgres with no Docker (pgserver); prints DATABASE_URL, or set it to Supabase
+pnpm dev            # API :4000 (migrates and creates demo users on start) + web :5173
+pnpm test           # vitest: web and shared
+pnpm typecheck && pnpm lint
+pnpm py:test        # ruff, pyright, pytest for python/agents and python/payops
+pnpm eval           # the 15 golden evals in REPLAY (python -m payops.evals)
 ```
+
+Database changes: add an Alembic revision in `python/payops/migrations/versions` (the SQL history `0000` to `0012` lives in `migrations/sql`).
 
 ## Token budget rules (for coding sessions)
 

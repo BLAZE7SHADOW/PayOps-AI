@@ -1476,3 +1476,15 @@ The Python backend (`python/payops`) matches the TypeScript API on everything th
 - **Startup does the setup work.** With `MIGRATE_ON_START` (default on) the API applies migrations, seeds the demo users and seals legacy audit rows before it serves traffic. `/api/health` reports `database` and `agents` separately. This replaces the `pnpm seed` step in the Node start command.
 
 **Why record these.** Each is a place where "identical to TypeScript" is false, and a reader comparing the two codebases would otherwise take it for a bug. None changes what the web app shows.
+
+## D090 · The TypeScript backend is retired (2026-10-26)
+
+`apps/server` and `packages/{core,agents,simulator,evals}` are deleted, together with the internal agent API, `AGENT_RUNTIME`, the Node Render blueprint and the PGlite and Jev smoke scripts. `apps/web` and `packages/shared` stay. The last TypeScript commit is the tag `ts-backend-final`; `git show ts-backend-final:<path>` reads any old file and a checkout of the tag rebuilds the old backend.
+
+**Why.** The Python backend reproduces everything the web app reads (D089) and had run on Render with a healthy `/api/health` before this change. Keeping both meant two copies of the agents, a hand-copied prompt text pinned by cassette keys, and an internal API that existed only to join them. Deleting the TypeScript side makes the Python text the only copy.
+
+**What was verified before deleting.** 534 backend tests, 43 agent tests, 15 of 15 golden evals with 83 exact lookups and 0 by fallback, web and shared typecheck, lint and 241 tests. The parity fixtures the Python tests use (`tests/fixtures`, `tests/contract`) are committed recordings of the TypeScript output, so the tests no longer need the TypeScript code to run.
+
+**What is lost.** (1) The test oracle: new Python behaviour is no longer compared with TypeScript, only with the recordings. (2) `pnpm cassette:record` and `pnpm eval:live` were TypeScript; recording new cassettes needs a Python recorder (listed in PROGRESS Later). Until then, do not change prompt, question or tool-description text. (3) `pnpm jev:ping`.
+
+**CI.** The parity job is gone; the backend job also runs `python -m payops.evals`.

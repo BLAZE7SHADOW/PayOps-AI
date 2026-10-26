@@ -1,5 +1,19 @@
 # 03 · Agent System
 
+> **Backend moved to Python (D090).** The sections below still describe the original TypeScript layout. Where they name a TypeScript path, use this map; behaviour is the same, the code is in Python. The last TypeScript commit is the tag `ts-backend-final` (`git show ts-backend-final:<path>`).
+>
+> | Was | Now |
+> |---|---|
+> | `apps/server` (Express routes, auth, Socket.IO, pg-boss) | `python/payops/src/payops/api`, `auth`, `jobs`, `realtime.py` (FastAPI, python-socketio, Procrastinate) |
+> | `packages/core` (domain, services, executor, validator, adapters, Drizzle schema) | `payops/domain`, `services`, `services/writes`, `infra`, `db` (SQLAlchemy models, Alembic) |
+> | `packages/agents` and `python/agents` as a service | `python/agents/src/payops_agents` (the graph) and `payops/agent_tools` (tools, run store, in-process node API) |
+> | `packages/simulator` | `payops/simulator` |
+> | `packages/evals` | `payops/evals` (`pnpm eval`) |
+> | `/internal/agent/*`, `AGENT_RUNTIME`, `AGENT_INTERNAL_SECRET` | removed: agents call the services in process |
+> | Drizzle migrations | `python/payops/migrations` (SQL `0000` to `0012` kept as `migrations/sql`, then Alembic revisions) |
+> | `.env` read in `env.ts` | `payops/settings.py` |
+
+
 This is the most important design document in the repo. If code and this doc disagree, stop and ask before changing either.
 
 ## 1. Design stance
