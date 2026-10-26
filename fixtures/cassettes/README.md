@@ -1,7 +1,7 @@
 # Phase 4 recordings
 
 Real provider responses recorded on 2026-09-29 through `pnpm cassette:record`
-(`packages/agents/scripts/record-cassettes.ts`, docs/DECISIONS.md D045) against the current
+(now `python -m payops.evals.record`; it was `record-cassettes.ts`, docs/DECISIONS.md D045) against the current
 specialist-split graph (`plan` J2 -> `paymentAgent`/`reconciliationAgent`/`riskAgent` -> `join` ->
 `groundCheck` J4 -> `resolve`). Supersedes the original Phase 3 recording (single `investigate`
 node), whose cassette entries the current graph could no longer replay (ReplayMissError -- node

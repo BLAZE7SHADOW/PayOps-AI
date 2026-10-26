@@ -225,6 +225,7 @@ pnpm test            # web and shared tests
 pnpm typecheck && pnpm lint
 pnpm py:test         # ruff, pyright and pytest for both Python projects
 pnpm eval            # the 15 golden scenarios from cassettes
+pnpm cassette:record # record missing cassettes (real, billed calls; needs the API keys)
 pnpm --filter @payops/web dev:mock   # UI on fixtures, no backend
 ```
 

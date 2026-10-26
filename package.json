@@ -17,7 +17,8 @@
     "py:test": "cd python/agents && uv run ruff check . && uv run pyright && uv run pytest -q && cd ../payops && uv run ruff check . && uv run pyright && uv run pytest -q",
     "api:dev": "cd python/payops && uv run --env-file ../../.env uvicorn payops.api.app:app_factory --factory --port 4000 --reload",
     "db:local": "cd python/payops && uv run python scripts/dev_db.py",
-    "eval": "cd python/payops && uv run python -m payops.evals"
+    "eval": "cd python/payops && uv run python -m payops.evals",
+    "cassette:record": "cd python/payops && uv run --env-file ../../.env python -m payops.evals.record"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

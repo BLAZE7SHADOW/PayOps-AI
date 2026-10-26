@@ -45,7 +45,7 @@ If code and docs disagree, stop and ask Shivam. Do not silently "fix" either.
 
 **Backend (`python/payops`, `python/agents`):** Python 3.12 managed with `uv` · FastAPI · SQLAlchemy 2 async + Alembic + psycopg 3 · Pydantic v2 · Procrastinate (jobs in Postgres, LISTEN/NOTIFY) · python-socketio (in-process) · LangGraph Python with the Postgres checkpointer · PyJWT, cryptography (auth) · pytest, ruff, pyright · `pgserver` (embedded Postgres for tests and local dev) · Postgres on Supabase.
 
-History: the backend was TypeScript until D090 (last commit tagged `ts-backend-final`). Prompts, Jev questions and tool descriptions are pinned by cassette keys; changing their wording needs a billed re-recording.
+History: the backend was TypeScript until D090 (last commit tagged `ts-backend-final`). Prompts, Jev questions and tool descriptions are pinned by cassette keys; changing their wording needs a billed re-recording (`pnpm cassette:record --all`).
 
 Do **not** add: MongoDB, Redis, BullMQ, Celery, any other worker service, Supabase Auth/RLS, Next.js, Redux, Kafka, Kubernetes, microservices, vector DB, MCP, Context.dev, shadcn default styles, lucide-react, framer-motion, any icon pack with sparkles.
 
@@ -75,6 +75,7 @@ pnpm test           # vitest: web and shared
 pnpm typecheck && pnpm lint
 pnpm py:test        # ruff, pyright, pytest for python/agents and python/payops
 pnpm eval           # the 15 golden evals in REPLAY (python -m payops.evals)
+pnpm cassette:record # record missing cassettes (REAL, billed calls; needs the API keys in .env)
 ```
 
 Database changes: add an Alembic revision in `python/payops/migrations/versions` (the SQL history `0000` to `0012` lives in `migrations/sql`).
