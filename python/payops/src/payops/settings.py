@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     #: Connections kept for reading the gateway's tables. They are a separate pool on purpose: a request holds one application connection while it asks the
     #: gateway, so sharing one pool lets a burst of requests each wait for a second connection the others hold (a deadlock). A pool of leaf reads cannot.
     gateway_pool_max: int = Field(default=5, ge=1, le=20)
+    #: Connections the job queue may hold (one of them listens for NOTIFY).
+    job_pool_max: int = Field(default=4, ge=2, le=20)
     database_pool_max: int | None = Field(default=None, ge=1, le=50)
     jwt_secret: str | None = Field(default=None, min_length=16, repr=False)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -54,6 +56,11 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         return sqlalchemy_url(self.database_url)
+
+    @property
+    def max_connections(self) -> int:
+        """Most connections one process can hold at once: the four pools. Two processes overlap during a deploy."""
+        return self.pool_size + self.gateway_pool_max + self.checkpoint_pool_max + self.job_pool_max
 
     @property
     def pool_size(self) -> int:

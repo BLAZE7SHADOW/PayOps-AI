@@ -78,6 +78,7 @@ One service, `payops-backend` (`render.yaml`): API, job worker, Socket.IO and th
 | `RECONCILE_SWEEP_MS` | `0` disables the periodic sweep (saves bandwidth) |
 | `JOB_POLL_SECONDS` | job queue polling, 30 on Render; NOTIFY wakes the worker immediately |
 | `GATEWAY_POOL_MAX` | size of the separate pool for simulated gateway reads (D089) |
+| `DATABASE_POOL_MAX`, `CHECKPOINT_POOL_MAX`, `JOB_POOL_MAX` | the other three pools. With the gateway pool, one process holds at most their sum (9 on Render: 3 + 2 + 2 + 2) |
 | `MIGRATE_ON_START` | default on: migrations, demo users and audit sealing before serving |
 
 - **Health:** `GET /api/health` returns `database` and `agents` checks; Render uses it as the health check path.
@@ -85,3 +86,9 @@ One service, `payops-backend` (`render.yaml`): API, job worker, Socket.IO and th
 - **Failed deploy:** open the deploy log first. A host error such as `failed to resolve host 'xxx@aws-...'` means the password in `DATABASE_URL` has an unescaped `@`.
 - **Rollback:** resume the old Node service (`render.node.yaml`) and point the three hosts in `vercel.json` back at it.
 - **Dependencies:** CI runs `pip-audit` on `python/payops` and `python/agents`; lockfiles are committed.
+
+### Database connection budget
+
+The free Supabase Session pooler allows **15 clients in total**. A deploy keeps the old process running until the new one is healthy, so two processes overlap. `render.yaml` therefore caps one process at 9 connections (pools open lazily, so it usually holds about half). If a deploy fails with `EMAXCONNSESSION max clients reached in session mode` and `PoolTimeout: pool initialization incomplete`, the budget was exceeded: lower the pool variables or move to a bigger pooler plan.
+
+`render.yaml` also sets `buildFilter` so the backend redeploys only when `python/` or `render.yaml` change; web-only commits (Vercel builds those) leave it running.

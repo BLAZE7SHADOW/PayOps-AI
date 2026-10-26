@@ -105,6 +105,10 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Render deploy failures: pooler connection limit
+- Web-only commits redeployed the backend and the new process failed with `EMAXCONNSESSION max clients reached in session mode` (Supabase Session pooler: 15 clients; the old and new process overlap during a deploy). One process could hold 22.
+- Fix: `render.yaml` caps the pools (3 + 2 + 2 + 2 = 9, new `JOB_POOL_MAX`), adds `buildFilter` (backend redeploys only for `python/**` and `render.yaml`); test and `OPERATIONS.md` section added.
+
 ### 2026-10-26 · Cleanup pass (code simplification, behaviour unchanged)
 - Done: removed the unused standalone agent service (on the B7 branch); web `QueryError` component replaces 24 hand-wired "could not load, retry" blocks (retry wiring in one place, 2 new tests).
 - Checked and dropped: a factory for the web list hooks (they already share `useCursorList`, each is one line).

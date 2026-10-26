@@ -11,6 +11,11 @@ services:
     # Migrations and demo users are applied on start (MIGRATE_ON_START defaults to on).
     startCommand: cd python/payops && uv run --no-dev uvicorn payops.api.app:app_factory --factory --host 0.0.0.0 --port $PORT --timeout-graceful-shutdown 30
     healthCheckPath: /api/health
+    # Redeploy only when the backend changes. A web-only commit (Vercel builds that) must not restart this service.
+    buildFilter:
+      paths:
+        - python/**
+        - render.yaml
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -26,8 +31,16 @@ services:
         value: 0
       - key: JOB_POLL_SECONDS
         value: 30
-      - key: GATEWAY_POOL_MAX
+      # Connection budget: the Supabase Session pooler allows 15 clients in total, and a deploy briefly runs the old and the
+      # new process together. One process holds at most 3 + 2 + 2 + 2 = 9 and usually about half of that (pools open lazily).
+      - key: DATABASE_POOL_MAX
         value: 3
+      - key: GATEWAY_POOL_MAX
+        value: 2
+      - key: CHECKPOINT_POOL_MAX
+        value: 2
+      - key: JOB_POOL_MAX
+        value: 2
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
