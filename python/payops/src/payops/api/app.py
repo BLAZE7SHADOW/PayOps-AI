@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI, Response
+from fastapi import APIRouter, Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -16,7 +16,8 @@ from ..observability import RequestIdMiddleware, configure_logging
 from ..ports import Clock, EventPublisher
 from ..settings import Settings, get_settings
 from .errors import install_error_handlers
-from .routes import ops, read
+from .routes import ops, read, write
+from .security import public_route
 
 
 def create_app(
@@ -44,7 +45,7 @@ def create_app(
 
     api = APIRouter(prefix="/api")
 
-    @api.get("/health")
+    @api.get("/health", dependencies=[Depends(public_route())])
     async def health(response: Response) -> dict[str, object]:
         up = await ping(app.state.engine)
         response.status_code = 200 if up else 503
@@ -52,6 +53,7 @@ def create_app(
 
     api.include_router(read.router)
     api.include_router(ops.router)
+    api.include_router(write.router)
     app.include_router(api)
     return app
 

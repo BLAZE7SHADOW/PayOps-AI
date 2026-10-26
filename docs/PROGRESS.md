@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B4 batch 3: the write routes in Python
+- The operator writes and their routes: case notes, saved views, feedback on a diagnosis, the agent switch, case assignment, preview and propose, undo, approval decision and bulk approve, webhook replay. Request bodies are Pydantic models matching the Zod schemas (unknown fields refused, comment and reason rules kept).
+- 10 HTTP tests (401, 403, 400, 404, 409, 422 shapes; a note is audited; views are private; a refund waits for a manager and four-eyes holds) and the route-guard test (every route names a permission or is public; the list of permissions with no route yet shrinks to empty). 414 tests, ruff and pyright clean.
+- Left in B4: agent run start (needs the jobs, B5), auth with MFA and sessions, simulator reset and undo.
+
 ### 2026-10-26 · Phase B4 batch 2: resolutions, approvals and detection in Python
 - Ported the resolution flow (`services/writes/resolutions.py`): preview, propose (person and agent), undo, execute, validate, close, escalate without proposal; approval decide and bulk approve with four-eyes and tier rules (`writes/approvals.py`); case opening and merging from detection, auto-close, assign (`writes/cases.py`); the reconciliation service with sweep (`writes/reconciliation.py`).
 - 11 new flow tests on the recorded scenarios: policy picks the tier, a refund needs a manager other than the proposer, reject reopens, escalate hands over, undo goes through the same path, the audit chain verifies, and a sweep over the recorded data opens nothing new. 400 tests, ruff and pyright clean.

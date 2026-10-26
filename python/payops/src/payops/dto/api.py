@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Generic, Literal, TypeVar
 
-from pydantic import Field, StringConstraints
+from pydantic import ConfigDict, Field, StringConstraints, model_validator
 
 from ..domain.enums import CASE_STATUS, CASE_TYPES, GW_PAYMENT_STATUS, ORDER_STATUS, SEVERITIES
 from .base import CamelModel
@@ -162,3 +162,21 @@ class AgentControlItem(CamelModel):
     reason: str
     changed_by_name: str | None
     changed_at: str | None
+
+
+class AssignCaseBody(CamelModel):
+    assignee_id: Annotated[str, Field(min_length=1, max_length=64)] | None
+
+
+class AgentControlBody(CamelModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["NORMAL", "PROPOSE_ONLY", "PAUSED"]
+    #: Why the switch changed. Required for anything other than NORMAL so the banner can say why.
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] = ""
+
+    @model_validator(mode="after")
+    def _needs_a_reason(self) -> AgentControlBody:
+        if self.mode != "NORMAL" and len(self.reason) < 3:
+            raise ValueError("Say briefly why the agent is being limited.")
+        return self

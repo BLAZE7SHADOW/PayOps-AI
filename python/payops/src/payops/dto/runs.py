@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, StringConstraints, model_validator
 
 from .api import CursorQuery
 from .base import CamelModel
@@ -70,3 +70,30 @@ class DiagnosisFeedbackItem(CamelModel):
     given_by_name: str
     created_at: str
     updated_at: str
+
+
+ROOT_CAUSES = (
+    "WEBHOOK_PROCESSING_FAILURE", "WEBHOOK_NOT_DELIVERED", "ORDER_STATE_DIVERGED", "LEDGER_POSTING_MISSING", "DUPLICATE_CAPTURE", "REFUND_STATUS_NOT_SYNCED",
+    "REFUND_NOT_INITIATED", "REFUND_FAILED_AT_GATEWAY", "SETTLEMENT_FEE_MISMATCH", "SETTLEMENT_LINE_MISSING", "SUSPECTED_FRAUD", "UNKNOWN",
+)
+RootCauseName = Literal[
+    "WEBHOOK_PROCESSING_FAILURE", "WEBHOOK_NOT_DELIVERED", "ORDER_STATE_DIVERGED", "LEDGER_POSTING_MISSING", "DUPLICATE_CAPTURE", "REFUND_STATUS_NOT_SYNCED",
+    "REFUND_NOT_INITIATED", "REFUND_FAILED_AT_GATEWAY", "SETTLEMENT_FEE_MISMATCH", "SETTLEMENT_LINE_MISSING", "SUSPECTED_FRAUD", "UNKNOWN",
+]
+
+
+class DiagnosisFeedbackBody(CamelModel):
+    """A "wrong" verdict needs a reason, so the feedback is usable later (metrics, new checks)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["RIGHT", "WRONG"]
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)] = ""
+    #: What the operator believes the cause was; only meaningful for a WRONG verdict.
+    correct_root_cause: RootCauseName | None = None
+
+    @model_validator(mode="after")
+    def _wrong_needs_a_reason(self) -> DiagnosisFeedbackBody:
+        if self.verdict == "WRONG" and len(self.reason) < 3:
+            raise ValueError("Say briefly why the diagnosis is wrong.")
+        return self

@@ -32,6 +32,7 @@ from .services.writes.refunds import RefundWriteService
 from .services.writes.resolutions import ResolutionService
 from .services.writes.validator import ValidatorService
 from .services.writes.webhooks import WebhookConsumer, WebhookEventService
+from .services.writes.workflow import AgentControlWriteService, CaseNoteWriteService, FeedbackService, SavedViewWriteService
 
 
 @dataclass
@@ -59,6 +60,10 @@ class Services:
     reconciliation: ReconciliationService
     resolution_service: ResolutionService
     approval_service: ApprovalService
+    note_writes: CaseNoteWriteService
+    view_writes: SavedViewWriteService
+    feedback: FeedbackService
+    agent_control_writes: AgentControlWriteService
 
 
 def build_services(
@@ -70,6 +75,7 @@ def build_services(
     resolutions = ResolutionQueryService(clock, gateway)
     cases.resolutions = resolutions
     audit = AuditService(clock)
+    agent_control = AgentControlService()
     orders, payments = OrderService(clock, audit), PaymentWriteService(clock, audit)
     ledger = LedgerWriteService(clock, audit)
     refunds = RefundWriteService(clock, audit, ledger, payments)
@@ -100,7 +106,7 @@ def build_services(
         cases=cases,
         payments=PaymentQueryService(clock, gateway, cases),
         overview=OverviewService(clock, gateway),
-        agent_control=AgentControlService(),
+        agent_control=agent_control,
         audit=audit,
         webhooks=WebhookQueryService(),
         handoff=HandoffService(clock),
@@ -116,4 +122,8 @@ def build_services(
         reconciliation=reconciliation,
         resolution_service=resolution_service,
         approval_service=approval_service,
+        note_writes=CaseNoteWriteService(clock, audit),
+        view_writes=SavedViewWriteService(clock),
+        feedback=FeedbackService(clock, audit),
+        agent_control_writes=AgentControlWriteService(clock, audit, agent_control),
     )
