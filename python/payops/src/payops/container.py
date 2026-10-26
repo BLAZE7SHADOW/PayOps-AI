@@ -6,12 +6,16 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from .auth.rate_limit import RateLimiter
+from .auth.sessions import SessionStore
+from .auth.tokens import SessionConfig, session_config
 from .domain.gateway import PaymentGateway
 from .infra.gateway import SimulatorGateway
 from .ports import Clock, EventPublisher, NoopPublisher, SystemClock
 from .services.agent_control import AgentControlService
 from .services.approvals import ApprovalQueryService
 from .services.audit import AuditService
+from .services.auth import AuthService
 from .services.cases import CaseQueryService
 from .services.overview import OverviewService
 from .services.payments import PaymentQueryService
@@ -64,10 +68,14 @@ class Services:
     view_writes: SavedViewWriteService
     feedback: FeedbackService
     agent_control_writes: AgentControlWriteService
+    session_store: SessionStore
+    limiter: RateLimiter
+    auth: AuthService
 
 
 def build_services(
-    sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None
+    sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None,
+    auth_config: SessionConfig | None = None, demo_mode: bool = True,
 ) -> Services:
     clock = clock or SystemClock()
     gateway = gateway or SimulatorGateway(sessions, clock)
@@ -75,6 +83,8 @@ def build_services(
     resolutions = ResolutionQueryService(clock, gateway)
     cases.resolutions = resolutions
     audit = AuditService(clock)
+    auth_config = auth_config or session_config(None, "development")
+    session_store, limiter = SessionStore(clock), RateLimiter(sessions, clock)
     agent_control = AgentControlService()
     orders, payments = OrderService(clock, audit), PaymentWriteService(clock, audit)
     ledger = LedgerWriteService(clock, audit)
@@ -126,4 +136,7 @@ def build_services(
         view_writes=SavedViewWriteService(clock),
         feedback=FeedbackService(clock, audit),
         agent_control_writes=AgentControlWriteService(clock, audit, agent_control),
+        session_store=session_store,
+        limiter=limiter,
+        auth=AuthService(sessions, clock, audit, session_store, limiter, auth_config, demo_mode),
     )

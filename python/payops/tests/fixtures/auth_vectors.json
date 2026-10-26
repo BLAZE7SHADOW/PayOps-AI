@@ -1,0 +1,38 @@
+{
+  "jwtSecret": "a-test-secret-of-sufficient-length",
+  "password": "p@ss wörd ✓",
+  "passwordHash": "scrypt$yV3QqpgTdbtr7eoMcIKYCg==$MDWRd8X1UqW69M6QzIlo79gdcKzi0OWcVOoy55qRYtJ3hHvWDaX+1dwIE2kfYFPTrDPK7SB+gIUcVzn5+3jIBA==",
+  "totpSecret": "XNSENNVWKRTAGMMX2NZEUJYBNPPKZPLY",
+  "sealed": "v1$j2I6vCTa2HlWtNx2$5zHoCMiJ67m+VC+Rf0Ccj8SY1yPVjkZUNBOfDdcgsTs=$IqjE+nxD/tPPMidCZkWsig==",
+  "sessionToken": "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiT1BTIiwibmFtZSI6IkFuYW55YSBSYW8iLCJlbWFpbCI6Im9wc0BwYXlvcHMuZGV2Iiwic2lkIjoic2VzX2FiYyIsInN1YiI6InVzcl8xIiwiaXNzIjoicGF5b3BzIiwiaWF0IjoxNzkyOTkyMzQxLCJleHAiOjE3OTMwMjExNDF9.JKpfj41TLOQIUdv66n7eSZeb-jd8PysSIHEIl5knFyU",
+  "challengeToken": "eyJhbGciOiJIUzI1NiJ9.eyJwdXJwb3NlIjoibWZhIiwic3ViIjoidXNyXzEiLCJpc3MiOiJwYXlvcHMiLCJpYXQiOjE3OTI5OTIzNDEsImV4cCI6MTc5Mjk5MjY0MX0.Yu6c3P98fIrUVE_ISu1BL877-_8CQ8Pnyv33c1m4KUw",
+  "user": {
+    "id": "usr_1",
+    "email": "ops@payops.dev",
+    "name": "Ananya Rao",
+    "role": "OPS"
+  },
+  "codes": [
+    {
+      "ms": 0,
+      "code": "517792"
+    },
+    {
+      "ms": 29999,
+      "code": "517792"
+    },
+    {
+      "ms": 30000,
+      "code": "711259"
+    },
+    {
+      "ms": 1700000000000,
+      "code": "795560"
+    },
+    {
+      "ms": 1800000123456,
+      "code": "445460"
+    }
+  ],
+  "otpauth": "otpauth://totp/PayOps%20AI%3Aops%40payops.dev?secret=XNSENNVWKRTAGMMX2NZEUJYBNPPKZPLY&issuer=PayOps+AI&algorithm=SHA1&digits=6&period=30"
+}

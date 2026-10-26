@@ -105,6 +105,13 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B4 batch 4: sign-in and sessions in Python
+- `payops/auth/`: scrypt passwords, AES-GCM sealed TOTP seeds, hand-written RFC 6238 codes, HS256 session and MFA-challenge tokens, server-side sessions, a database rate limiter, demo users with the same seeded ids. Added `pyjwt` and `cryptography` (D086 listed their TypeScript equivalents).
+- Compatibility is tested against values made by running the real TypeScript modules (`tests/fixtures/auth_vectors.json`): a hash, a sealed seed, codes, a session cookie and a challenge from TypeScript are accepted here. Demo user ids match the ones already in the database.
+- Routes: sign in (password, code step, demo), logout, me, security overview, MFA setup, enable, disable, admin reset, session revoke (one, others, all of a user). Session middleware reads the cookie and checks the sessions table; a JSON-only rule refuses state-changing requests that are not JSON.
+- 21 HTTP tests ported from the TypeScript auth tests; the route-guard list now only waits for run start and the simulator. 450 tests, ruff and pyright clean.
+- Left in B4: simulator reset and undo. Run start waits for the jobs (B5).
+
 ### 2026-10-26 · Phase B4 batch 3: the write routes in Python
 - The operator writes and their routes: case notes, saved views, feedback on a diagnosis, the agent switch, case assignment, preview and propose, undo, approval decision and bulk approve, webhook replay. Request bodies are Pydantic models matching the Zod schemas (unknown fields refused, comment and reason rules kept).
 - 10 HTTP tests (401, 403, 400, 404, 409, 422 shapes; a note is audited; views are private; a refund waits for a manager and four-eyes holds) and the route-guard test (every route names a permission or is public; the list of permissions with no route yet shrinks to empty). 414 tests, ruff and pyright clean.

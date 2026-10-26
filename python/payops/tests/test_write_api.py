@@ -37,7 +37,9 @@ async def client(seeded_url: str) -> AsyncIterator[httpx.AsyncClient]:
             request.state.user = USERS[who]
         return await call_next(request)
 
-    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+    async with app.router.lifespan_context(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://t", headers={"content-type": "application/json"}
+    ) as c:
         yield c
     await engine.dispose()
 

@@ -13,7 +13,7 @@ from payops.domain.permissions import PERMISSIONS
 from payops.settings import Settings
 
 #: Permissions whose routes are not ported yet. This list only shrinks; it is empty when Phase B4 is done.
-PENDING_PERMISSIONS = {"run.start", "simulator.use", "user.mfaReset", "user.sessionsRevoke", "account.security"}
+PENDING_PERMISSIONS = {"run.start", "simulator.use"}
 
 
 def _guards(route: APIRoute) -> set[str]:
