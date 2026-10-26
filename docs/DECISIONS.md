@@ -1485,6 +1485,6 @@ The Python backend (`python/payops`) matches the TypeScript API on everything th
 
 **What was verified before deleting.** 534 backend tests, 43 agent tests, 15 of 15 golden evals with 83 exact lookups and 0 by fallback, web and shared typecheck, lint and 241 tests. The parity fixtures the Python tests use (`tests/fixtures`, `tests/contract`) are committed recordings of the TypeScript output, so the tests no longer need the TypeScript code to run.
 
-**What is lost.** (1) The test oracle: new Python behaviour is no longer compared with TypeScript, only with the recordings. (2) `pnpm cassette:record` and `pnpm eval:live` were TypeScript; recording new cassettes needs a Python recorder (listed in PROGRESS Later). Until then, do not change prompt, question or tool-description text. (3) `pnpm jev:ping`.
+**What is lost.** (1) The test oracle: new Python behaviour is no longer compared with TypeScript, only with the recordings. (2) `pnpm eval:live` was TypeScript and is gone. `pnpm cassette:record` is now `python -m payops.evals.record` (same 22 scenario and seed pairs, same manifest); it is tested only in REPLAY and has not yet made a real recording. (3) `pnpm jev:ping`.
 
 **CI.** The parity job is gone; the backend job also runs `python -m payops.evals`.
