@@ -105,6 +105,13 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B4 done on the Python side: the simulator, reset and undo
+- `payops/simulator/`: the world (merchants, customers, devices), checkout lifecycle, noise, all 21 scenarios, generate, reset, undo and the demo seed. J1 signal intake (`writes/signal_intake.py`) runs for new cases; it needs a Jev adapter, which arrives with the agents in B5 (without one, notes stay unscreened, as in the TypeScript fallback).
+- Parity with TypeScript is tested row for row: `tests/fixtures/simulator_seed.json.gz` (made by `packages/evals/scripts/export-simulator-seed.ts`) holds every table after the demo seed. 16 tables match exactly (same ids from the seeded generators, same timestamps, same detection results) and the 20 cases match apart from their random ids.
+- Two intentional differences: `updated_at` is stamped with the clock (TypeScript used the real time for settlements and for cases tagged by screening), and a reset keeps `sessions` and `auth_rate_limits` so it does not sign anyone out.
+- Routes: scenarios, generate, recorded, reset-status, reset (with `demo: true` loading in the background), undo-reset, with the one-at-a-time lock and cooldown. 8 HTTP tests. 475 tests, ruff and pyright clean.
+- Left from B4: agent run start (needs the jobs). Next is B5: jobs (Procrastinate), realtime (python-socketio) and the agents in process.
+
 ### 2026-10-26 · Phase B4 batch 4: sign-in and sessions in Python
 - `payops/auth/`: scrypt passwords, AES-GCM sealed TOTP seeds, hand-written RFC 6238 codes, HS256 session and MFA-challenge tokens, server-side sessions, a database rate limiter, demo users with the same seeded ids. Added `pyjwt` and `cryptography` (D086 listed their TypeScript equivalents).
 - Compatibility is tested against values made by running the real TypeScript modules (`tests/fixtures/auth_vectors.json`): a hash, a sealed seed, codes, a session cookie and a challenge from TypeScript are accepted here. Demo user ids match the ones already in the database.

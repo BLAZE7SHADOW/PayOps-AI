@@ -17,7 +17,7 @@ from ..observability import RequestIdMiddleware, configure_logging
 from ..ports import Clock, EventPublisher
 from ..settings import Settings, get_settings
 from .errors import install_error_handlers
-from .routes import auth, ops, read, write
+from .routes import auth, ops, read, simulator, write
 from .security import public_route
 from .session_middleware import install_session_middleware
 
@@ -34,7 +34,8 @@ def create_app(
         owned = engine is None
         app.state.engine = engine or create_engine(settings)
         app.state.services = services or build_services(
-            session_factory(app.state.engine), clock=clock, events=events, auth_config=app.state.session_config, demo_mode=settings.demo_mode
+            session_factory(app.state.engine), clock=clock, events=events, auth_config=app.state.session_config, demo_mode=settings.demo_mode,
+            cassette_dir=settings.cassettes, reset_cooldown_seconds=0 if settings.node_env == "test" else 10,
         )
         try:
             yield
@@ -61,6 +62,7 @@ def create_app(
     api.include_router(read.router)
     api.include_router(ops.router)
     api.include_router(write.router)
+    api.include_router(simulator.make_router(settings.demo_mode))
     app.include_router(api)
     return app
 

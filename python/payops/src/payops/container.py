@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -34,9 +35,11 @@ from .services.writes.payments import PaymentWriteService
 from .services.writes.reconciliation import ReconciliationService
 from .services.writes.refunds import RefundWriteService
 from .services.writes.resolutions import ResolutionService
+from .services.writes.signal_intake import SignalIntakeService
 from .services.writes.validator import ValidatorService
 from .services.writes.webhooks import WebhookConsumer, WebhookEventService
 from .services.writes.workflow import AgentControlWriteService, CaseNoteWriteService, FeedbackService, SavedViewWriteService
+from .simulator.service import SimulatorService
 
 
 @dataclass
@@ -71,11 +74,13 @@ class Services:
     session_store: SessionStore
     limiter: RateLimiter
     auth: AuthService
+    simulator: SimulatorService
+    signal_intake: SignalIntakeService
 
 
 def build_services(
     sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None,
-    auth_config: SessionConfig | None = None, demo_mode: bool = True,
+    auth_config: SessionConfig | None = None, demo_mode: bool = True, cassette_dir: Path | None = None, reset_cooldown_seconds: float = 10.0,
 ) -> Services:
     clock = clock or SystemClock()
     gateway = gateway or SimulatorGateway(sessions, clock)
@@ -94,6 +99,8 @@ def build_services(
     consumer = WebhookConsumer(sessions, gateway, audit, orders, payments, ledger, refunds)
     webhook_events = WebhookEventService(sessions, clock, audit, consumer, gateway)
     reconciliation = ReconciliationService(sessions, clock, gateway, deps.cases, cases, events)
+    signal_intake = SignalIntakeService(sessions)
+    reconciliation.screen_case = signal_intake.screen_case
     executor = ExecutorService(deps, audit, events, resolutions)
     validator = ValidatorService(sessions, clock, gateway, audit, resolutions)
     resolution_service = ResolutionService(sessions, clock, gateway, audit, events, deps.cases, cases, reconciliation, resolutions, executor, validator)
@@ -138,5 +145,7 @@ def build_services(
         agent_control_writes=AgentControlWriteService(clock, audit, agent_control),
         session_store=session_store,
         limiter=limiter,
+        signal_intake=signal_intake,
+        simulator=SimulatorService(sessions, clock, audit, reconciliation, cassette_dir, reset_cooldown_seconds),
         auth=AuthService(sessions, clock, audit, session_store, limiter, auth_config, demo_mode),
     )

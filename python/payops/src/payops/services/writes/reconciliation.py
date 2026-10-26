@@ -28,7 +28,7 @@ from .cases import CaseWriteService
 RECON_CHUNK_SIZE = 200
 
 #: J1 signal intake hook: screens a newly opened case's support notes once, outside the transaction (it makes a network call).
-ScreenCase = Callable[[str, dict[str, Any]], Awaitable[None]]
+ScreenCase = Callable[[str, dict[str, Any]], Awaitable[Any]]
 
 
 @dataclass
@@ -135,7 +135,10 @@ class ReconciliationService:
                 await s.execute(
                     update(Settlement)
                     .where(Settlement.id == batch.settlement.id)
-                    .values(expected_net_minor=result.expected_net_minor, reported_net_minor=result.reported_net_minor, status="MATCHED" if result.diff_minor == 0 else "MISMATCH")
+                    .values(
+                        expected_net_minor=result.expected_net_minor, reported_net_minor=result.reported_net_minor,
+                        status="MATCHED" if result.diff_minor == 0 else "MISMATCH", updated_at=now,
+                    )
                 )
                 if not result.hit:
                     continue

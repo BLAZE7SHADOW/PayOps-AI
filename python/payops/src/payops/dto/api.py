@@ -180,3 +180,18 @@ class AgentControlBody(CamelModel):
         if self.mode != "NORMAL" and len(self.reason) < 3:
             raise ValueError("Say briefly why the agent is being limited.")
         return self
+
+
+class GenerateScenarioBody(CamelModel):
+    scenario: str
+    seed: Annotated[int, Field(ge=0, le=2**31)] | None = None
+    #: Healthy background payments generated alongside the scenario.
+    noise: Annotated[int, Field(ge=0, le=50)] = 0
+
+    @model_validator(mode="after")
+    def _known_scenario(self) -> GenerateScenarioBody:
+        from ..simulator.scenario_info import SCENARIO_KEYS
+
+        if self.scenario not in SCENARIO_KEYS:
+            raise ValueError(f"Unknown scenario {self.scenario}")
+        return self

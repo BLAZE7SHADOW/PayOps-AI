@@ -6,6 +6,7 @@ Names match the TypeScript API's variables, so one `.env` and one Render dashboa
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
@@ -25,6 +26,12 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     ai_mode: Literal["LIVE", "RECORD", "REPLAY"] = "REPLAY"
     demo_mode: bool = True
+    #: Recorded model responses (and the manifest of which scenarios have them). Defaults to the repository's `fixtures/cassettes`.
+    cassette_dir: Path | None = None
+
+    @property
+    def cassettes(self) -> Path:
+        return self.cassette_dir or Path(__file__).resolve().parents[4] / "fixtures" / "cassettes"
 
     @property
     def sqlalchemy_url(self) -> str:
