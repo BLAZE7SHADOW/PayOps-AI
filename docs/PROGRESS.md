@@ -106,7 +106,7 @@ Shivam's Mac directly, same as task 9 did.
 ## Session log
 
 ### 2026-10-26 · Phase B2 done: the pure domain in Python (D088)
-- 128 pytest cases in `python/payops`: ids, money, time and SLA; reconciliation rules, matrix, lifecycle, candidates, settlement check; policy P0 to P12; action pre and postconditions, options, idempotency; validator invariants; audit hash chain (byte-identical to TypeScript); metrics, retry, cursors, permissions (checked against docs/02), bulk approve, handoff text.
+- 154 pytest cases in `python/payops`: ids, money, time and SLA; reconciliation rules, matrix, lifecycle, candidates, settlement check; policy P0 to P12; action pre and postconditions, options, idempotency; validator invariants; audit hash chain (byte-identical to TypeScript); metrics, retry, cursors, permissions (checked against docs/02), bulk approve, handoff text.
 - Also: CI now green with the audit job (zod and body-parser patched).
 - Next: B3, the services and read API: case, payment, order, ledger, refund, dispute, resolution, approval, audit, overview and webhook services, the executor and validator against the database, the gateway adapter over `gw_*` tables, then the read routes with golden-JSON contract tests against the TypeScript API.
 

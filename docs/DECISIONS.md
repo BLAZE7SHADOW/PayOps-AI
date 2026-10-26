@@ -1447,7 +1447,7 @@ New project `python/payops` (FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3), t
 
 ## D088 · B2: the domain layer in Python, checked against the TypeScript results (2026-10-26)
 
-`python/payops` now holds every pure piece of the backend: money, ids, time and the SLA clock; detection rules D1 to D8, the state matrix, lifecycle, case candidates and the settlement batch check; the policy engine (P0 to P12) and rules-only risk tier; the action layer (preconditions, postconditions, prefilled options, idempotency keys); the validator's invariants and verdict; the tamper-evident audit chain and its CSV export; performance metrics, webhook retry schedule, cursors, the permission table, bulk approve and the handoff text. 128 tests at the end of B2, ported from the TypeScript ones where they existed.
+`python/payops` now holds every pure piece of the backend: money, ids, time and the SLA clock; detection rules D1 to D8, the state matrix, lifecycle, case candidates and the settlement batch check; the policy engine (P0 to P12) and rules-only risk tier; the action layer (preconditions, postconditions, prefilled options, idempotency keys); the validator's invariants and verdict; the tamper-evident audit chain and its CSV export; performance metrics, webhook retry schedule, cursors, the permission table, bulk approve and the handoff text. 154 tests at the end of B2, ported from the TypeScript ones where they existed.
 
 **How equality with TypeScript is established, not assumed.**
 - Seeded ids reproduce the TypeScript generator exactly (a pinned hash and PRNG sequence, 32-bit arithmetic), so simulator output stays reproducible across both.
