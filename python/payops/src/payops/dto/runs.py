@@ -97,3 +97,18 @@ class DiagnosisFeedbackBody(CamelModel):
         if self.verdict == "WRONG" and len(self.reason) < 3:
             raise ValueError("Say briefly why the diagnosis is wrong.")
         return self
+
+
+class CreateRunBody(CamelModel):
+    model_config = ConfigDict(extra="forbid")
+
+    #: For RECORD and REPLAY only: which cassette file to use (docs/03 §14). Ignored in LIVE.
+    scenario_key: str | None = None
+
+    @model_validator(mode="after")
+    def _known_scenario(self) -> CreateRunBody:
+        from ..simulator.scenario_info import SCENARIO_KEYS
+
+        if self.scenario_key is not None and self.scenario_key not in SCENARIO_KEYS:
+            raise ValueError(f"Unknown scenario {self.scenario_key}")
+        return self

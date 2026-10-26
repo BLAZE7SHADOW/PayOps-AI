@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     ai_mode: Literal["LIVE", "RECORD", "REPLAY"] = "REPLAY"
     demo_mode: bool = True
+    #: Where LangGraph keeps run checkpoints: Postgres in production, memory for local runs and tests (`auto`: Postgres, except for the local PGlite database).
+    checkpointer: Literal["auto", "memory", "postgres"] = "auto"
+    checkpoint_pool_max: int = Field(default=3, ge=1, le=20)
     #: How often the reconcile sweep runs, in ms. 0 turns it off (the hosted demo does: the database bills egress).
     reconcile_sweep_ms: int = Field(default=60_000, ge=0)
     #: `worker` runs a job worker in this process; `inline` runs each job at once in the background (tests, and running without a queue).

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +12,8 @@ from procrastinate import PsycopgConnector
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .. import __version__
+from ..agent_tools.runtime import AgentRuntime, QueueResumer
+from ..agent_tools.store import AgentStore
 from ..auth.tokens import session_config
 from ..container import Services, build_services
 from ..db.engine import create_engine, ping, session_factory
@@ -41,7 +43,6 @@ def create_app(
         app.state.engine = engine or create_engine(settings)
         handlers = JobHandlers()
         queue: JobQueue
-        worker: asyncio.Task[None] | None = None
         if settings.jobs_mode == "inline":
             queue = InlineJobs(handlers)
         else:
@@ -54,22 +55,31 @@ def create_app(
             cassette_dir=settings.cassettes, reset_cooldown_seconds=0 if settings.node_env == "test" else 10, jobs=queue,
         )
         handlers.services = app.state.services
-        app.state.job_handlers = handlers
         app.state.jobs = queue
         realtime.attach_revocations()
-        if isinstance(queue, ProcrastinateJobs):
-            await queue.app.open_async()
-            worker = asyncio.get_running_loop().create_task(queue.run_worker(fetch_job_polling_interval=settings.job_poll_seconds))
-        try:
-            yield
-        finally:
-            if worker is not None:
-                worker.cancel()
-                await asyncio.gather(worker, return_exceptions=True)
+        worker: asyncio.Task[None] | None = None
+        async with AsyncExitStack() as stack:
+            store = AgentStore(app.state.services.sessions, app.state.services.clock, app.state.services.events)
+            app.state.agent_store = store
+            agents = await AgentRuntime.create(stack, app.state.services, settings, store)
+            app.state.agents = agents
+            handlers.agents = agents
+            app.state.services.approval_service.agent_resumer = QueueResumer(queue)
             if isinstance(queue, ProcrastinateJobs):
-                await queue.app.close_async()
-            if owned:
-                await app.state.engine.dispose()
+                await queue.app.open_async()
+                worker = asyncio.get_running_loop().create_task(queue.run_worker(fetch_job_polling_interval=settings.job_poll_seconds))
+            try:
+                yield
+            finally:
+                if worker is not None:
+                    worker.cancel()
+                    await asyncio.gather(worker, return_exceptions=True)
+                if isinstance(queue, ProcrastinateJobs):
+                    await queue.app.close_async()
+                if isinstance(queue, InlineJobs):
+                    await queue.idle()
+        if owned:
+            await app.state.engine.dispose()
 
     app = FastAPI(title="PayOps AI", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.session_config = session_config(settings.jwt_secret, settings.node_env)

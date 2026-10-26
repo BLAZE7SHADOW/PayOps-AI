@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 
+from ...agent_tools.store import create_agent_run
 from ...db.engine import transaction
+from ...db.models import Case
 from ...domain.bulk_approve import BulkApprovalBody, BulkApprovalResult
 from ...dto.api import AgentControlBody, AgentControlItem, AssignCaseBody, CaseListItem
 from ...dto.resolution import ApprovalDecisionBody, ApprovalItem, PolicyPreview, PreviewActionsBody, ProposeActionsBody, ResolutionItem
-from ...dto.runs import DiagnosisFeedbackBody, DiagnosisFeedbackItem
+from ...dto.runs import CreateRunBody, DiagnosisFeedbackBody, DiagnosisFeedbackItem
 from ...dto.webhooks import WebhookLogDetail
 from ...dto.workflow import OperatorNoteBody, OperatorNoteItem, SavedViewBody, SavedViewItem
 from ...errors import not_found
@@ -108,3 +110,18 @@ async def replay_webhook(
     event_id: str, services: ServicesDep, user: Annotated[SessionUser, Depends(require_permission("webhook.replay"))]
 ) -> WebhookLogDetail:
     return await services.webhook_events.replay(ident(event_id), user.id, user.name)
+
+
+@router.post("/cases/{case_id}/runs", status_code=202)
+async def start_run(
+    case_id: str, request: Request, services: ServicesDep, user: Annotated[SessionUser, Depends(require_permission("run.start"))], body: CreateRunBody | None = None
+) -> dict[str, str]:
+    """Starts an agent investigation. The job does the work; this answers at once with the run's id."""
+    async with services.sessions() as s:
+        if await s.get(Case, ident(case_id)) is None:
+            raise not_found("Case", case_id)
+    scenario_key = body.scenario_key if body else None
+    run_id = await create_agent_run(services, request.app.state.agent_store, case_id, scenario_key)
+    assert services.jobs is not None
+    await services.jobs.enqueue_agent_run(run_id, case_id, scenario_key)
+    return {"runId": run_id}

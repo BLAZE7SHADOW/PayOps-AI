@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B5 done: the agents run inside the Python API
+- The graph in `python/agents` is now a local dependency of `python/payops` and runs in the API process. `payops/agent_tools/` holds what the graph may read and do: the 15 evidence tools, the case brief, the proposal builder, the run, step, evidence and finding store, and `InProcessNodeApi`, which answers every call the graph used to make over `/internal/agent` with a direct service call. No second service, no shared secret, no HTTP hop.
+- Tested against TypeScript: for all 20 demo cases the brief, the output of every tool and the proposal for every root cause equal what the TypeScript code computed (`tests/fixtures/agent_tools.json.gz`, made by `packages/evals/scripts/export-agent-tools.ts`). End to end in REPLAY over HTTP: the three recorded scenarios reach the same status, path, root cause, evidence and finding counts and policy tier as the TypeScript runs; an approval by a manager resumes the paused run and resolves it; a rejection ends it without executing.
+- `POST /api/cases/{id}/runs` (202, refuses while the agent is paused), approvals resume agent runs through the queue, the checkpointer is Postgres in production and memory in tests. 531 tests, ruff and pyright clean.
+- Next: B6, prove it: all 15 evals in process, a browser pass on the real web app, deploy one Render service, measure bandwidth. Then B7: delete the TypeScript backend.
+
 ### 2026-10-26 · Phase B5 batch 1: the job queue and realtime in Python
 - Jobs on Postgres with Procrastinate (migration 0002 adds its four tables): agent run and resume, the reconcile sweep (a cron job, only registered when `RECONCILE_SWEEP_MS` is above 0) and webhook retries scheduled for the time the event log asks. The worker runs inside the API process and sleeps until Postgres NOTIFY wakes it; polling is every 30 s (only delayed jobs need it) and the heartbeat every 5 min, to keep idle traffic low (D083). `JOBS=inline` runs jobs at once in the background for tests.
 - Realtime with python-socketio mounted at `/socket.io`: the handshake needs a valid session cookie, everyone joins `ops`, case rooms are joined on demand, and revoking a session closes its sockets. The services publish through it. Tests use the real Socket.IO client against a real uvicorn server (added `aiohttp` as a dev dependency for that client).
