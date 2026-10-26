@@ -13,7 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from payops.container import Services, build_services
 from payops.db.engine import create_engine, session_factory, transaction
-from payops.db.models import AuditEvent, Case, Dispute, Execution, GwRefund, LedgerEntry, Payment, Refund, Resolution, WebhookEvent
+from payops.db.models import (
+    AuditEvent,
+    Case,
+    Dispute,
+    Execution,
+    GwRefund,
+    LedgerEntry,
+    Payment,
+    Refund,
+    Resolution,
+    WebhookEvent,
+)
 from payops.domain.actions.options import action_options
 from payops.domain.ids import new_id
 from payops.infra.snapshots import load_case_state
@@ -44,9 +55,17 @@ async def propose(services: Services, case_id: str, types: list[str]) -> str:
     async with transaction(services.sessions) as s:
         s.add(
             Resolution(
-                id=resolution_id, case_id=case_id, attempt=1, actions=[options[t].action.to_json() for t in types], rationale="test", status="EXECUTING",
-                proposed_by={"type": "USER", "id": "usr_test", "name": "Test"}, policy={"tier": "AUTO", "reasons": [], "version": "t", "moneyMovingMinor": 0, "riskTier": "LOW"},
-                created_at=NOW, updated_at=NOW, run_id=None,
+                id=resolution_id,
+                case_id=case_id,
+                attempt=1,
+                actions=[options[t].action.to_json() for t in types],
+                rationale="test",
+                status="EXECUTING",
+                proposed_by={"type": "USER", "id": "usr_test", "name": "Test"},
+                policy={"tier": "AUTO", "reasons": [], "version": "t", "moneyMovingMinor": 0, "riskTier": "LOW"},
+                created_at=NOW,
+                updated_at=NOW,
+                run_id=None,
             )
         )
     return resolution_id
@@ -87,7 +106,9 @@ async def test_executing_the_same_resolution_again_never_acts_twice(world: tuple
     assert await count(services, Execution, Execution.resolution_id == resolution_id) == 2
 
 
-async def test_a_step_whose_precondition_no_longer_holds_fails_and_stops_the_rest(world: tuple[Services, AsyncEngine]) -> None:
+async def test_a_step_whose_precondition_no_longer_holds_fails_and_stops_the_rest(
+    world: tuple[Services, AsyncEngine],
+) -> None:
     services, _ = world
     case_id = "case_w3wryfpvbpyt13"
     resolution_id = await propose(services, case_id, ["MARK_ORDER_PAID", "POST_LEDGER_ENTRY"])
@@ -129,7 +150,9 @@ async def test_escalates_a_case(world: tuple[Services, AsyncEngine]) -> None:
     assert await count(services, AuditEvent, AuditEvent.action == "case.escalated") == 1
 
 
-async def test_replaying_into_a_locked_order_is_answered_409_and_changes_nothing(world: tuple[Services, AsyncEngine]) -> None:
+async def test_replaying_into_a_locked_order_is_answered_409_and_changes_nothing(
+    world: tuple[Services, AsyncEngine],
+) -> None:
     services, _ = world
     case_id = "case_9cpasct6pwgvd0"  # PAY-0002: the order service rejects webhook-driven changes (the replan scenario)
     resolution_id = await propose(services, case_id, ["REPLAY_WEBHOOK_EVENT"])
@@ -142,7 +165,9 @@ async def test_replaying_into_a_locked_order_is_answered_409_and_changes_nothing
     assert state.order and state.order.order.status != "PAID"
 
 
-async def test_replaying_a_failed_webhook_runs_our_consumer_and_fixes_the_order(world: tuple[Services, AsyncEngine]) -> None:
+async def test_replaying_a_failed_webhook_runs_our_consumer_and_fixes_the_order(
+    world: tuple[Services, AsyncEngine],
+) -> None:
     services, _ = world
     case_id = "case_2pqcg0k8rzkkxm"  # PAY-0003
     resolution_id = await propose(services, case_id, ["REPLAY_WEBHOOK_EVENT"])

@@ -25,7 +25,8 @@ def upgrade() -> None:
     conn = op.get_bind()
     if conn.execute(sa.text("select to_regclass('public.cases') is not null")).scalar():
         return
-    # Statements go straight to the driver: they contain `%` (trigger messages), which a parameterized call would read as a placeholder.
+    # Statements go straight to the driver: they contain `%` (trigger messages), which a parameterized call would read
+    # as a placeholder.
     cursor = conn.connection.dbapi_connection.cursor()
     for file in sorted(SQL_DIR.glob("0*.sql")):
         for statement in file.read_text(encoding="utf-8").split(BREAKPOINT):

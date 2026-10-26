@@ -1,5 +1,6 @@
-"""The agent graph's door into the backend, as direct calls. It answers exactly what the `/internal/agent` routes used to answer, so the graph code does not
-change; there is no HTTP hop, no shared secret and no second service. (packages/agents remote.ts, apps/server routes/internal-agent.ts)"""
+"""The agent graph's door into the backend, as direct calls. It answers exactly what the `/internal/agent` routes used
+to answer, so the graph code does not change; there is no HTTP hop, no shared secret and no second service.
+(packages/agents remote.ts, apps/server routes/internal-agent.ts)"""
 
 from __future__ import annotations
 
@@ -49,9 +50,16 @@ class InProcessNodeApi:
     async def proposal(self, case_id: str, diagnosis: dict[str, Any], history: list[dict[str, Any]]) -> dict[str, Any]:
         return build_proposal(diagnosis, await self._state(case_id), to_attempt_history(history))
 
-    async def policy_gate(self, case_id: str, run_id: str, proposal: dict[str, Any], diagnosis_confidence: float) -> dict[str, Any]:
+    async def policy_gate(
+        self, case_id: str, run_id: str, proposal: dict[str, Any], diagnosis_confidence: float
+    ) -> dict[str, Any]:
         result = await self._services.resolution_service.propose_from_agent(
-            case_id, run_id, _ACTIONS.validate_python(proposal["actions"]), proposal["rationale"], diagnosis_confidence=diagnosis_confidence, grounding_violations=0
+            case_id,
+            run_id,
+            _ACTIONS.validate_python(proposal["actions"]),
+            proposal["rationale"],
+            diagnosis_confidence=diagnosis_confidence,
+            grounding_violations=0,
         )
         r = result.resolution
         return {"resolutionId": r.id, "policy": r.policy, "attempt": r.attempt, "approvalId": result.approval_id}
@@ -77,10 +85,14 @@ class InProcessNodeApi:
         return {"verdict": row.verdict, "checks": row.checks}
 
     async def close_validated(self, case_id: str, run_id: str, resolution_id: str, verdict: str) -> None:
-        await self._services.resolution_service.close_validated(resolution_id, verdict, agent_write_context(case_id, run_id), on_failure="ESCALATE")
+        await self._services.resolution_service.close_validated(
+            resolution_id, verdict, agent_write_context(case_id, run_id), on_failure="ESCALATE"
+        )
 
     async def escalate_without_proposal(self, case_id: str, run_id: str, reason: str) -> None:
-        await self._services.resolution_service.escalate_without_proposal(case_id, reason, agent_write_context(case_id, run_id))
+        await self._services.resolution_service.escalate_without_proposal(
+            case_id, reason, agent_write_context(case_id, run_id)
+        )
 
     async def record_step(self, run_id: str, case_id: str, node: str, kind: str, payload: dict[str, Any]) -> None:
         await self._store.record_step(run_id, case_id, node, kind, payload)

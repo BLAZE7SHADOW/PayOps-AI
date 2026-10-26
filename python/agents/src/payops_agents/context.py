@@ -109,7 +109,9 @@ def prompt_facts(facts: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in mask_pii_in_facts(facts).items():
         if key in ("capturedAt", "processedAt"):
-            out["captured" if key == "capturedAt" else "processed"] = isinstance(value, str) and not value.startswith("not ")
+            out["captured" if key == "capturedAt" else "processed"] = isinstance(value, str) and not value.startswith(
+                "not "
+            )
         elif key.endswith("Id"):
             out[f"{key}Present"] = value != "none"
         else:
@@ -192,7 +194,9 @@ def hash_context(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def _draft_text(prefix: str, brief: str, slice_header: str, slice_: list[SliceItem], peers: str, history: str, task: str) -> str:
+def _draft_text(
+    prefix: str, brief: str, slice_header: str, slice_: list[SliceItem], peers: str, history: str, task: str
+) -> str:
     return "\n\n".join(s for s in [prefix, brief, slice_header, _render_slice(slice_), peers, history, task] if s != "")
 
 
@@ -211,7 +215,9 @@ def apply_budget(draft: ContextDraft, budget: int) -> BudgetedContext:
     dropped_ids: list[str] = []
 
     def tokens() -> int:
-        return estimate_tokens(_draft_text(draft.prefix, draft.brief, draft.slice_header, slice_, peers, history, draft.task))
+        return estimate_tokens(
+            _draft_text(draft.prefix, draft.brief, draft.slice_header, slice_, peers, history, draft.task)
+        )
 
     n = tokens()
     if n > budget and history != "":

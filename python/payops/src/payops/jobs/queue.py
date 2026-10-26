@@ -1,11 +1,13 @@
-"""The job queue. Four kinds of work, all run inside the API process by a worker that sleeps until Postgres NOTIFY wakes it:
+"""The job queue. Four kinds of work, all run inside the API process by a worker that sleeps until Postgres NOTIFY wakes
+it:
 
 - agent runs and resumes (one LangGraph thread each),
 - the reconcile sweep (a cron job, off when RECONCILE_SWEEP_MS is 0),
 - retries of failed inbound webhooks (delayed by the event log's backoff).
 
-The handlers are plain methods on `JobHandlers`, so tests call them directly; the Procrastinate tasks only forward to them. Polling is kept long on purpose
-(the hosted database bills egress, D083): NOTIFY handles immediate work, and the poll only picks up delayed jobs such as webhook retries."""
+The handlers are plain methods on `JobHandlers`, so tests call them directly; the Procrastinate tasks only forward to
+them. Polling is kept long on purpose (the hosted database bills egress, D083): NOTIFY handles immediate work, and the
+poll only picks up delayed jobs such as webhook retries."""
 
 from __future__ import annotations
 
@@ -43,7 +45,8 @@ class JobQueue(Protocol):
 
 
 class JobHandlers:
-    """The work itself. `services` is set once the container exists (the queue is built before it, because services schedule jobs through it)."""
+    """The work itself. `services` is set once the container exists (the queue is built before it, because services
+    schedule jobs through it)."""
 
     def __init__(self) -> None:
         self.services: Services | None = None
@@ -69,16 +72,16 @@ class JobHandlers:
         log.info("agent resume job done", extra={"runId": run_id})
 
     async def reconcile_sweep(self) -> dict[str, int]:
-        """Re-checks recent orders and batches so faults that appear later (a rule's grace period passing, a 48h refund window closing) become cases without
-        anyone generating data."""
+        """Re-checks recent orders and batches so faults that appear later (a rule's grace period passing, a 48h refund
+        window closing) become cases without anyone generating data."""
         summary = await self._services().reconciliation.sweep()
         out = {"checked": summary.checked, "opened": summary.opened, "updated": summary.updated}
         log.info("reconcile sweep done", extra=out)
         return out
 
     async def webhook_retry(self, event_id: str) -> str:
-        """The delay comes from the event log, which decides the backoff; the job only asks the log to retry. If the job runs early, or a person already
-        replayed the event, `retry` does nothing."""
+        """The delay comes from the event log, which decides the backoff; the job only asks the log to retry. If the job
+        runs early, or a person already replayed the event, `retry` does nothing."""
         outcome = await self._services().webhook_events.retry(event_id)
         log.info("webhook retry job done", extra={"eventId": event_id, "outcome": outcome})
         return outcome
@@ -119,20 +122,29 @@ class ProcrastinateJobs:
         await self._agent_resume.defer_async(run_id=run_id, decision=decision)
 
     async def schedule(self, event_id: str, delay_seconds: int) -> None:
-        await self._webhook_retry.configure(schedule_in={"seconds": max(0, delay_seconds)}).defer_async(event_id=event_id)
+        await self._webhook_retry.configure(schedule_in={"seconds": max(0, delay_seconds)}).defer_async(
+            event_id=event_id
+        )
 
     async def run_worker(self, **options: Any) -> None:
-        """Runs until cancelled. Defaults keep idle traffic low: NOTIFY wakes the worker for new jobs, so polling is only for delayed ones, and the heartbeat
-        is rare."""
+        """Runs until cancelled. Defaults keep idle traffic low: NOTIFY wakes the worker for new jobs, so polling is
+        only for delayed ones, and the heartbeat is rare."""
         defaults: dict[str, Any] = {
-            "queues": list(QUEUES), "concurrency": 2, "fetch_job_polling_interval": 30, "abort_job_polling_interval": 60, "update_heartbeat_interval": 300,
-            "stalled_worker_timeout": 900, "install_signal_handlers": False, "name": "payops",
+            "queues": list(QUEUES),
+            "concurrency": 2,
+            "fetch_job_polling_interval": 30,
+            "abort_job_polling_interval": 60,
+            "update_heartbeat_interval": 300,
+            "stalled_worker_timeout": 900,
+            "install_signal_handlers": False,
+            "name": "payops",
         }
         await self.app.run_worker_async(**{**defaults, **options})
 
 
 class InlineJobs:
-    """A queue that runs each job at once in the background of the same process. For tests and for running the API without a worker."""
+    """A queue that runs each job at once in the background of the same process. For tests and for running the API
+    without a worker."""
 
     def __init__(self, handlers: JobHandlers) -> None:
         self.handlers = handlers

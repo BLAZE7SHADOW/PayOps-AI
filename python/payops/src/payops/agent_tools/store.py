@@ -1,5 +1,5 @@
-"""Persistence for `agent_runs`, `agent_steps`, `evidence` and `agent_findings`, and the realtime event each step produces. Only the graph writes these tables;
-the read side is `services/runs.py`. (packages/agents store.ts, run.ts)"""
+"""Persistence for `agent_runs`, `agent_steps`, `evidence` and `agent_findings`, and the realtime event each step
+produces. Only the graph writes these tables; the read side is `services/runs.py`. (packages/agents store.ts, run.ts)"""
 
 from __future__ import annotations
 
@@ -33,9 +33,21 @@ STEP_EVENT = {
 
 #: Run row columns a patch may set, by the name the graph state uses.
 _COLUMN = {
-    "status": "status", "path": "path", "resolutionId": "resolution_id", "approvalId": "approval_id", "attempt": "attempt", "scenarioKey": "scenario_key",
-    "budget": "budget", "evidence": "evidence", "findings": "findings", "diagnosis": "diagnosis", "proposal": "proposal", "policy": "policy",
-    "grounding": "grounding", "error": "error", "finishedAt": "finished_at",
+    "status": "status",
+    "path": "path",
+    "resolutionId": "resolution_id",
+    "approvalId": "approval_id",
+    "attempt": "attempt",
+    "scenarioKey": "scenario_key",
+    "budget": "budget",
+    "evidence": "evidence",
+    "findings": "findings",
+    "diagnosis": "diagnosis",
+    "proposal": "proposal",
+    "policy": "policy",
+    "grounding": "grounding",
+    "error": "error",
+    "finishedAt": "finished_at",
 }
 
 
@@ -50,8 +62,24 @@ class AgentStore:
         async with transaction(self._sessions) as s:
             s.add(
                 AgentRun(
-                    id=run_id, case_id=case_id, scenario_key=scenario_key, status="INVESTIGATING", path=None, attempt=1, budget=ZERO_BUDGET, evidence=[], findings=[],
-                    diagnosis=None, proposal=None, policy=None, grounding=None, created_at=now, updated_at=now, resolution_id=None, approval_id=None, error=None,
+                    id=run_id,
+                    case_id=case_id,
+                    scenario_key=scenario_key,
+                    status="INVESTIGATING",
+                    path=None,
+                    attempt=1,
+                    budget=ZERO_BUDGET,
+                    evidence=[],
+                    findings=[],
+                    diagnosis=None,
+                    proposal=None,
+                    policy=None,
+                    grounding=None,
+                    created_at=now,
+                    updated_at=now,
+                    resolution_id=None,
+                    approval_id=None,
+                    error=None,
                     finished_at=None,
                 )
             )
@@ -59,7 +87,9 @@ class AgentStore:
     async def patch_run(self, run_id: str, patch: dict[str, Any]) -> None:
         values = {_COLUMN[k]: v for k, v in patch.items()}
         async with transaction(self._sessions) as s:
-            await s.execute(update(AgentRun).where(AgentRun.id == run_id).values(**values, updated_at=self._clock.now()))
+            await s.execute(
+                update(AgentRun).where(AgentRun.id == run_id).values(**values, updated_at=self._clock.now())
+            )
 
     async def get_run(self, run_id: str) -> AgentRun | None:
         async with self._sessions() as s:
@@ -69,17 +99,24 @@ class AgentStore:
         """One `agent_steps` row plus its realtime event."""
         at = self._clock.now()
         async with transaction(self._sessions) as s:
-            seq = (await s.execute(select(func.count()).select_from(AgentStep).where(AgentStep.run_id == run_id))).scalar_one() + 1
-            s.add(AgentStep(id=new_id("agentStep"), run_id=run_id, seq=seq, node=node, kind=kind, payload=payload, at=at))
+            seq = (
+                await s.execute(select(func.count()).select_from(AgentStep).where(AgentStep.run_id == run_id))
+            ).scalar_one() + 1
+            s.add(
+                AgentStep(id=new_id("agentStep"), run_id=run_id, seq=seq, node=node, kind=kind, payload=payload, at=at)
+            )
         envelope = {"runId": run_id, "caseId": case_id, "node": node, "at": to_iso(at), "seq": seq, "data": payload}
         event = STEP_EVENT.get(kind, "node.completed")
         self._events.publish(ROOM_OPS, event, envelope)
         self._events.publish(room_case(case_id), event, envelope)
 
     async def sync_run(self, run_id: str, case_id: str, state: dict[str, Any], interrupted: bool) -> None:
-        """Copies the graph's final (or paused) state onto the run row and fans the evidence and findings out into their own tables. Safe to repeat: a run can
-        pause and resume, so this runs more than once for the same run, and every write is an upsert."""
-        patch: dict[str, Any] = {k: state[k] for k in ("status", "resolutionId", "approvalId", "attempt", "budget") if k in state}
+        """Copies the graph's final (or paused) state onto the run row and fans the evidence and findings out into their
+        own tables. Safe to repeat: a run can pause and resume, so this runs more than once for the same run, and every
+        write is an upsert."""
+        patch: dict[str, Any] = {
+            k: state[k] for k in ("status", "resolutionId", "approvalId", "attempt", "budget") if k in state
+        }
         patch["path"] = (state.get("diagnosis") or {}).get("path")
         for key in ("evidence", "findings"):
             patch[key] = state.get(key) or []
@@ -89,28 +126,56 @@ class AgentStore:
         patch["approvalId"] = state.get("approvalId")
         patch["finishedAt"] = None if interrupted else self._clock.now()
         await self.patch_run(run_id, patch)
-        await self._sync_evidence_and_findings(run_id, case_id, state.get("evidence") or [], state.get("findings") or [], state.get("grounding"))
+        await self._sync_evidence_and_findings(
+            run_id, case_id, state.get("evidence") or [], state.get("findings") or [], state.get("grounding")
+        )
 
-    async def _sync_evidence_and_findings(self, run_id: str, case_id: str, evidence: list[dict[str, Any]], findings: list[dict[str, Any]], grounding: dict[str, Any] | None) -> None:
+    async def _sync_evidence_and_findings(
+        self,
+        run_id: str,
+        case_id: str,
+        evidence: list[dict[str, Any]],
+        findings: list[dict[str, Any]],
+        grounding: dict[str, Any] | None,
+    ) -> None:
         now = self._clock.now()
         dropped = {v["findingId"] for v in (grounding or {}).get("violations", [])}
         async with transaction(self._sessions) as s:
             for item in evidence:
-                values = {"source": item["source"], "system": item["system"], "entity_ref": item["entityRef"], "facts": item["facts"], "step_id": item["stepId"]}
+                values = {
+                    "source": item["source"],
+                    "system": item["system"],
+                    "entity_ref": item["entityRef"],
+                    "facts": item["facts"],
+                    "step_id": item["stepId"],
+                }
                 await s.execute(
                     pg_insert(Evidence)
                     .values(id=new_id("evidenceRow"), run_id=run_id, evidence_id=item["id"], created_at=now, **values)
                     .on_conflict_do_update(index_elements=[Evidence.run_id, Evidence.evidence_id], set_=values)
                 )
             for f in findings:
-                # A finding is grounded until a violation names it. Findings J4 never checked (fast path) are therefore grounded too.
+                # A finding is grounded until a violation names it. Findings J4 never checked (fast path) are therefore
+                # grounded too.
                 values = {
-                    "agent": f["agent"], "code": f["code"], "statement": f["statement"], "evidence_ids": f["evidenceIds"], "confidence": f["confidence"],
-                    "grounded": f["id"] not in dropped, "updated_at": now,
+                    "agent": f["agent"],
+                    "code": f["code"],
+                    "statement": f["statement"],
+                    "evidence_ids": f["evidenceIds"],
+                    "confidence": f["confidence"],
+                    "grounded": f["id"] not in dropped,
+                    "updated_at": now,
                 }
                 await s.execute(
                     pg_insert(AgentFinding)
-                    .values(id=new_id("agentFinding"), run_id=run_id, case_id=case_id, finding_id=f["id"], created_at=now, **values)
+                    .values(
+                        id=new_id("agentFinding"),
+                        run_id=run_id,
+                        case_id=case_id,
+                        finding_id=f["id"],
+                        created_at=now,
+                        **values,
+                    )
                     .on_conflict_do_update(index_elements=[AgentFinding.run_id, AgentFinding.finding_id], set_=values)
                 )
 
@@ -119,8 +184,8 @@ class AgentStore:
 
 
 async def create_agent_run(services: Any, store: AgentStore, case_id: str, scenario_key: str | None) -> str:
-    """Creates the run row so `{runId}` can be returned at once. While an operator has the agent paused no new investigation starts (D066); people can still
-    resolve cases by hand, so nothing else is blocked."""
+    """Creates the run row so `{runId}` can be returned at once. While an operator has the agent paused no new
+    investigation starts (D066); people can still resolve cases by hand, so nothing else is blocked."""
     async with services.sessions() as s:
         control = await services.agent_control.get(s)
     if control.mode == "PAUSED":

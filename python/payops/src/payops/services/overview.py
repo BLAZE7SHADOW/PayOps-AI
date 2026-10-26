@@ -1,4 +1,5 @@
-"""Overview metrics: counts, the 14-day exceptions trend, the oldest open cases and the last-7-day performance block. (packages/core overview.service.ts)"""
+"""Overview metrics: counts, the 14-day exceptions trend, the oldest open cases and the last-7-day performance block.
+(packages/core overview.service.ts)"""
 
 from __future__ import annotations
 
@@ -38,11 +39,23 @@ class OverviewService:
         day = func.to_char(func.timezone("UTC", Case.opened_at), "YYYY-MM-DD")
 
         captured = await self._gateway.summarize_captures(today, today + _DAY)
-        open_rows = (await session.execute(select(Case.status, func.count()).where(Case.status.in_(OPEN_CASE_STATUSES)).group_by(Case.status))).all()
+        open_rows = (
+            await session.execute(
+                select(Case.status, func.count()).where(Case.status.in_(OPEN_CASE_STATUSES)).group_by(Case.status)
+            )
+        ).all()
         resolved_count = (
-            await session.execute(select(func.count()).select_from(Case).where(Case.status == "RESOLVED", Case.resolved_at >= now - 7 * _DAY))
+            await session.execute(
+                select(func.count())
+                .select_from(Case)
+                .where(Case.status == "RESOLVED", Case.resolved_at >= now - 7 * _DAY)
+            )
         ).scalar_one()
-        trend_rows = (await session.execute(select(day, Case.type, func.count()).where(Case.opened_at >= trend_start).group_by(day, Case.type))).all()
+        trend_rows = (
+            await session.execute(
+                select(day, Case.type, func.count()).where(Case.opened_at >= trend_start).group_by(day, Case.type)
+            )
+        ).all()
         oldest = (
             await session.execute(
                 select(Case, User.name)
@@ -52,27 +65,47 @@ class OverviewService:
                 .limit(5)
             )
         ).all()
-        pending = (await session.execute(select(func.count()).select_from(Approval).where(Approval.status == "PENDING"))).scalar_one()
+        pending = (
+            await session.execute(select(func.count()).select_from(Approval).where(Approval.status == "PENDING"))
+        ).scalar_one()
         agent_resolved = (
             await session.execute(
-                select(func.count()).select_from(Case).where(
-                    Case.status == "RESOLVED", Case.resolved_at >= now - 7 * _DAY, Case.resolution["by"].astext == "AGENT"
+                select(func.count())
+                .select_from(Case)
+                .where(
+                    Case.status == "RESOLVED",
+                    Case.resolved_at >= now - 7 * _DAY,
+                    Case.resolution["by"].astext == "AGENT",
                 )
             )
         ).scalar_one()
         verdict_rows = (
-            await session.execute(select(ValidationResult.verdict, func.count()).where(ValidationResult.at >= now - 7 * _DAY).group_by(ValidationResult.verdict))
+            await session.execute(
+                select(ValidationResult.verdict, func.count())
+                .where(ValidationResult.at >= now - 7 * _DAY)
+                .group_by(ValidationResult.verdict)
+            )
         ).all()
         perf_cases = (
             await session.execute(
-                select(Case.opened_at, Case.resolved_at, Case.resolution).where(Case.status == "RESOLVED", Case.resolved_at.is_not(None), Case.resolved_at >= since7d)
+                select(Case.opened_at, Case.resolved_at, Case.resolution).where(
+                    Case.status == "RESOLVED", Case.resolved_at.is_not(None), Case.resolved_at >= since7d
+                )
             )
         ).all()
         perf_approvals = (
-            await session.execute(select(Approval.requested_at, Approval.decided_at).where(Approval.decided_at.is_not(None), Approval.decided_at >= since7d))
+            await session.execute(
+                select(Approval.requested_at, Approval.decided_at).where(
+                    Approval.decided_at.is_not(None), Approval.decided_at >= since7d
+                )
+            )
         ).all()
-        perf_feedback = (await session.execute(select(DiagnosisFeedback.verdict).where(DiagnosisFeedback.updated_at >= since7d))).all()
-        perf_runs = (await session.execute(select(AgentRun.case_id, AgentRun.budget).where(AgentRun.created_at >= since7d))).all()
+        perf_feedback = (
+            await session.execute(select(DiagnosisFeedback.verdict).where(DiagnosisFeedback.updated_at >= since7d))
+        ).all()
+        perf_runs = (
+            await session.execute(select(AgentRun.case_id, AgentRun.budget).where(AgentRun.created_at >= since7d))
+        ).all()
 
         performance = compute_performance(
             [ResolvedCaseRow(o, r, (res or {}).get("by")) for o, r, res in perf_cases if r is not None],

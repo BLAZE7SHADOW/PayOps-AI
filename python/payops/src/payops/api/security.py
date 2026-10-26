@@ -1,4 +1,5 @@
-"""Who is calling, and may they. Every route names its permission through `require_permission`; the route-guard test fails any route that does not."""
+"""Who is calling, and may they. Every route names its permission through `require_permission`; the route-guard test
+fails any route that does not."""
 
 from __future__ import annotations
 
@@ -26,8 +27,8 @@ def current_user(request: Request) -> SessionUser | None:
 
 
 def require_permission(permission: str, *, role_override: str | None = None) -> Callable[..., Any]:
-    """A FastAPI dependency: 401 without a signed-in user, 403 when the role is below the one the permission names. `role_override` exists for
-    the simulator, whose rule depends on DEMO_MODE."""
+    """A FastAPI dependency: 401 without a signed-in user, 403 when the role is below the one the permission names.
+    `role_override` exists for the simulator, whose rule depends on DEMO_MODE."""
     needed = role_override or role_for(permission)
 
     async def dependency(request: Request) -> SessionUser:

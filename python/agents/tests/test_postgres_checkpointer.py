@@ -32,6 +32,10 @@ async def test_a_paused_run_resumes_on_a_new_runner_with_the_same_database() -> 
     # A fresh checkpointer and runner stand in for the service restarting.
     async with AsyncExitStack() as second:
         done = await AgentRunner(api, await create_checkpointer(second, settings)).resume(  # type: ignore[arg-type]
-            "run_pg", api.data["caseId"], "captured_order_failed", "REPLAY", {"approvalId": "apr_fake", "decision": "APPROVE"}
+            "run_pg",
+            api.data["caseId"],
+            "captured_order_failed",
+            "REPLAY",
+            {"approvalId": "apr_fake", "decision": "APPROVE"},
         )
     assert done.status == "RESOLVED" and "execute" in api.calls

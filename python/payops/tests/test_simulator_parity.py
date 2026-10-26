@@ -80,5 +80,8 @@ async def test_detection_opened_the_same_cases(seeded: tuple[Services, Any]) -> 
     assert sorted(mine) == sorted(theirs)
     for display_id, expected in theirs.items():
         # Case ids are random in both implementations; everything else is deterministic. Only compare the ids' presence.
-        a, b = {k: v for k, v in mine[display_id].items() if k != "id"}, {k: v for k, v in expected.items() if k != "id"}
+        a, b = (
+            {k: v for k, v in mine[display_id].items() if k != "id"},
+            {k: v for k, v in expected.items() if k != "id"},
+        )
         assert a == b, f"{display_id}:\n  python {a}\n  ts     {b}"

@@ -1,4 +1,5 @@
-"""The composition root: wires ports to adapters and services to each other. The API, jobs, the simulator and tests all build their services here."""
+"""The composition root: wires ports to adapters and services to each other. The API, jobs, the simulator and tests all
+build their services here."""
 
 from __future__ import annotations
 
@@ -39,7 +40,12 @@ from .services.writes.resolutions import ResolutionService
 from .services.writes.signal_intake import SignalIntakeService
 from .services.writes.validator import ValidatorService
 from .services.writes.webhooks import WebhookConsumer, WebhookEventService
-from .services.writes.workflow import AgentControlWriteService, CaseNoteWriteService, FeedbackService, SavedViewWriteService
+from .services.writes.workflow import (
+    AgentControlWriteService,
+    CaseNoteWriteService,
+    FeedbackService,
+    SavedViewWriteService,
+)
 from .simulator.service import SimulatorService
 
 
@@ -81,8 +87,15 @@ class Services:
 
 
 def build_services(
-    sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None,
-    auth_config: SessionConfig | None = None, demo_mode: bool = True, cassette_dir: Path | None = None, reset_cooldown_seconds: float = 10.0,
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    clock: Clock | None = None,
+    events: EventPublisher | None = None,
+    gateway: PaymentGateway | None = None,
+    auth_config: SessionConfig | None = None,
+    demo_mode: bool = True,
+    cassette_dir: Path | None = None,
+    reset_cooldown_seconds: float = 10.0,
     jobs: JobQueue | None = None,
 ) -> Services:
     clock = clock or SystemClock()
@@ -97,7 +110,17 @@ def build_services(
     orders, payments = OrderService(clock, audit), PaymentWriteService(clock, audit)
     ledger = LedgerWriteService(clock, audit)
     refunds = RefundWriteService(clock, audit, ledger, payments)
-    deps = ExecDeps(sessions, clock, gateway, orders, ledger, payments, refunds, DisputeWriteService(clock, audit), CaseWriteService(clock, audit, gateway))
+    deps = ExecDeps(
+        sessions,
+        clock,
+        gateway,
+        orders,
+        ledger,
+        payments,
+        refunds,
+        DisputeWriteService(clock, audit),
+        CaseWriteService(clock, audit, gateway),
+    )
     events = events or NoopPublisher()
     consumer = WebhookConsumer(sessions, gateway, audit, orders, payments, ledger, refunds)
     webhook_events = WebhookEventService(sessions, clock, audit, consumer, gateway)
@@ -106,7 +129,9 @@ def build_services(
     reconciliation.screen_case = signal_intake.screen_case
     executor = ExecutorService(deps, audit, events, resolutions)
     validator = ValidatorService(sessions, clock, gateway, audit, resolutions)
-    resolution_service = ResolutionService(sessions, clock, gateway, audit, events, deps.cases, cases, reconciliation, resolutions, executor, validator)
+    resolution_service = ResolutionService(
+        sessions, clock, gateway, audit, events, deps.cases, cases, reconciliation, resolutions, executor, validator
+    )
     approvals = ApprovalQueryService(clock, cases, resolutions)
     approval_service = ApprovalService(sessions, clock, audit, events, deps.cases, approvals, resolution_service)
 

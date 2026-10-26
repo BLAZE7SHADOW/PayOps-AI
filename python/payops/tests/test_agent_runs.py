@@ -40,7 +40,10 @@ async def world(database_url: str) -> AsyncIterator[tuple[httpx.AsyncClient, Any
             request.state.user = USERS[who]
         return await call_next(request)
 
-    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t", headers=JSON) as c:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t", headers=JSON) as c,
+    ):
         await app.state.services.simulator.seed_demo_cases()
         async with app.state.services.sessions() as s:
             ids = {d: i for d, i in (await s.execute(select(Case.display_id, Case.id))).all()}
@@ -48,9 +51,13 @@ async def world(database_url: str) -> AsyncIterator[tuple[httpx.AsyncClient, Any
     await engine.dispose()
 
 
-async def run_case(world: tuple[httpx.AsyncClient, Any, dict[str, str]], display_id: str, scenario: str) -> dict[str, Any]:
+async def run_case(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]], display_id: str, scenario: str
+) -> dict[str, Any]:
     c, app, ids = world
-    res = await c.post(f"/api/cases/{ids[display_id]}/runs", json={"scenarioKey": scenario}, headers={"x-test-user": "ops"})
+    res = await c.post(
+        f"/api/cases/{ids[display_id]}/runs", json={"scenarioKey": scenario}, headers={"x-test-user": "ops"}
+    )
     assert res.status_code == 202, res.text
     run_id = res.json()["runId"]
     await app.state.jobs.idle()
@@ -64,7 +71,9 @@ def recorded(display_id: str) -> dict[str, Any]:
     return next(r for r in RECORDED["agent_runs"] if r["case_id"] == case_id)
 
 
-async def test_an_auto_fix_resolves_the_case_the_way_typescript_did(world: tuple[httpx.AsyncClient, Any, dict[str, str]]) -> None:
+async def test_an_auto_fix_resolves_the_case_the_way_typescript_did(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]],
+) -> None:
     c, app, ids = world
     run = await run_case(world, "PAY-0001", "captured_order_failed")
     expected = recorded("PAY-0001")
@@ -77,13 +86,24 @@ async def test_an_auto_fix_resolves_the_case_the_way_typescript_did(world: tuple
     assert case["status"] == "RESOLVED" and case["resolution"]["by"] == "AGENT"
     # every step was recorded in order, and the evidence and findings were copied into their own tables
     async with app.state.services.sessions() as s:
-        seqs = [x for (x,) in (await s.execute(select(AgentStep.seq).where(AgentStep.run_id == run["id"]).order_by(AgentStep.seq))).all()]
+        seqs = [
+            x
+            for (x,) in (
+                await s.execute(select(AgentStep.seq).where(AgentStep.run_id == run["id"]).order_by(AgentStep.seq))
+            ).all()
+        ]
         assert seqs == list(range(1, len(seqs) + 1)) and len(seqs) > 20
-        assert len((await s.scalars(select(Evidence).where(Evidence.run_id == run["id"]))).all()) == len(run["evidence"])
-        assert len((await s.scalars(select(AgentFinding).where(AgentFinding.run_id == run["id"]))).all()) == len(run["findings"])
+        assert len((await s.scalars(select(Evidence).where(Evidence.run_id == run["id"]))).all()) == len(
+            run["evidence"]
+        )
+        assert len((await s.scalars(select(AgentFinding).where(AgentFinding.run_id == run["id"]))).all()) == len(
+            run["findings"]
+        )
 
 
-async def test_a_manager_tier_fix_waits_for_approval_then_resumes_and_resolves(world: tuple[httpx.AsyncClient, Any, dict[str, str]]) -> None:
+async def test_a_manager_tier_fix_waits_for_approval_then_resumes_and_resolves(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]],
+) -> None:
     c, app, ids = world
     run = await run_case(world, "RFD-0002", "refund_never_initiated")
     expected = recorded("RFD-0002")
@@ -94,7 +114,11 @@ async def test_a_manager_tier_fix_waits_for_approval_then_resumes_and_resolves(w
     mine = next(a for a in approvals if a["id"] == run["approvalId"])
     assert mine["requestedBy"]["type"] == "AGENT" and mine["canDecide"] is True
 
-    decided = await c.post(f"/api/approvals/{run['approvalId']}/decision", json={"decision": "APPROVE", "comment": "Refund is owed"}, headers={"x-test-user": "manager"})
+    decided = await c.post(
+        f"/api/approvals/{run['approvalId']}/decision",
+        json={"decision": "APPROVE", "comment": "Refund is owed"},
+        headers={"x-test-user": "manager"},
+    )
     assert decided.status_code == 200
     await app.state.jobs.idle()
     after = (await c.get(f"/api/runs/{run['id']}", headers={"x-test-user": "ops"})).json()
@@ -102,29 +126,43 @@ async def test_a_manager_tier_fix_waits_for_approval_then_resumes_and_resolves(w
     assert [s["status"] for s in after["executions"]] == ["SUCCEEDED"]
 
 
-async def test_a_rejected_approval_ends_the_run_without_executing(world: tuple[httpx.AsyncClient, Any, dict[str, str]]) -> None:
+async def test_a_rejected_approval_ends_the_run_without_executing(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]],
+) -> None:
     c, app, ids = world
     run = await run_case(world, "RFD-0002", "refund_never_initiated")
-    res = await c.post(f"/api/approvals/{run['approvalId']}/decision", json={"decision": "REJECT", "comment": "Not this refund"}, headers={"x-test-user": "manager"})
+    res = await c.post(
+        f"/api/approvals/{run['approvalId']}/decision",
+        json={"decision": "REJECT", "comment": "Not this refund"},
+        headers={"x-test-user": "manager"},
+    )
     assert res.status_code == 200
     await app.state.jobs.idle()
     after = (await c.get(f"/api/runs/{run['id']}", headers={"x-test-user": "ops"})).json()
     assert after["status"] in ("ESCALATED", "REJECTED") and after["executions"] == []
 
 
-async def test_the_settlement_case_pauses_for_an_ops_approval_like_typescript(world: tuple[httpx.AsyncClient, Any, dict[str, str]]) -> None:
+async def test_the_settlement_case_pauses_for_an_ops_approval_like_typescript(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]],
+) -> None:
     run = await run_case(world, "STL-0001", "settlement_mismatch")
     expected = recorded("STL-0001")
     assert run["status"] == expected["status"] and run["policy"]["tier"] == expected["policy"]["tier"] == "OPS"
     assert run["diagnosis"]["rootCause"] == expected["diagnosis"]["rootCause"]
 
 
-async def test_starting_a_run_needs_ops_a_known_case_and_an_agent_that_is_not_paused(world: tuple[httpx.AsyncClient, Any, dict[str, str]]) -> None:
+async def test_starting_a_run_needs_ops_a_known_case_and_an_agent_that_is_not_paused(
+    world: tuple[httpx.AsyncClient, Any, dict[str, str]],
+) -> None:
     c, app, ids = world
     assert (await c.post(f"/api/cases/{ids['PAY-0001']}/runs", json={})).status_code == 401
     assert (await c.post("/api/cases/case_nope/runs", json={}, headers={"x-test-user": "ops"})).status_code == 404
-    assert (await c.post(f"/api/cases/{ids['PAY-0001']}/runs", json={"scenarioKey": "nope"}, headers={"x-test-user": "ops"})).status_code == 422
-    paused = await c.put("/api/agent-control", json={"mode": "PAUSED", "reason": "Gateway incident"}, headers={"x-test-user": "manager"})
+    assert (
+        await c.post(f"/api/cases/{ids['PAY-0001']}/runs", json={"scenarioKey": "nope"}, headers={"x-test-user": "ops"})
+    ).status_code == 422
+    paused = await c.put(
+        "/api/agent-control", json={"mode": "PAUSED", "reason": "Gateway incident"}, headers={"x-test-user": "manager"}
+    )
     assert paused.status_code == 200
     blocked = await c.post(f"/api/cases/{ids['PAY-0001']}/runs", json={}, headers={"x-test-user": "ops"})
     assert blocked.status_code == 409 and "paused" in blocked.json()["error"]["message"]

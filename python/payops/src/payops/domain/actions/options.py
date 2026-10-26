@@ -1,6 +1,6 @@
-"""Action options for the manual "Resolve" form: every catalog action with parameters prefilled for this case, whether it can run now (from its
-preconditions), and which ones we recommend for the case's shape. Unavailable options still carry a well-formed action with placeholder ids.
-(packages/core actions/options.ts)"""
+"""Action options for the manual "Resolve" form: every catalog action with parameters prefilled for this case, whether
+it can run now (from its preconditions), and which ones we recommend for the case's shape. Unavailable options still
+carry a well-formed action with placeholder ids. (packages/core actions/options.ts)"""
 
 from __future__ import annotations
 
@@ -15,7 +15,13 @@ from ...dto.validation import ActionOption
 from ..enums import CASE_TYPE_LABEL
 from ..ledger import live_capture_journals, summarize_journals
 from ..money import format_money
-from ..reconciliation.facts import PAID_ORDER_STATUSES, capture_credit_minor, held_captures, is_captured, last_transition_at
+from ..reconciliation.facts import (
+    PAID_ORDER_STATUSES,
+    capture_credit_minor,
+    held_captures,
+    is_captured,
+    last_transition_at,
+)
 from ..reconciliation.rules import d8_risk_velocity
 from ..snapshot import OrderSnapshot
 from .facts import refundable_minor
@@ -158,7 +164,11 @@ def _draft_post_ledger(state: CaseState) -> Draft:
 def _draft_reverse_ledger(state: CaseState) -> Draft:
     ledger = state.order.ledger if state.order else []
     live = live_capture_journals(ledger)
-    journal = live[-1] if live else next((j for j in summarize_journals(ledger) if j.kind != "REVERSAL" and not j.reversed_by), None)
+    journal = (
+        live[-1]
+        if live
+        else next((j for j in summarize_journals(ledger) if j.kind != "REVERSAL" and not j.reversed_by), None)
+    )
     return Draft(
         _make("REVERSE_LEDGER_ENTRY", journalId=journal.journal_id if journal else NONE),
         f"Reverse {journal.kind.lower()} journal {journal.journal_id} ({format_money(journal.amount_minor)}) with an equal and opposite entry"
@@ -181,8 +191,19 @@ def _draft_refund(state: CaseState) -> Draft:
 
 def _draft_sync_refund(state: CaseState) -> Draft:
     s = state.order
-    refund = (next((r for r in s.refunds if r.status != "PROCESSED" and r.gw_refund_id), None) or (s.refunds[0] if s.refunds else None)) if s else None
-    gw = next((r for r in s.gw_refunds if r.id == refund.gw_refund_id), None) if s and refund and refund.gw_refund_id else None
+    refund = (
+        (
+            next((r for r in s.refunds if r.status != "PROCESSED" and r.gw_refund_id), None)
+            or (s.refunds[0] if s.refunds else None)
+        )
+        if s
+        else None
+    )
+    gw = (
+        next((r for r in s.gw_refunds if r.id == refund.gw_refund_id), None)
+        if s and refund and refund.gw_refund_id
+        else None
+    )
     if refund and gw:
         tail = " and post it to the ledger" if gw.status == "PROCESSED" else ""
         summary = f"Copy gateway status {gw.status} of {gw.id} to refund {refund.id}{tail}"
@@ -212,7 +233,9 @@ def _draft_hold(state: CaseState) -> Draft:
     p = state.order.payment if state.order else None
     return Draft(
         _make("HOLD_PAYMENT_FOR_REVIEW", paymentId=p.id if p else NONE),
-        f"Hold payment {p.id} ({format_money(p.amount_minor)}) from payouts for review" if p else "Hold the payment for review",
+        f"Hold payment {p.id} ({format_money(p.amount_minor)}) from payouts for review"
+        if p
+        else "Hold the payment for review",
     )
 
 
@@ -239,7 +262,9 @@ DRAFTERS: Final[dict[str, Callable[[CaseState], Draft]]] = {
 
 def _replay_failed_before(history: Sequence[AttemptHistory]) -> bool:
     return any(
-        "REPLAY_WEBHOOK_EVENT" in h.action_types and (h.verdict in ("FAIL", "PARTIAL") or h.status == "EXECUTION_FAILED") for h in history
+        "REPLAY_WEBHOOK_EVENT" in h.action_types
+        and (h.verdict in ("FAIL", "PARTIAL") or h.status == "EXECUTION_FAILED")
+        for h in history
     )
 
 
@@ -263,7 +288,9 @@ def recommended_types(state: CaseState, history: Sequence[AttemptHistory] = ()) 
             (
                 r
                 for r in s.refunds
-                if r.status != "PROCESSED" and r.gw_refund_id and any(g.id == r.gw_refund_id and g.status != "PENDING" for g in s.gw_refunds)
+                if r.status != "PROCESSED"
+                and r.gw_refund_id
+                and any(g.id == r.gw_refund_id and g.status != "PENDING" for g in s.gw_refunds)
             ),
             None,
         )
@@ -286,11 +313,24 @@ def action_options(state: CaseState, history: Sequence[AttemptHistory] = ()) -> 
         draft = DRAFTERS[type_](state)
         failures = preconditions_of(draft.action, state)
         available = not failures
-        reason = None if available else (_missing_subject(draft.action) or (failures[0] if failures else None) or f"{ACTION_META[type_].label} is not possible here.")
+        reason = (
+            None
+            if available
+            else (
+                _missing_subject(draft.action)
+                or (failures[0] if failures else None)
+                or f"{ACTION_META[type_].label} is not possible here."
+            )
+        )
         out.append(
             ActionOption(
-                type=type_, action=draft.action, summary=draft.summary, recommended=available and type_ in recommended, available=available,
-                unavailable_reason=reason, editable=draft.editable,  # type: ignore[arg-type]
+                type=type_,
+                action=draft.action,
+                summary=draft.summary,
+                recommended=available and type_ in recommended,
+                available=available,
+                unavailable_reason=reason,
+                editable=draft.editable,  # type: ignore[arg-type]
                 max_amount_minor=draft.max_amount_minor,
             )
         )

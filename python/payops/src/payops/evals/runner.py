@@ -1,6 +1,7 @@
-"""Drives every golden scenario end to end against a fresh database, in REPLAY: the scenario is generated, detection opens its case, the agent graph runs,
-a person decides an approval when the golden says so, and the outcome is checked against the golden's gates. Zero network: cassette scenarios replay real
-recorded responses and fixture scenarios use the deterministic ports. (packages/evals runner.ts)"""
+"""Drives every golden scenario end to end against a fresh database, in REPLAY: the scenario is generated, detection
+opens its case, the agent graph runs, a person decides an approval when the golden says so, and the outcome is checked
+against the golden's gates. Zero network: cassette scenarios replay real recorded responses and fixture scenarios use
+the deterministic ports. (packages/evals runner.ts)"""
 
 from __future__ import annotations
 
@@ -21,8 +22,9 @@ from .report import RunOutcome
 
 
 class SharedIntakeFixture:
-    """Answers the one J1 (signal intake) call every scenario's case creation can trigger. Only a note that tries to instruct the system to refund answers
-    non-zero; every other note answers 0 (not injected), as production J1 does for ordinary support text."""
+    """Answers the one J1 (signal intake) call every scenario's case creation can trigger. Only a note that tries to
+    instruct the system to refund answers non-zero; every other note answers 0 (not injected), as production J1 does for
+    ordinary support text."""
 
     async def ask(self, tag: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
         text = (state or {}).get("untrusted_text", "") if isinstance(state, dict) else ""
@@ -54,13 +56,24 @@ async def _run_one(services: Services, store: AgentStore, runner: AgentRunner, g
 
     if result.interrupted:
         if golden.on_approval == "none":
-            failures.append(f"unexpected approval interrupt at tier {(result.state.get('policy') or {}).get('tier', 'unknown')}")
+            failures.append(
+                f"unexpected approval interrupt at tier {(result.state.get('policy') or {}).get('tier', 'unknown')}"
+            )
         else:
             decision_type = "APPROVE" if golden.on_approval == "approve" else "REJECT"
-            manager = SessionUser(id=f"usr_eval_{golden.key}", email=f"eval-{golden.key}@payops.dev", name="Eval manager", role="MANAGER")
+            manager = SessionUser(
+                id=f"usr_eval_{golden.key}", email=f"eval-{golden.key}@payops.dev", name="Eval manager", role="MANAGER"
+            )
             comment = "Eval rejection" if golden.on_approval == "reject" else ""
-            await services.approval_service.decide(result.state["approvalId"], ApprovalDecisionBody(decision=decision_type, comment=comment), manager)
-            decision = {"approvalId": result.state["approvalId"], "decision": decision_type, "decidedBy": None, "comment": comment or None}
+            await services.approval_service.decide(
+                result.state["approvalId"], ApprovalDecisionBody(decision=decision_type, comment=comment), manager
+            )
+            decision = {
+                "approvalId": result.state["approvalId"],
+                "decision": decision_type,
+                "decidedBy": None,
+                "comment": comment or None,
+            }
             result = await runner.resume(run_id, case_id, cassette_key, "REPLAY", decision, fixture=fixture)
             replay.update({f"resume:{k}": v for k, v in (result.replay or {}).items()})
     elif golden.on_approval != "none":
@@ -108,29 +121,66 @@ async def _run_one(services: Services, store: AgentStore, runner: AgentRunner, g
     root_cause = (state.get("diagnosis") or {}).get("rootCause")
     grounding = state.get("grounding")
     return RunOutcome(
-        key=golden.key, scenario=golden.scenario, ok=not failures, failures=failures, status=status, tier=tier, verdict=verdict, root_cause=root_cause,
-        expected_root_cause=golden.expected_root_cause, root_cause_match=root_cause == golden.expected_root_cause,
-        known_root_cause_caveat=golden.known_root_cause_caveat, action_types=action_types,
-        action_set_match=tuple(action_types) in golden.allowed_action_sets if golden.allowed_action_sets else None, tools_used=tools_used,
-        tool_set_match=all(t in tools_used for t in golden.expected_tools) if golden.expected_tools else None, attempt=state.get("attempt", 0),
-        replanned=len(state.get("history") or []) > 0, tool_calls=budget.get("toolCalls", 0), llm_calls=budget.get("llmCalls", 0), jev_calls=budget.get("jevCalls", 0),
-        cost_usd=budget.get("costUsd", 0), latency_ms=latency_ms, grounding_violations=len(grounding["violations"]) if grounding else None,
-        quarantine_ok=quarantine_ok, replay=replay,
+        key=golden.key,
+        scenario=golden.scenario,
+        ok=not failures,
+        failures=failures,
+        status=status,
+        tier=tier,
+        verdict=verdict,
+        root_cause=root_cause,
+        expected_root_cause=golden.expected_root_cause,
+        root_cause_match=root_cause == golden.expected_root_cause,
+        known_root_cause_caveat=golden.known_root_cause_caveat,
+        action_types=action_types,
+        action_set_match=tuple(action_types) in golden.allowed_action_sets if golden.allowed_action_sets else None,
+        tools_used=tools_used,
+        tool_set_match=all(t in tools_used for t in golden.expected_tools) if golden.expected_tools else None,
+        attempt=state.get("attempt", 0),
+        replanned=len(state.get("history") or []) > 0,
+        tool_calls=budget.get("toolCalls", 0),
+        llm_calls=budget.get("llmCalls", 0),
+        jev_calls=budget.get("jevCalls", 0),
+        cost_usd=budget.get("costUsd", 0),
+        latency_ms=latency_ms,
+        grounding_violations=len(grounding["violations"]) if grounding else None,
+        quarantine_ok=quarantine_ok,
+        replay=replay,
     )
 
 
 def _empty(golden: Golden, failures: list[str], started: float) -> RunOutcome:
     return RunOutcome(
-        key=golden.key, scenario=golden.scenario, ok=False, failures=failures, status="FAILED", tier=None, verdict=None, root_cause=None,
-        expected_root_cause=golden.expected_root_cause, root_cause_match=False, known_root_cause_caveat=golden.known_root_cause_caveat, action_types=[],
-        action_set_match=None, tools_used=[], tool_set_match=None, attempt=0, replanned=False, tool_calls=0, llm_calls=0, jev_calls=0, cost_usd=0,
-        latency_ms=(time.monotonic() - started) * 1000, grounding_violations=None, quarantine_ok=None,
+        key=golden.key,
+        scenario=golden.scenario,
+        ok=False,
+        failures=failures,
+        status="FAILED",
+        tier=None,
+        verdict=None,
+        root_cause=None,
+        expected_root_cause=golden.expected_root_cause,
+        root_cause_match=False,
+        known_root_cause_caveat=golden.known_root_cause_caveat,
+        action_types=[],
+        action_set_match=None,
+        tools_used=[],
+        tool_set_match=None,
+        attempt=0,
+        replanned=False,
+        tool_calls=0,
+        llm_calls=0,
+        jev_calls=0,
+        cost_usd=0,
+        latency_ms=(time.monotonic() - started) * 1000,
+        grounding_violations=None,
+        quarantine_ok=None,
     )
 
 
 async def run_eval_suite(services: Services, goldens: tuple[Golden, ...] = GOLDEN_SCENARIOS) -> list[RunOutcome]:
-    """Runs every golden scenario, one after another, against `services` (a fresh database with a fixed clock). The services must not resume paused runs on
-    their own: the suite resumes them itself after the approval decision."""
+    """Runs every golden scenario, one after another, against `services` (a fresh database with a fixed clock). The
+    services must not resume paused runs on their own: the suite resumes them itself after the approval decision."""
     from contextlib import AsyncExitStack
 
     from payops_agents.checkpointer import create_checkpointer

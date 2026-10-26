@@ -1,5 +1,6 @@
-"""Sessions are a signed JWT (HS256, 8 hours) in an httpOnly cookie. The token carries a session id; the sessions table decides whether that session is
-still live (see `sessions.py`). A short-lived MFA challenge token proves only that the password step passed."""
+"""Sessions are a signed JWT (HS256, 8 hours) in an httpOnly cookie. The token carries a session id; the sessions table
+decides whether that session is still live (see `sessions.py`). A short-lived MFA challenge token proves only that the
+password step passed."""
 
 from __future__ import annotations
 
@@ -10,8 +11,10 @@ from typing import Any
 
 import jwt
 
-# Existing deployments sign with a JWT_SECRET of 16 or more characters (the TypeScript API only required that), and cookies signed with it must keep
-# working. PyJWT would warn that HS256 keys under 32 bytes are short; accepting them is deliberate, and settings.py still enforces the 16-character minimum.
+# Existing deployments sign with a JWT_SECRET of 16 or more characters (the TypeScript API only required that), and
+# cookies signed with it must keep
+# working. PyJWT would warn that HS256 keys under 32 bytes are short; accepting them is deliberate, and settings.py
+# still enforces the 16-character minimum.
 warnings.filterwarnings("ignore", category=jwt.InsecureKeyLengthWarning)
 
 SESSION_COOKIE = "payops_session"
@@ -35,7 +38,8 @@ class SessionConfig:
 
     @property
     def seal_key(self) -> str:
-        """The TOTP seed is encrypted with a key derived from the same secret that signs cookies (base64 of its bytes, as the TypeScript API does)."""
+        """The TOTP seed is encrypted with a key derived from the same secret that signs cookies (base64 of its bytes,
+        as the TypeScript API does)."""
         import base64
 
         return base64.b64encode(self.key).decode()
@@ -60,8 +64,16 @@ def _encode(claims: dict[str, Any], subject: str, ttl: int, config: SessionConfi
     return jwt.encode(body, config.key, algorithm="HS256", headers={"typ": None})
 
 
-def sign_session(user_id: str, role: str, name: str, email: str, session_id: str, config: SessionConfig, now: datetime | None = None) -> str:
-    return _encode({"role": role, "name": name, "email": email, "sid": session_id}, user_id, SESSION_TTL_SECONDS, config, now or datetime.now(UTC))
+def sign_session(
+    user_id: str, role: str, name: str, email: str, session_id: str, config: SessionConfig, now: datetime | None = None
+) -> str:
+    return _encode(
+        {"role": role, "name": name, "email": email, "sid": session_id},
+        user_id,
+        SESSION_TTL_SECONDS,
+        config,
+        now or datetime.now(UTC),
+    )
 
 
 def verify_session(token: str | None, config: SessionConfig, now: datetime | None = None) -> SessionClaims | None:
@@ -73,7 +85,14 @@ def verify_session(token: str | None, config: SessionConfig, now: datetime | Non
     except jwt.PyJWTError:
         return None
     sub, role, name, email, sid = (payload.get(k) for k in ("sub", "role", "name", "email", "sid"))
-    if not isinstance(sub, str) or role not in ROLES or not isinstance(name, str) or not isinstance(email, str) or not isinstance(sid, str) or not sid:
+    if (
+        not isinstance(sub, str)
+        or role not in ROLES
+        or not isinstance(name, str)
+        or not isinstance(email, str)
+        or not isinstance(sid, str)
+        or not sid
+    ):
         return None
     return SessionClaims(sub, role, name, email, sid)
 

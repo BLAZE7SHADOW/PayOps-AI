@@ -12,7 +12,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from payops.db.models import Customer, LedgerEntry, Merchant, Order, Payment, PaymentAttempt, Refund, Settlement
-from payops.domain.gateway import GatewayPayment, GatewayRefund, GatewaySettlementLine, GatewayWebhookDelivery, WebhookAttempt
+from payops.domain.gateway import (
+    GatewayPayment,
+    GatewayRefund,
+    GatewaySettlementLine,
+    GatewayWebhookDelivery,
+    WebhookAttempt,
+)
 from payops.domain.money import bps_of
 from payops.domain.snapshot import OrderSnapshot, pick_primary_gw
 from payops.domain.timeutil import DAY_MS, HOUR_MS, MINUTE_MS, to_iso
@@ -33,8 +39,16 @@ def _row(cls: type, defaults: dict[str, Any], overrides: dict[str, Any]) -> Any:
 def merchant_row(**o: Any) -> Merchant:
     return _row(
         Merchant,
-        dict(id="mer_1", name="Kavya Electronics", fee_bps=200, fee_fixed_minor=0, tax_bps=1800, settlement_cycle_days=1,
-             created_at=ago(400 * DAY_MS), updated_at=ago(400 * DAY_MS)),
+        dict(
+            id="mer_1",
+            name="Kavya Electronics",
+            fee_bps=200,
+            fee_fixed_minor=0,
+            tax_bps=1800,
+            settlement_cycle_days=1,
+            created_at=ago(400 * DAY_MS),
+            updated_at=ago(400 * DAY_MS),
+        ),
         o,
     )
 
@@ -42,8 +56,15 @@ def merchant_row(**o: Any) -> Merchant:
 def customer_row(**o: Any) -> Customer:
     return _row(
         Customer,
-        dict(id="cus_1", name="Aarav Sharma", email_masked="a****@gmail.com", phone_masked="+91 ******4321", risk_flags=[],
-             created_at=ago(300 * DAY_MS), updated_at=ago(300 * DAY_MS)),
+        dict(
+            id="cus_1",
+            name="Aarav Sharma",
+            email_masked="a****@gmail.com",
+            phone_masked="+91 ******4321",
+            risk_flags=[],
+            created_at=ago(300 * DAY_MS),
+            updated_at=ago(300 * DAY_MS),
+        ),
         o,
     )
 
@@ -57,10 +78,20 @@ def order_row(**o: Any) -> Order:
     return _row(
         Order,
         dict(
-            id="ord_1", merchant_id="mer_1", customer_id="cus_1", amount_minor=1_249_900, status="PAID", payment_id="pay_1", version=1,
+            id="ord_1",
+            merchant_id="mer_1",
+            customer_id="cus_1",
+            amount_minor=1_249_900,
+            status="PAID",
+            payment_id="pay_1",
+            version=1,
             locked_reason=None,
-            timeline=[transition(created, None, "PENDING", "checkout"), transition(ago(26 * HOUR_MS - 2_000), "PENDING", "PAID", "webhook-consumer")],
-            created_at=created, updated_at=created,
+            timeline=[
+                transition(created, None, "PENDING", "checkout"),
+                transition(ago(26 * HOUR_MS - 2_000), "PENDING", "PAID", "webhook-consumer"),
+            ],
+            created_at=created,
+            updated_at=created,
         ),
         o,
     )
@@ -69,17 +100,36 @@ def order_row(**o: Any) -> Order:
 def payment_row(**o: Any) -> Payment:
     return _row(
         Payment,
-        dict(id="pay_1", gw_payment_id="gwp_1", order_id="ord_1", merchant_id="mer_1", customer_id="cus_1", amount_minor=1_249_900,
-             method="CARD", status="CAPTURED", hold=False, recon=None, mismatch=False,
-             created_at=ago(26 * HOUR_MS + MINUTE_MS), updated_at=ago(26 * HOUR_MS)),
+        dict(
+            id="pay_1",
+            gw_payment_id="gwp_1",
+            order_id="ord_1",
+            merchant_id="mer_1",
+            customer_id="cus_1",
+            amount_minor=1_249_900,
+            method="CARD",
+            status="CAPTURED",
+            hold=False,
+            recon=None,
+            mismatch=False,
+            created_at=ago(26 * HOUR_MS + MINUTE_MS),
+            updated_at=ago(26 * HOUR_MS),
+        ),
         o,
     )
 
 
 def gw_payment(**o: Any) -> GatewayPayment:
     base = GatewayPayment(
-        id="gwp_1", order_ref="ord_1", merchant_id="mer_1", amount_minor=1_249_900, status="CAPTURED", method="CARD",
-        card={"last4": "4242", "network": "VISA", "country": "IN"}, captured_at=ago(26 * HOUR_MS), refunded_minor=0,
+        id="gwp_1",
+        order_ref="ord_1",
+        merchant_id="mer_1",
+        amount_minor=1_249_900,
+        status="CAPTURED",
+        method="CARD",
+        card={"last4": "4242", "network": "VISA", "country": "IN"},
+        captured_at=ago(26 * HOUR_MS),
+        refunded_minor=0,
         created_at=ago(26 * HOUR_MS + 30_000),
     )
     return replace(base, **o)
@@ -89,13 +139,19 @@ def delivery(fail: bool = False, **o: Any) -> GatewayWebhookDelivery:
     start = ago(26 * HOUR_MS - 1_000)
     if fail:
         attempts = [
-            WebhookAttempt(to_iso(start + timedelta(minutes=5 * i)), 500, 1204 + i, "Internal Server Error") for i in range(3)
+            WebhookAttempt(to_iso(start + timedelta(minutes=5 * i)), 500, 1204 + i, "Internal Server Error")
+            for i in range(3)
         ]
     else:
         attempts = [WebhookAttempt(to_iso(start), 200, 180, None)]
     base = GatewayWebhookDelivery(
-        id="evt_1", event="payment.captured", gw_payment_id="gwp_1", gw_refund_id=None, attempts=attempts,
-        final_status="FAILED" if fail else "DELIVERED", created_at=start,
+        id="evt_1",
+        event="payment.captured",
+        gw_payment_id="gwp_1",
+        gw_refund_id=None,
+        attempts=attempts,
+        final_status="FAILED" if fail else "DELIVERED",
+        created_at=start,
     )
     return replace(base, **o)
 
@@ -103,8 +159,21 @@ def delivery(fail: bool = False, **o: Any) -> GatewayWebhookDelivery:
 def ledger_leg(**o: Any) -> LedgerEntry:
     return _row(
         LedgerEntry,
-        dict(id="led_1", journal_id="jrn_1", payment_id="pay_1", refund_id=None, batch_id=None, merchant_id="mer_1", account="MERCHANT_PAYABLE",
-             direction="CREDIT", amount_minor=1_249_900, posted_at=ago(26 * HOUR_MS - 3_000), source="SYSTEM", memo="capture", reversal_of=None),
+        dict(
+            id="led_1",
+            journal_id="jrn_1",
+            payment_id="pay_1",
+            refund_id=None,
+            batch_id=None,
+            merchant_id="mer_1",
+            account="MERCHANT_PAYABLE",
+            direction="CREDIT",
+            amount_minor=1_249_900,
+            posted_at=ago(26 * HOUR_MS - 3_000),
+            source="SYSTEM",
+            memo="capture",
+            reversal_of=None,
+        ),
         o,
     )
 
@@ -117,12 +186,22 @@ def capture_journal(amount_minor: int, **o: Any) -> list[LedgerEntry]:
     ]
 
 
-def settlement_line(gw: GatewayPayment, merchant: Merchant, fee_bps: int | None = None, **o: Any) -> GatewaySettlementLine:
+def settlement_line(
+    gw: GatewayPayment, merchant: Merchant, fee_bps: int | None = None, **o: Any
+) -> GatewaySettlementLine:
     fee = bps_of(gw.amount_minor, fee_bps if fee_bps is not None else merchant.fee_bps) + merchant.fee_fixed_minor
     tax = bps_of(fee, merchant.tax_bps)
     base = GatewaySettlementLine(
-        id=f"sln_{gw.id}", batch_id="stb_1", merchant_id="mer_1", gw_payment_id=gw.id, gross_minor=gw.amount_minor, fee_minor=fee,
-        tax_minor=tax, net_minor=gw.amount_minor - fee - tax, line_no=1, settled_on=ago(2 * HOUR_MS),
+        id=f"sln_{gw.id}",
+        batch_id="stb_1",
+        merchant_id="mer_1",
+        gw_payment_id=gw.id,
+        gross_minor=gw.amount_minor,
+        fee_minor=fee,
+        tax_minor=tax,
+        net_minor=gw.amount_minor - fee - tax,
+        line_no=1,
+        settled_on=ago(2 * HOUR_MS),
     )
     return replace(base, **o)
 
@@ -130,8 +209,17 @@ def settlement_line(gw: GatewayPayment, merchant: Merchant, fee_bps: int | None 
 def settlement_row(**o: Any) -> Settlement:
     return _row(
         Settlement,
-        dict(id="stb_1", merchant_id="mer_1", settled_on=ago(2 * HOUR_MS), payment_ids=["pay_1"], expected_net_minor=0, reported_net_minor=0,
-             status="PENDING", created_at=ago(2 * HOUR_MS), updated_at=ago(2 * HOUR_MS)),
+        dict(
+            id="stb_1",
+            merchant_id="mer_1",
+            settled_on=ago(2 * HOUR_MS),
+            payment_ids=["pay_1"],
+            expected_net_minor=0,
+            reported_net_minor=0,
+            status="PENDING",
+            created_at=ago(2 * HOUR_MS),
+            updated_at=ago(2 * HOUR_MS),
+        ),
         o,
     )
 
@@ -139,14 +227,31 @@ def settlement_row(**o: Any) -> Settlement:
 def refund_row(**o: Any) -> Refund:
     return _row(
         Refund,
-        dict(id="rfd_1", payment_id="pay_1", gw_payment_id="gwp_1", gw_refund_id=None, amount_minor=345_000, status="PENDING",
-             reason="Customer returned item", requested_at=ago(9 * DAY_MS), created_at=ago(9 * DAY_MS), updated_at=ago(9 * DAY_MS)),
+        dict(
+            id="rfd_1",
+            payment_id="pay_1",
+            gw_payment_id="gwp_1",
+            gw_refund_id=None,
+            amount_minor=345_000,
+            status="PENDING",
+            reason="Customer returned item",
+            requested_at=ago(9 * DAY_MS),
+            created_at=ago(9 * DAY_MS),
+            updated_at=ago(9 * DAY_MS),
+        ),
         o,
     )
 
 
 def gw_refund(**o: Any) -> GatewayRefund:
-    base = GatewayRefund(id="gwr_1", gw_payment_id="gwp_1", amount_minor=345_000, status="PROCESSED", processed_at=ago(8 * DAY_MS), created_at=ago(9 * DAY_MS))
+    base = GatewayRefund(
+        id="gwr_1",
+        gw_payment_id="gwp_1",
+        amount_minor=345_000,
+        status="PROCESSED",
+        processed_at=ago(8 * DAY_MS),
+        created_at=ago(9 * DAY_MS),
+    )
     return replace(base, **o)
 
 
@@ -156,8 +261,17 @@ _attempt_seq = itertools.count(1)
 def attempt(**o: Any) -> PaymentAttempt:
     return _row(
         PaymentAttempt,
-        dict(id=f"att_{next(_attempt_seq)}", customer_id="cus_1", device_id="dev_1", order_id=None, amount_minor=4_500_000, result="FAILED",
-             failure_code="CARD_DECLINED", card_country="IN", at=ago(27 * HOUR_MS)),
+        dict(
+            id=f"att_{next(_attempt_seq)}",
+            customer_id="cus_1",
+            device_id="dev_1",
+            order_id=None,
+            amount_minor=4_500_000,
+            result="FAILED",
+            failure_code="CARD_DECLINED",
+            card_country="IN",
+            at=ago(27 * HOUR_MS),
+        ),
         o,
     )
 
@@ -205,7 +319,13 @@ def captured_order_failed_snapshot() -> OrderSnapshot:
             status="FAILED",
             timeline=[
                 transition(created, None, "PENDING", "checkout"),
-                transition(created + timedelta(minutes=15), "PENDING", "FAILED", "checkout-timeout", "No payment confirmation within 15 min"),
+                transition(
+                    created + timedelta(minutes=15),
+                    "PENDING",
+                    "FAILED",
+                    "checkout-timeout",
+                    "No payment confirmation within 15 min",
+                ),
             ],
         ),
         payment=payment_row(status="PENDING"),

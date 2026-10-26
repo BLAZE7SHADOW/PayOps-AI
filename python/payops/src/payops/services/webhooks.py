@@ -17,9 +17,17 @@ from ..errors import not_found
 
 def _item(r: WebhookEvent) -> dict[str, object]:
     return dict(
-        id=r.id, event=r.event, gw_payment_id=r.gw_payment_id, gw_refund_id=r.gw_refund_id, status=r.status, attempt_count=r.attempt_count,
-        last_http_status=r.last_http_status, last_message=r.last_message, next_retry_at=to_iso(r.next_retry_at) if r.next_retry_at else None,
-        first_received_at=to_iso(r.first_received_at), updated_at=to_iso(r.updated_at),
+        id=r.id,
+        event=r.event,
+        gw_payment_id=r.gw_payment_id,
+        gw_refund_id=r.gw_refund_id,
+        status=r.status,
+        attempt_count=r.attempt_count,
+        last_http_status=r.last_http_status,
+        last_message=r.last_message,
+        next_retry_at=to_iso(r.next_retry_at) if r.next_retry_at else None,
+        first_received_at=to_iso(r.first_received_at),
+        updated_at=to_iso(r.updated_at),
     )
 
 
@@ -50,15 +58,30 @@ class WebhookQueryService:
         cursor = decode_cursor(query.cursor, _is_list_cursor)
         if cursor:
             at = datetime.fromisoformat(cursor["at"])
-            conditions.append(or_(WebhookEvent.updated_at < at, and_(WebhookEvent.updated_at == at, WebhookEvent.id < cursor["id"])))
+            conditions.append(
+                or_(WebhookEvent.updated_at < at, and_(WebhookEvent.updated_at == at, WebhookEvent.id < cursor["id"]))
+            )
         rows = list(
-            (await session.scalars(select(WebhookEvent).where(*conditions).order_by(desc(WebhookEvent.updated_at), desc(WebhookEvent.id)).limit(query.limit + 1))).all()
+            (
+                await session.scalars(
+                    select(WebhookEvent)
+                    .where(*conditions)
+                    .order_by(desc(WebhookEvent.updated_at), desc(WebhookEvent.id))
+                    .limit(query.limit + 1)
+                )
+            ).all()
         )
         page = rows[: query.limit]
         last = page[-1] if page else None
-        next_cursor = encode_cursor({"at": to_iso(last.updated_at), "id": last.id}) if len(rows) > query.limit and last else None
+        next_cursor = (
+            encode_cursor({"at": to_iso(last.updated_at), "id": last.id}) if len(rows) > query.limit and last else None
+        )
         return Page[WebhookLogItem](items=[WebhookLogItem(**_item(r)) for r in page], next_cursor=next_cursor)  # type: ignore[arg-type]
 
     async def counts(self, session: AsyncSession) -> WebhookLogCounts:
-        rows = dict((await session.execute(select(WebhookEvent.status, func.count()).group_by(WebhookEvent.status))).all())
-        return WebhookLogCounts(processed=rows.get("PROCESSED", 0), failed=rows.get("FAILED", 0), dead=rows.get("DEAD", 0))
+        rows = dict(
+            (await session.execute(select(WebhookEvent.status, func.count()).group_by(WebhookEvent.status))).all()
+        )
+        return WebhookLogCounts(
+            processed=rows.get("PROCESSED", 0), failed=rows.get("FAILED", 0), dead=rows.get("DEAD", 0)
+        )

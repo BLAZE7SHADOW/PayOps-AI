@@ -1,5 +1,6 @@
-"""Realtime over Socket.IO, in the same process as the API. Everyone joins the "ops" room; clients join case rooms on demand. Only signed-in users connect:
-the handshake must carry a valid session cookie. A session revoked later loses its sockets at once. (apps/server realtime/socket.ts)"""
+"""Realtime over Socket.IO, in the same process as the API. Everyone joins the "ops" room; clients join case rooms on
+demand. Only signed-in users connect: the handshake must carry a valid session cookie. A session revoked later loses its
+sockets at once. (apps/server realtime/socket.ts)"""
 
 from __future__ import annotations
 
@@ -36,7 +37,9 @@ def read_cookie(header: str | None, name: str) -> str | None:
 
 class Realtime:
     def __init__(self, origin: str, session_config: SessionConfig, services: Callable[[], Services]) -> None:
-        self.sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=[origin], logger=False, engineio_logger=False)
+        self.sio = socketio.AsyncServer(
+            async_mode="asgi", cors_allowed_origins=[origin], logger=False, engineio_logger=False
+        )
         #: Mounted by the app at /socket.io.
         self.asgi = socketio.ASGIApp(self.sio, socketio_path="")
         self._config = session_config

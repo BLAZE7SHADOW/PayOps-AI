@@ -50,7 +50,10 @@ async def client(contract_url: str) -> AsyncIterator[httpx.AsyncClient]:
         request.state.user = user
         return await call_next(request)
 
-    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c,
+    ):
         yield c
     await engine.dispose()
 
@@ -73,7 +76,11 @@ def _same(expected: Any, actual: Any, path: str = "$") -> str | None:
             if (diff := _same(e, a, f"{path}[{i}]")) is not None:
                 return diff
         return None
-    if expected != actual or type(expected) is not type(actual) and not (isinstance(expected, (int, float)) and isinstance(actual, (int, float))):
+    if (
+        expected != actual
+        or type(expected) is not type(actual)
+        and not (isinstance(expected, (int, float)) and isinstance(actual, (int, float)))
+    ):
         return f"{path}: TypeScript {expected!r}, Python {actual!r}"
     return None
 
@@ -92,6 +99,8 @@ async def test_route_matches_the_typescript_response(client: httpx.AsyncClient, 
         expected, actual = route["body"].split("\r\n"), res.text.split("\r\n")
         assert actual[:-2] == expected[:-2]
         mine, theirs = actual[-2].split(","), expected[-2].split(",")
-        assert [c for i, c in enumerate(mine) if i not in (1, 15)] == [c for i, c in enumerate(theirs) if i not in (1, 15)]
+        assert [c for i, c in enumerate(mine) if i not in (1, 15)] == [
+            c for i, c in enumerate(theirs) if i not in (1, 15)
+        ]
     else:
         assert res.text == route["body"]

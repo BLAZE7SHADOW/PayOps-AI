@@ -1,7 +1,8 @@
-"""Prefixed, human-scannable identifiers. Random ids use `secrets`; seeded ids use a deterministic PRNG so simulator output is reproducible.
+"""Prefixed, human-scannable identifiers. Random ids use `secrets`; seeded ids use a deterministic PRNG so simulator
+output is reproducible.
 
-`mulberry32` and `hash_seed` reproduce the TypeScript versions bit for bit (32-bit unsigned maths), so a seed gives the same ids in both.
-"""
+`mulberry32` and `hash_seed` reproduce the TypeScript versions bit for bit (32-bit unsigned maths), so a seed gives the
+same ids in both."""
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
-"""`python -m payops.evals`: runs the golden scenarios in REPLAY against a throwaway Postgres (pgserver, no Docker) and exits 1 if a gate or limit fails."""
+"""`python -m payops.evals`: runs the golden scenarios in REPLAY against a throwaway Postgres (pgserver, no Docker) and
+exits 1 if a gate or limit fails."""
 
 from __future__ import annotations
 

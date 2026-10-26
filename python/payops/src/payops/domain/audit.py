@@ -1,13 +1,12 @@
 """Tamper-evident audit chain (D077) and the CSV export of the log.
 
-Every audit row stores `hash = sha256(its own fields + the previous row's hash)`. Editing or removing any row breaks its own hash or the next
-row's `prev_hash`, and `verify_audit_chain` reports the first place it breaks. This proves the log was changed; it cannot prevent a database
-owner from rewriting the whole tail and recomputing every hash. The database triggers stop ordinary writes, and an exported head (seq + hash)
-kept elsewhere closes the rest.
+Every audit row stores `hash = sha256(its own fields + the previous row's hash)`. Editing or removing any row breaks its
+own hash or the next row's `prev_hash`, and `verify_audit_chain` reports the first place it breaks. This proves the log
+was changed; it cannot prevent a database owner from rewriting the whole tail and recomputing every hash. The database
+triggers stop ordinary writes, and an exported head (seq + hash) kept elsewhere closes the rest.
 
-The hash input has to be byte-identical to the TypeScript API's, or every existing row would fail verification. `canonical_json` therefore sorts
-keys the way JavaScript does and prints numbers the way `JSON.stringify` does.
-"""
+The hash input has to be byte-identical to the TypeScript API's, or every existing row would fail verification.
+`canonical_json` therefore sorts keys the way JavaScript does and prints numbers the way `JSON.stringify` does."""
 
 from __future__ import annotations
 
@@ -52,7 +51,8 @@ class ChainRow(ChainFields):
 
 
 def canonical_json(value: Any) -> str:
-    """JSON with object keys sorted at every depth. Postgres jsonb does not keep key order, so plain `json.dumps` would not round-trip."""
+    """JSON with object keys sorted at every depth. Postgres jsonb does not keep key order, so plain `json.dumps` would
+    not round-trip."""
     if value is None:
         return "null"
     if value is True:
@@ -66,17 +66,33 @@ def canonical_json(value: Any) -> str:
     if isinstance(value, (list, tuple)):
         return "[" + ",".join(canonical_json(v) for v in value) + "]"
     if isinstance(value, dict):
-        # JavaScript sorts keys by UTF-16 code unit, which differs from code point order only for characters outside the BMP.
+        # JavaScript sorts keys by UTF-16 code unit, which differs from code point order only for characters outside the
+        # BMP.
         keys = sorted(value, key=lambda k: str(k).encode("utf-16-be"))
-        return "{" + ",".join(f"{json.dumps(str(k), ensure_ascii=False)}:{canonical_json(value[k])}" for k in keys) + "}"
+        return (
+            "{" + ",".join(f"{json.dumps(str(k), ensure_ascii=False)}:{canonical_json(value[k])}" for k in keys) + "}"
+        )
     raise TypeError(f"cannot hash {type(value).__name__}")
 
 
 def compute_audit_hash(f: ChainFields) -> str:
     payload = canonical_json(
         [
-            f.seq, f.id, to_iso(f.at), f.actor_type, f.actor_id, f.actor_name, f.action, f.entity_type, f.entity_id, f.summary,
-            f.before, f.after, f.run_id, f.case_id, f.prev_hash,
+            f.seq,
+            f.id,
+            to_iso(f.at),
+            f.actor_type,
+            f.actor_id,
+            f.actor_name,
+            f.action,
+            f.entity_type,
+            f.entity_id,
+            f.summary,
+            f.before,
+            f.after,
+            f.run_id,
+            f.case_id,
+            f.prev_hash,
         ]
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -93,10 +109,14 @@ class ChainVerdict:
 
 
 def verify_audit_chain(
-    rows: Sequence[ChainRow], *, start_after: tuple[int, str] | None = None, expected_head: tuple[int, str] | None = None
+    rows: Sequence[ChainRow],
+    *,
+    start_after: tuple[int, str] | None = None,
+    expected_head: tuple[int, str] | None = None,
 ) -> ChainVerdict:
-    """Rows must be ordered by ascending seq. Stops at the first broken row. `start_after` is (seq, hash) of the link before the first row;
-    `expected_head` is a (seq, hash) recorded earlier, and the chain fails if it now ends before it."""
+    """Rows must be ordered by ascending seq. Stops at the first broken row. `start_after` is (seq, hash) of the link
+    before the first row; `expected_head` is a (seq, hash) recorded earlier, and the chain fails if it now ends before
+    it."""
     prev_seq, prev_hash = start_after if start_after else (0, GENESIS_HASH)
     checked = 0
     for row in rows:
@@ -130,8 +150,9 @@ _FORMULA_START: Final = ("=", "+", "-", "@", "\t", "\r")
 
 
 def csv_cell(value: Any) -> str:
-    """Quotes every cell that needs it and defuses spreadsheet formulas: a cell that starts with = + - @ tab or CR would run as a formula when
-    opened in Excel, so it gets a leading apostrophe. Audit summaries contain user-typed names and notes, so this matters."""
+    """Quotes every cell that needs it and defuses spreadsheet formulas: a cell that starts with = + - @ tab or CR would
+    run as a formula when opened in Excel, so it gets a leading apostrophe. Audit summaries contain user-typed names and
+    notes, so this matters."""
     if value is None:
         return ""
     if isinstance(value, str):

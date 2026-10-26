@@ -46,7 +46,7 @@ def age_label(from_time: datetime, now: datetime) -> str:
 
 
 def due_label(due: datetime, now: datetime) -> str:
-    """"in 3h" while time remains, "2h late" once past, "due now" inside a minute either way."""
+    """ "in 3h" while time remains, "2h late" once past, "due now" inside a minute either way."""
     ms = ms_between(due, now)
     magnitude = abs(ms)
     if magnitude < MINUTE_MS:

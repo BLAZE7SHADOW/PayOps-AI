@@ -59,20 +59,29 @@ class PolicyRuleInfo:
 
 #: Human-readable rule table, rendered on the Policy page. Must describe exactly `domain/policy/rules.py`.
 POLICY_RULES: Final = (
-    PolicyRuleInfo("P0", "Proposal is empty, relies on findings that failed grounding, or fails a precondition", "BLOCKED", "all"),
-    PolicyRuleInfo("P1", "Risk is CRITICAL and the proposal does anything other than hold or escalate", "BLOCKED", "all"),
+    PolicyRuleInfo(
+        "P0", "Proposal is empty, relies on findings that failed grounding, or fails a precondition", "BLOCKED", "all"
+    ),
+    PolicyRuleInfo(
+        "P1", "Risk is CRITICAL and the proposal does anything other than hold or escalate", "BLOCKED", "all"
+    ),
     PolicyRuleInfo("P2", "Risk is HIGH or CRITICAL", "MANAGER", "all"),
     PolicyRuleInfo("P3", "Refunds over ₹10,000", "MANAGER", "all"),
     PolicyRuleInfo("P4", "Refunds over ₹1,000 up to ₹10,000", "OPS", "all"),
     PolicyRuleInfo("P5", "Refunds up to ₹1,000 with LOW risk (agent: confidence at least 0.90)", "AUTO", "all"),
-    PolicyRuleInfo("P6", "State corrections only, gateway capture verified (agent: confidence at least 0.85)", "AUTO", "all"),
+    PolicyRuleInfo(
+        "P6", "State corrections only, gateway capture verified (agent: confidence at least 0.85)", "AUTO", "all"
+    ),
     PolicyRuleInfo("P7", "Second or later attempt on the same case", "at least OPS", "all"),
     PolicyRuleInfo("P8", "Agent diagnosis confidence below 0.60", "at least OPS", "agent"),
     PolicyRuleInfo("P9", "Claims against a third party (settlement disputes)", "OPS", "all"),
     PolicyRuleInfo("P10", "Hold or escalate only", "AUTO", "all"),
     PolicyRuleInfo("P11", "No rule above allows automatic execution (default)", "OPS", "all"),
     PolicyRuleInfo(
-        "P12", "The agent is set to propose-only or paused, and the proposal does more than hold or escalate", "at least OPS", "agent"
+        "P12",
+        "The agent is set to propose-only or paused, and the proposal does more than hold or escalate",
+        "at least OPS",
+        "agent",
     ),
 )
 

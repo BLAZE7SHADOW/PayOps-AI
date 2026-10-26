@@ -1,5 +1,6 @@
-"""Turns rule hits into case candidates. Hits that share `case_type:primary_entity_id` become one candidate (so D1 and D3 on the same payment
-are one case), which the case service then opens or merges into the existing open case with that fingerprint."""
+"""Turns rule hits into case candidates. Hits that share `case_type:primary_entity_id` become one candidate (so D1 and
+D3 on the same payment are one case), which the case service then opens or merges into the existing open case with that
+fingerprint."""
 
 from __future__ import annotations
 
@@ -44,7 +45,8 @@ def max_severity(*values: str | None) -> str:
 
 
 def priority_of(severity: str, amount_minor: int) -> int:
-    """Queue order: severity first, then amount in whole rupees (capped so it never spills into the next severity band). Higher is more urgent."""
+    """Queue order: severity first, then amount in whole rupees (capped so it never spills into the next severity band).
+    Higher is more urgent."""
     return SEVERITY_RANK[severity] * 1_000_000 + min(999_999, abs(amount_minor) // 100)
 
 
@@ -61,7 +63,16 @@ def group_hits(hits: Sequence[RuleHit], entity_refs: EntityRefs, matrix: StateMa
         if first.entity_kind == "batch":
             refs["batchId"] = first.entity_id
         candidates.append(
-            CaseCandidate(fingerprint, first.case_type, sorted({h.rule_id for h in group}), severity, priority_of(severity, amount), amount, refs, matrix)
+            CaseCandidate(
+                fingerprint,
+                first.case_type,
+                sorted({h.rule_id for h in group}),
+                severity,
+                priority_of(severity, amount),
+                amount,
+                refs,
+                matrix,
+            )
         )
     return candidates
 

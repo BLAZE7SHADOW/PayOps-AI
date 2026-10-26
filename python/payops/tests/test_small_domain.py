@@ -7,11 +7,23 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from payops.domain.bulk_approve import BULK_APPROVE_MAX_MINOR, BulkApprovalBody, BulkApproveInput, bulk_approve_block_reason
+from payops.domain.bulk_approve import (
+    BULK_APPROVE_MAX_MINOR,
+    BulkApprovalBody,
+    BulkApproveInput,
+    bulk_approve_block_reason,
+)
 from payops.domain.cursor import decode_cursor, encode_cursor, is_record
 from payops.domain.enums import ROLES
 from payops.domain.handoff_text import render_handoff_text
-from payops.domain.metrics import DecidedApprovalRow, FeedbackRow, ResolvedCaseRow, RunCostRow, compute_performance, median
+from payops.domain.metrics import (
+    DecidedApprovalRow,
+    FeedbackRow,
+    ResolvedCaseRow,
+    RunCostRow,
+    compute_performance,
+    median,
+)
 from payops.domain.permissions import PERMISSIONS, has_permission, permission_table_markdown, role_for
 from payops.domain.webhook_retry import WEBHOOK_MAX_ATTEMPTS, is_webhook_success, webhook_retry_delay_seconds
 from payops.dto.workflow import HandoffSummary
@@ -30,7 +42,13 @@ def test_median() -> None:
 
 def test_nothing_to_measure_gives_nulls_not_zeros() -> None:
     m = compute_performance([], [], [], [])
-    assert (m.resolution_time_median_ms, m.auto_resolution_rate, m.agent_accuracy, m.approval_turnaround_median_ms, m.cost_per_case_usd) == (None,) * 5
+    assert (
+        m.resolution_time_median_ms,
+        m.auto_resolution_rate,
+        m.agent_accuracy,
+        m.approval_turnaround_median_ms,
+        m.cost_per_case_usd,
+    ) == (None,) * 5
 
 
 def test_each_metric_from_rows() -> None:
@@ -58,7 +76,10 @@ def test_each_metric_from_rows() -> None:
 # ── webhook retry ──
 def test_retry_backs_off_gives_up_and_has_nothing_before_the_first_attempt() -> None:
     assert [webhook_retry_delay_seconds(n) for n in (1, 2, 3, 4)] == [60, 300, 1800, 7200]
-    assert webhook_retry_delay_seconds(WEBHOOK_MAX_ATTEMPTS) is None and webhook_retry_delay_seconds(WEBHOOK_MAX_ATTEMPTS + 3) is None
+    assert (
+        webhook_retry_delay_seconds(WEBHOOK_MAX_ATTEMPTS) is None
+        and webhook_retry_delay_seconds(WEBHOOK_MAX_ATTEMPTS + 3) is None
+    )
     assert webhook_retry_delay_seconds(0) is None
 
 
@@ -91,7 +112,11 @@ def test_a_higher_role_keeps_everything_a_lower_one_has() -> None:
 def test_signed_out_users_get_nothing_and_roles_keep_their_limits() -> None:
     assert not has_permission(None, "overview.view")
     assert not has_permission("VIEWER", "resolution.propose") and not has_permission("OPS", "agent.control")
-    assert has_permission("MANAGER", "agent.control") and not has_permission("MANAGER", "user.mfaReset") and has_permission("ADMIN", "user.mfaReset")
+    assert (
+        has_permission("MANAGER", "agent.control")
+        and not has_permission("MANAGER", "user.mfaReset")
+        and has_permission("ADMIN", "user.mfaReset")
+    )
     assert len(permission_table_markdown().split("\n")) == 2 + len(PERMISSIONS)
 
 
@@ -116,9 +141,13 @@ def test_bulk_approve_blocks_the_rest() -> None:
         return bulk_approve_block_reason(BulkApproveInput(**{**OK.__dict__, **o})) or ""  # type: ignore[arg-type]
 
     assert all("OPS tier" in blocked(tier=x) for x in ("MANAGER", "BLOCKED", "AUTO"))
-    assert re.search("risk", blocked(risk_tier="MEDIUM"), re.I) and "limit" in blocked(money_moving_minor=BULK_APPROVE_MAX_MINOR + 1)
+    assert re.search("risk", blocked(risk_tier="MEDIUM"), re.I) and "limit" in blocked(
+        money_moving_minor=BULK_APPROVE_MAX_MINOR + 1
+    )
     assert re.search("quarantined", blocked(quarantined=True), re.I)
-    assert re.search("repeat", blocked(rule_ids=["P4", "P7"]), re.I) and re.search("confidence", blocked(rule_ids=["P8"]), re.I)
+    assert re.search("repeat", blocked(rule_ids=["P4", "P7"]), re.I) and re.search(
+        "confidence", blocked(rule_ids=["P8"]), re.I
+    )
 
 
 def test_bulk_approval_body_needs_one_to_twenty_five_ids() -> None:
@@ -131,9 +160,19 @@ def test_bulk_approval_body_needs_one_to_twenty_five_ids() -> None:
 
 # ── handoff text ──
 BASE = {
-    "generatedAt": "2026-09-28T12:00:00.000Z", "sinceHours": 8, "since": "2026-09-28T04:00:00.000Z",
-    "open": {"total": 3, "overdue": 1, "awaitingApproval": 1, "unassigned": 2, "bySeverity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 0}},
-    "needsAttention": [], "resolved": {"total": 2, "by": {"AGENT": 1, "USER": 1, "SYSTEM": 0}}, "recentNotes": [],
+    "generatedAt": "2026-09-28T12:00:00.000Z",
+    "sinceHours": 8,
+    "since": "2026-09-28T04:00:00.000Z",
+    "open": {
+        "total": 3,
+        "overdue": 1,
+        "awaitingApproval": 1,
+        "unassigned": 2,
+        "bySeverity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 1, "LOW": 0},
+    },
+    "needsAttention": [],
+    "resolved": {"total": 2, "by": {"AGENT": 1, "USER": 1, "SYSTEM": 0}},
+    "recentNotes": [],
 }
 
 
@@ -148,10 +187,22 @@ def test_handoff_states_counts_and_says_nothing_needs_attention() -> None:
 def test_handoff_lists_cases_with_owner_and_notes() -> None:
     note = {"text": "Bank confirmed.", "authorName": "Ananya Rao", "at": "2026-09-28T11:00:00.000Z"}
     summary = {
-        **BASE, "sinceHours": 1,
+        **BASE,
+        "sinceHours": 1,
         "needsAttention": [
-            {"id": "case_1", "displayId": "PAY-0001", "type": "PAYMENT_MISMATCH", "severity": "HIGH", "status": "AWAITING_APPROVAL", "amountMinor": 1_249_900,
-             "dueAt": "2026-09-28T16:00:00.000Z", "overdue": False, "assigneeName": "Rahul Menon", "reasons": ["Waiting for approval"], "lastNote": note}
+            {
+                "id": "case_1",
+                "displayId": "PAY-0001",
+                "type": "PAYMENT_MISMATCH",
+                "severity": "HIGH",
+                "status": "AWAITING_APPROVAL",
+                "amountMinor": 1_249_900,
+                "dueAt": "2026-09-28T16:00:00.000Z",
+                "overdue": False,
+                "assigneeName": "Rahul Menon",
+                "reasons": ["Waiting for approval"],
+                "lastNote": note,
+            }
         ],
         "recentNotes": [{"caseId": "case_1", "displayId": "PAY-0001", **note}],
     }
@@ -159,5 +210,7 @@ def test_handoff_lists_cases_with_owner_and_notes() -> None:
     assert "last 1 hour " in text
     assert re.search(r"- PAY-0001 Payment mismatch, ₹12,499\.00, Waiting for approval, due in 4h, Rahul Menon", text)
     assert "  Note from Ananya Rao: Bank confirmed." in text and "- PAY-0001, Ananya Rao: Bank confirmed." in text
-    assert render_handoff_text(HandoffSummary.model_validate(BASE)) == render_handoff_text(HandoffSummary.model_validate(BASE))
+    assert render_handoff_text(HandoffSummary.model_validate(BASE)) == render_handoff_text(
+        HandoffSummary.model_validate(BASE)
+    )
     assert UTC is not None

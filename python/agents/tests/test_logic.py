@@ -20,7 +20,15 @@ from payops_agents.state import merge_by_id
 
 
 def ev(id_: str, source: str, system: str, **facts: object) -> dict:
-    return {"id": id_, "source": source, "system": system, "entityRef": f"ref_{id_}", "facts": facts, "observedAt": "2026-09-28T00:00:00.000Z", "stepId": "triage"}
+    return {
+        "id": id_,
+        "source": source,
+        "system": system,
+        "entityRef": f"ref_{id_}",
+        "facts": facts,
+        "observedAt": "2026-09-28T00:00:00.000Z",
+        "stepId": "triage",
+    }
 
 
 def test_ids_continue_from_what_exists() -> None:
@@ -50,7 +58,11 @@ def test_planning_routes_by_need_and_amount_band() -> None:
 
 
 def test_risk_tiers_and_confidence_raise() -> None:
-    assert tier_for_composite(0.75) == "LOW" and tier_for_composite(0.76) == "MEDIUM" and tier_for_composite(9) == "CRITICAL"
+    assert (
+        tier_for_composite(0.75) == "LOW"
+        and tier_for_composite(0.76) == "MEDIUM"
+        and tier_for_composite(9) == "CRITICAL"
+    )
     assert raise_tier_by_one("CRITICAL") == "CRITICAL"
     scores = {"velocity_abuse": 0, "identity_mismatch": 0, "chargeback_pattern": 0, "merchant_exposure": 0}
     assert combine_risk_scores(scores, 0.9)["tier"] == "LOW"
@@ -79,9 +91,30 @@ def test_structural_grounding_drops_findings_citing_the_wrong_evidence() -> None
         "ev_02": ev("ev_02", "getOrder", "ORDER", status="PENDING"),
     }
     findings = [
-        {"id": "fd_01", "agent": "payment", "code": "WEBHOOK_HTTP_500", "statement": "s", "evidenceIds": ["ev_01"], "confidence": 0.9},
-        {"id": "fd_02", "agent": "payment", "code": "WEBHOOK_HTTP_500", "statement": "s", "evidenceIds": ["ev_02"], "confidence": 0.9},
-        {"id": "fd_03", "agent": "payment", "code": "OTHER", "statement": "s", "evidenceIds": ["ev_99"], "confidence": 0.9},
+        {
+            "id": "fd_01",
+            "agent": "payment",
+            "code": "WEBHOOK_HTTP_500",
+            "statement": "s",
+            "evidenceIds": ["ev_01"],
+            "confidence": 0.9,
+        },
+        {
+            "id": "fd_02",
+            "agent": "payment",
+            "code": "WEBHOOK_HTTP_500",
+            "statement": "s",
+            "evidenceIds": ["ev_02"],
+            "confidence": 0.9,
+        },
+        {
+            "id": "fd_03",
+            "agent": "payment",
+            "code": "OTHER",
+            "statement": "s",
+            "evidenceIds": ["ev_99"],
+            "confidence": 0.9,
+        },
     ]
     result = apply_structural_grounding(findings, evidence)
     assert [f["id"] for f in result["sound"]] == ["fd_01"]
@@ -89,7 +122,16 @@ def test_structural_grounding_drops_findings_citing_the_wrong_evidence() -> None
 
 
 def test_grounding_rules_drop_contradicted_claims_and_ask_for_one_more_round() -> None:
-    findings = [{"id": "fd_01", "agent": "payment", "code": "OTHER", "statement": "s", "evidenceIds": ["ev_01"], "confidence": 0.9}]
+    findings = [
+        {
+            "id": "fd_01",
+            "agent": "payment",
+            "code": "OTHER",
+            "statement": "s",
+            "evidenceIds": ["ev_01"],
+            "confidence": 0.9,
+        }
+    ]
     answers = [{"findingId": "fd_01", "choice": "contradicted", "confidence": 0.7}]
     first = apply_grounding_rules(findings, [], answers, 0.2, ["payment"], 1)
     assert [v["findingId"] for v in first["violations"]] == ["fd_01"]
@@ -117,6 +159,9 @@ def test_root_cause_reconciliation() -> None:
 def test_narratives_cite_their_evidence() -> None:
     evidence = [ev("ev_01", "getWebhookDeliveries", "WEBHOOK", lastHttpStatus=500, finalStatus="FAILED", attempts=3)]
     out = narrative_for("WEBHOOK_PROCESSING_FAILURE", evidence)
-    assert out == {"text": "The captured webhook failed with HTTP 500 after 3 attempt(s) [ev_01].", "citedIds": ["ev_01"]}
+    assert out == {
+        "text": "The captured webhook failed with HTTP 500 after 3 attempt(s) [ev_01].",
+        "citedIds": ["ev_01"],
+    }
     assert narrative_for("UNKNOWN", [])["citedIds"] == []
     assert narrative_for("WEBHOOK_PROCESSING_FAILURE", [])["citedIds"] == []

@@ -45,12 +45,14 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 
 [tool.ruff]
-line-length = 160
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
-ignore = ["UP046", "UP047"]
+# E501 is off on purpose: `ruff format` wraps code at 120 columns, and the only lines left over are long message strings,
+# which cannot be split without changing readability. Comments and docstrings are wrapped to 120. Prompt text is hashed into REPLAY keys, so it is never re-wrapped.
+ignore = ["E501", "UP046", "UP047"]
 
 [tool.pyright]
 include = ["src", "tests"]
@@ -59,19 +61,7 @@ reportMissingTypeStubs = false
 pythonVersion = "3.12"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E501"]
 "migrations/*" = ["I001"]
-"src/payops/db/models.py" = ["E501"]
-"src/payops/domain/**/*.py" = ["E501"]
-"src/payops/infra/*.py" = ["E501"]
-"src/payops/services/*.py" = ["E501"]
-"src/payops/api/*.py" = ["E501"]
-"src/payops/dto/*.py" = ["E501"]
-"src/payops/simulator/*.py" = ["E501"]
-"src/payops/agent_tools/*.py" = ["E501"]
-"src/payops/evals/*.py" = ["E501"]
-"src/payops/services/writes/*.py" = ["E501"]
-"src/payops/auth/*.py" = ["E501"]
 
 [[tool.pyright.executionEnvironments]]
 root = "tests"

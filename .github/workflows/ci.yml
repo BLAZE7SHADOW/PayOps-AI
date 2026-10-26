@@ -53,6 +53,7 @@ jobs:
           cache-dependency-glob: python/${{ matrix.project }}/uv.lock
       - run: uv sync --frozen
       - run: uv run ruff check .
+      - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest -q
       # The 15 golden scenarios through the real API process, replaying recorded model responses.

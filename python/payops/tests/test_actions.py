@@ -41,10 +41,27 @@ def act(type_: str, **params: Any) -> Any:
 
 def case_row(**o: Any) -> Case:
     base: dict[str, Any] = dict(
-        id="case_1", display_id="PAY-0001", fingerprint="PAYMENT_MISMATCH:pay_1", type="PAYMENT_MISMATCH", severity="HIGH", priority=1,
-        status="OPEN", amount_minor=1_249_900, rule_ids=["D1_CAPTURED_NOT_PAID"], matrix={}, mismatched=[],
-        entity_refs={"orderId": "ord_1", "paymentId": "pay_1", "gwPaymentId": "gwp_1"}, signals={}, assignee_id=None, due_at=None,
-        active_run_id=None, resolution=None, last_detected_at=NOW, opened_at=NOW, resolved_at=None, updated_at=NOW,
+        id="case_1",
+        display_id="PAY-0001",
+        fingerprint="PAYMENT_MISMATCH:pay_1",
+        type="PAYMENT_MISMATCH",
+        severity="HIGH",
+        priority=1,
+        status="OPEN",
+        amount_minor=1_249_900,
+        rule_ids=["D1_CAPTURED_NOT_PAID"],
+        matrix={},
+        mismatched=[],
+        entity_refs={"orderId": "ord_1", "paymentId": "pay_1", "gwPaymentId": "gwp_1"},
+        signals={},
+        assignee_id=None,
+        due_at=None,
+        active_run_id=None,
+        resolution=None,
+        last_detected_at=NOW,
+        opened_at=NOW,
+        resolved_at=None,
+        updated_at=NOW,
     )
     return Case(**{**base, **o})
 
@@ -62,7 +79,10 @@ def post(a: Any, s: CaseState) -> list[tuple[str, bool]]:
 
 
 def reversed_ledger() -> list[Any]:
-    return [*capture_journal(1_249_900), *(_flip(leg, i) for i, leg in enumerate(capture_journal(1_249_900, journal_id="jrn_r")))]
+    return [
+        *capture_journal(1_249_900),
+        *(_flip(leg, i) for i, leg in enumerate(capture_journal(1_249_900, journal_id="jrn_r"))),
+    ]
 
 
 def _flip(leg: Any, i: int) -> Any:
@@ -93,12 +113,18 @@ REPLAY = act("REPLAY_WEBHOOK_EVENT", eventId="evt_1")
 def test_replay_needs_an_undelivered_event_of_this_case() -> None:
     assert pre(REPLAY, state(captured_order_failed_snapshot())) == []
     assert pre(REPLAY, state(healthy_snapshot())) == ["Event evt_1 (payment.captured) was already delivered."]
-    assert "does not belong" in pre(act("REPLAY_WEBHOOK_EVENT", eventId="evt_other"), state(captured_order_failed_snapshot()))[0]
+    assert (
+        "does not belong"
+        in pre(act("REPLAY_WEBHOOK_EVENT", eventId="evt_other"), state(captured_order_failed_snapshot()))[0]
+    )
     assert len(pre(REPLAY, state(None))) == 1
 
 
 def test_replay_passes_only_when_delivered_and_the_payment_mirrors_the_gateway() -> None:
-    assert post(REPLAY, state(captured_order_failed_snapshot())) == [("a0.webhook.delivery", False), ("a0.payment.status", False)]
+    assert post(REPLAY, state(captured_order_failed_snapshot())) == [
+        ("a0.webhook.delivery", False),
+        ("a0.payment.status", False),
+    ]
     assert post(REPLAY, state(healthy_snapshot())) == [("a0.webhook.delivery", True), ("a0.payment.status", True)]
 
 
@@ -122,7 +148,10 @@ POST = act("POST_LEDGER_ENTRY", paymentId="pay_1", amountMinor=1_249_900)
 def test_post_ledger_refuses_a_second_credit_and_a_wrong_amount() -> None:
     assert pre(POST, state(captured_order_failed_snapshot())) == []
     assert pre(POST, state(healthy_snapshot())) == ["A capture credit of ₹12,499.00 is already posted for pay_1."]
-    assert "does not match the gateway capture" in pre(act("POST_LEDGER_ENTRY", paymentId="pay_1", amountMinor=100), state(captured_order_failed_snapshot()))[0]
+    assert (
+        "does not match the gateway capture"
+        in pre(act("POST_LEDGER_ENTRY", paymentId="pay_1", amountMinor=100), state(captured_order_failed_snapshot()))[0]
+    )
 
 
 def test_post_ledger_wants_exactly_one_capture_journal_of_the_amount() -> None:
@@ -170,7 +199,12 @@ def test_refund_is_capped_at_the_refundable_balance_counting_pending_refunds() -
 def test_refund_refuses_payments_that_are_not_captured_or_not_on_this_order() -> None:
     refunded = with_snapshot(healthy_snapshot(), gateway=[gw_payment(status="REFUNDED", refunded_minor=1_249_900)])
     assert "is REFUNDED" in pre(refund(100), state(refunded))[0]
-    assert "does not belong" in pre(act("INITIATE_REFUND", gwPaymentId="gwp_x", amountMinor=100, reason="x y z"), state(healthy_snapshot()))[0]
+    assert (
+        "does not belong"
+        in pre(act("INITIATE_REFUND", gwPaymentId="gwp_x", amountMinor=100, reason="x y z"), state(healthy_snapshot()))[
+            0
+        ]
+    )
 
 
 def test_refund_checks_the_gateway_refund_and_our_mirror() -> None:
@@ -180,7 +214,11 @@ def test_refund_checks_the_gateway_refund_and_our_mirror() -> None:
         gw_refunds=[gw_refund(amount_minor=500_000)],
         refunds=[refund_row(amount_minor=500_000, gw_refund_id="gwr_1", status="PROCESSED", reason="Order cancelled")],
     )
-    assert post(refund(500_000), state(after)) == [("a0.refund.gateway", True), ("a0.refund.internal", True), ("a0.refund.balance", True)]
+    assert post(refund(500_000), state(after)) == [
+        ("a0.refund.gateway", True),
+        ("a0.refund.internal", True),
+        ("a0.refund.balance", True),
+    ]
     assert [p for _, p in post(refund(500_000), state(healthy_snapshot()))] == [False, False, True]
 
 
@@ -197,15 +235,24 @@ def test_sync_needs_a_linked_refund_whose_gateway_status_is_final() -> None:
     assert pre(SYNC, state(stuck)) == []
     pending = with_snapshot(stuck, gw_refunds=[gw_refund(status="PENDING", processed_at=None)])
     assert pre(SYNC, state(pending)) == ["The gateway still shows refund gwr_1 as PENDING."]
-    assert "never sent to the gateway" in pre(SYNC, state(with_snapshot(stuck, refunds=[refund_row(gw_refund_id=None)])))[0]
-    assert pre(SYNC, state(with_snapshot(stuck, refunds=[refund_row(gw_refund_id="gwr_1", status="PROCESSED")]))) == ["Refund rfd_1 is already PROCESSED."]
+    assert (
+        "never sent to the gateway"
+        in pre(SYNC, state(with_snapshot(stuck, refunds=[refund_row(gw_refund_id=None)])))[0]
+    )
+    assert pre(SYNC, state(with_snapshot(stuck, refunds=[refund_row(gw_refund_id="gwr_1", status="PROCESSED")]))) == [
+        "Refund rfd_1 is already PROCESSED."
+    ]
 
 
 def test_sync_checks_status_and_the_refund_journal() -> None:
     stuck = stuck_snapshot()
     assert post(SYNC, state(stuck)) == [("a0.refund.status", False), ("a0.ledger.refundJournal", False)]
     refund_leg = _relabel(capture_journal(345_000, journal_id="jrn_rf", refund_id="rfd_1"), "led_rf")
-    synced = with_snapshot(stuck, refunds=[refund_row(gw_refund_id="gwr_1", status="PROCESSED")], ledger=[*capture_journal(1_249_900), *refund_leg])
+    synced = with_snapshot(
+        stuck,
+        refunds=[refund_row(gw_refund_id="gwr_1", status="PROCESSED")],
+        ledger=[*capture_journal(1_249_900), *refund_leg],
+    )
     assert post(SYNC, state(synced)) == [("a0.refund.status", True), ("a0.ledger.refundJournal", True)]
 
 
@@ -216,14 +263,28 @@ LINES = [settlement_line(gw_payment(), MERCHANT, fee_bps=300)]
 
 def make_dispute(**o: Any) -> Dispute:
     base: dict[str, Any] = dict(
-        id="dsp_1", type="SETTLEMENT", batch_id="stb_1", gw_payment_id="gwp_1", amount_minor=DIFF, status="OPEN", reason="short",
-        resolution_id=None, created_at=NOW, updated_at=NOW,
+        id="dsp_1",
+        type="SETTLEMENT",
+        batch_id="stb_1",
+        gw_payment_id="gwp_1",
+        amount_minor=DIFF,
+        status="OPEN",
+        reason="short",
+        resolution_id=None,
+        created_at=NOW,
+        updated_at=NOW,
     )
     return Dispute(**{**base, **o})
 
 
 def batch(disputes: list[Dispute] | None = None) -> BatchState:
-    data = BatchData(settlement=settlement_row(status="MISMATCH"), lines=LINES, merchant=MERCHANT, payments_by_gw={}, disputes=disputes or [])
+    data = BatchData(
+        settlement=settlement_row(status="MISMATCH"),
+        lines=LINES,
+        merchant=MERCHANT,
+        payments_by_gw={},
+        disputes=disputes or [],
+    )
     return BatchState(data, check_batch(data.settlement.id, data.lines, data.merchant, data.disputes))
 
 
@@ -235,7 +296,9 @@ def test_dispute_needs_a_mismatched_batch_the_exact_diff_and_no_open_dispute() -
     assert pre(DISPUTE_ACTION, state(None, batch=batch())) == []
     wrong = act("RAISE_SETTLEMENT_DISPUTE", batchId="stb_1", amountMinor=DIFF + 1, gwPaymentId="gwp_1")
     assert "does not match the batch difference" in pre(wrong, state(None, batch=batch()))[0]
-    assert pre(DISPUTE_ACTION, state(None, batch=batch([make_dispute()]))) == ["Batch stb_1 already has an open dispute (dsp_1)."]
+    assert pre(DISPUTE_ACTION, state(None, batch=batch([make_dispute()]))) == [
+        "Batch stb_1 already has an open dispute (dsp_1)."
+    ]
     assert "not this case's settlement batch" in pre(DISPUTE_ACTION, state(None))[0]
 
 
@@ -270,7 +333,11 @@ def test_options_offer_all_nine_actions_and_recommend_replay_for_a_captured_fail
     assert len(options) == 9
     assert [o.type for o in options if o.recommended] == ["REPLAY_WEBHOOK_EVENT"]
     refund_option = next(o for o in options if o.type == "INITIATE_REFUND")
-    assert (refund_option.editable, refund_option.max_amount_minor, refund_option.available) == (["amountMinor", "reason"], 1_249_900, True)
+    assert (refund_option.editable, refund_option.max_amount_minor, refund_option.available) == (
+        ["amountMinor", "reason"],
+        1_249_900,
+        True,
+    )
     sync = next(o for o in options if o.type == "SYNC_REFUND_STATUS")
     assert sync.available is False and sync.unavailable_reason
     assert all("—" not in o.summary for o in options)
@@ -279,7 +346,10 @@ def test_options_offer_all_nine_actions_and_recommend_replay_for_a_captured_fail
 def test_options_recommend_mark_paid_and_ledger_once_a_replay_failed() -> None:
     s = captured_order_failed_snapshot()
     history = [AttemptHistory(["REPLAY_WEBHOOK_EVENT"], "VALIDATED", "FAIL")]
-    assert [o.type for o in action_options(state(s), history) if o.recommended] == ["MARK_ORDER_PAID", "POST_LEDGER_ENTRY"]
+    assert [o.type for o in action_options(state(s), history) if o.recommended] == [
+        "MARK_ORDER_PAID",
+        "POST_LEDGER_ENTRY",
+    ]
     s.order.locked_reason = "VERSION_CONFLICT"
     # `locked_reason` is simulator fault injection; a person could not see it, so it must not change advice.
     assert [o.type for o in action_options(state(s)) if o.recommended] == ["REPLAY_WEBHOOK_EVENT"]
@@ -291,7 +361,9 @@ def test_options_target_the_extra_capture_for_a_duplicate() -> None:
     options = action_options(state(s, case=case_row(type="DUPLICATE")))
     refund_option = next(o for o in options if o.type == "INITIATE_REFUND")
     assert refund_option.recommended is True
-    assert refund_option.action.params.gw_payment_id == "gwp_2" and refund_option.action.params.amount_minor == 1_249_900
+    assert (
+        refund_option.action.params.gw_payment_id == "gwp_2" and refund_option.action.params.amount_minor == 1_249_900
+    )
     assert refund_option.to_json()["action"]["params"]["gwPaymentId"] == "gwp_2"  # type: ignore[index]
 
 
@@ -304,7 +376,9 @@ def test_idempotency_key_is_stable_across_key_order_and_differs_by_resolution_in
     assert len(idempotency_key("rsl_1", 0, a)) == 64
     assert idempotency_key("rsl_2", 0, a) != idempotency_key("rsl_1", 0, a)
     assert idempotency_key("rsl_1", 1, a) != idempotency_key("rsl_1", 0, a)
-    assert idempotency_key("rsl_1", 0, act("INITIATE_REFUND", gwPaymentId="gwp_1", amountMinor=101, reason="x y z")) != idempotency_key("rsl_1", 0, a)
+    assert idempotency_key(
+        "rsl_1", 0, act("INITIATE_REFUND", gwPaymentId="gwp_1", amountMinor=101, reason="x y z")
+    ) != idempotency_key("rsl_1", 0, a)
 
 
 def test_a_failed_delivery_stops_being_a_mismatch_once_the_payment_record_caught_up() -> None:
@@ -338,7 +412,12 @@ def test_a_broken_case_fails_the_matrix_per_system_and_detection() -> None:
     from payops.domain.validation import case_invariants, verdict_of
 
     checks = case_invariants(state(captured_order_failed_snapshot()))
-    assert [(c.id, c.passed) for c in checks] == [("inv.matrix.ORDER", False), ("inv.matrix.LEDGER", False), ("inv.matrix.WEBHOOK", False), ("inv.detection", False)]
+    assert [(c.id, c.passed) for c in checks] == [
+        ("inv.matrix.ORDER", False),
+        ("inv.matrix.LEDGER", False),
+        ("inv.matrix.WEBHOOK", False),
+        ("inv.detection", False),
+    ]
     assert checks[1].actual == "MISSING: No capture credit for ₹12,499.00"
     assert "D1_CAPTURED_NOT_PAID" in checks[3].actual
     assert verdict_of(checks) == "PARTIAL"  # only invariants failed
@@ -359,6 +438,10 @@ def test_an_open_dispute_lets_a_settlement_case_pass_with_only_settlement_differ
     base = healthy_snapshot(1_180_000)
     line = settlement_line(base.gateway[0], base.merchant, fee_bps=300)
     snap = with_snapshot(base, settlement_lines=[line])
-    covered = state(snap, case=case_row(type="SETTLEMENT_MISMATCH", fingerprint="SETTLEMENT_MISMATCH:stb_1"), batch=batch([make_dispute()]))
+    covered = state(
+        snap,
+        case=case_row(type="SETTLEMENT_MISMATCH", fingerprint="SETTLEMENT_MISMATCH:stb_1"),
+        batch=batch([make_dispute()]),
+    )
     checks = case_invariants(covered)
     assert checks[0].id == "inv.matrix" and checks[0].passed and "covered by an open dispute" in checks[0].actual

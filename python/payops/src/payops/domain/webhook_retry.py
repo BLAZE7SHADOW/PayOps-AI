@@ -1,5 +1,6 @@
-"""Retry policy for inbound webhooks that our consumer failed to process (D072). A failed event is retried after 1 minute, 5 minutes, 30 minutes,
-then 2 hours. After WEBHOOK_MAX_ATTEMPTS total attempts (the first delivery counts) it is marked DEAD and only a person can replay it."""
+"""Retry policy for inbound webhooks that our consumer failed to process (D072). A failed event is retried after 1
+minute, 5 minutes, 30 minutes, then 2 hours. After WEBHOOK_MAX_ATTEMPTS total attempts (the first delivery counts) it is
+marked DEAD and only a person can replay it."""
 
 from __future__ import annotations
 

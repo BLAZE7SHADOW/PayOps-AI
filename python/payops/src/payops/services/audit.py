@@ -1,4 +1,5 @@
-"""The append-only audit trail (packages/core audit.service.ts). Pass the caller's session so the audit row commits with the change it describes."""
+"""The append-only audit trail (packages/core audit.service.ts). Pass the caller's session so the audit row commits with
+the change it describes."""
 
 from __future__ import annotations
 
@@ -21,8 +22,22 @@ from ..ports import Clock
 
 VERIFY_PAGE = 1000
 EXPORT_COLUMNS = [
-    "seq", "id", "at", "actor_type", "actor_id", "actor_name", "action", "entity_type", "entity_id", "case_id", "run_id", "summary", "before", "after",
-    "prev_hash", "hash",
+    "seq",
+    "id",
+    "at",
+    "actor_type",
+    "actor_id",
+    "actor_name",
+    "action",
+    "entity_type",
+    "entity_id",
+    "case_id",
+    "run_id",
+    "summary",
+    "before",
+    "after",
+    "prev_hash",
+    "hash",
 ]
 
 
@@ -40,7 +55,8 @@ WEBHOOK_CONSUMER_ACTOR = AuditActor("SYSTEM", "webhook-consumer", "Webhook consu
 
 @dataclass(frozen=True)
 class WriteContext:
-    """Who is making a write and on behalf of which case or run. Every write service takes one so its audit rows land in the case's trail."""
+    """Who is making a write and on behalf of which case or run. Every write service takes one so its audit rows land in
+    the case's trail."""
 
     actor: AuditActor
     case_id: str | None = None
@@ -63,17 +79,43 @@ class AuditInput:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-def audit_from(ctx: WriteContext, *, action: str, entity_type: str, entity_id: str, summary: str, before: Any = None, after: Any = None) -> AuditInput:
+def audit_from(
+    ctx: WriteContext,
+    *,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    summary: str,
+    before: Any = None,
+    after: Any = None,
+) -> AuditInput:
     """Convenience for writing an audit row from a WriteContext."""
     return AuditInput(
-        ctx.actor.actor_type, ctx.actor.actor_id, ctx.actor.actor_name, action, entity_type, entity_id, summary, before, after, ctx.case_id, ctx.run_id
+        ctx.actor.actor_type,
+        ctx.actor.actor_id,
+        ctx.actor.actor_name,
+        action,
+        entity_type,
+        entity_id,
+        summary,
+        before,
+        after,
+        ctx.case_id,
+        ctx.run_id,
     )
 
 
 def to_audit_item(r: AuditEvent) -> AuditEventItem:
     return AuditEventItem(
-        id=r.id, at=to_iso(r.at), actor_type=r.actor_type, actor=ActorRef(id=r.actor_id, name=r.actor_name), action=r.action, entity_type=r.entity_type,
-        entity_id=r.entity_id, summary=r.summary, run_id=r.run_id,
+        id=r.id,
+        at=to_iso(r.at),
+        actor_type=r.actor_type,
+        actor=ActorRef(id=r.actor_id, name=r.actor_name),
+        action=r.action,
+        entity_type=r.entity_type,
+        entity_id=r.entity_id,
+        summary=r.summary,
+        run_id=r.run_id,
     )
 
 
@@ -86,15 +128,31 @@ class AuditService:
         self._clock = clock
 
     async def record(self, session: AsyncSession, inp: AuditInput) -> None:
-        """Appends one row to the chain. The caller owns the transaction, so the row commits with the change it describes."""
+        """Appends one row to the chain. The caller owns the transaction, so the row commits with the change it
+        describes."""
         row = AuditEvent(
-            id=new_id("audit"), at=self._clock.now(), actor_type=inp.actor_type, actor_id=inp.actor_id, actor_name=inp.actor_name, action=inp.action,
-            entity_type=inp.entity_type, entity_id=inp.entity_id, summary=inp.summary, seq=0, prev_hash="", hash="", before=inp.before, after=inp.after,
-            run_id=inp.run_id, case_id=inp.case_id,
+            id=new_id("audit"),
+            at=self._clock.now(),
+            actor_type=inp.actor_type,
+            actor_id=inp.actor_id,
+            actor_name=inp.actor_name,
+            action=inp.action,
+            entity_type=inp.entity_type,
+            entity_id=inp.entity_id,
+            summary=inp.summary,
+            seq=0,
+            prev_hash="",
+            hash="",
+            before=inp.before,
+            after=inp.after,
+            run_id=inp.run_id,
+            case_id=inp.case_id,
         )
         await append_audit_row(session, row)
 
-    async def verify_chain(self, session: AsyncSession, expected_head: tuple[int, str] | None = None) -> AuditChainStatus:
+    async def verify_chain(
+        self, session: AsyncSession, expected_head: tuple[int, str] | None = None
+    ) -> AuditChainStatus:
         """Walks the whole chain in seq order and reports the first broken row (D077)."""
         after: tuple[int, str] | None = None
         checked = 0
@@ -116,12 +174,21 @@ class AuditService:
         return self._status(True, checked, after, None, None, None)
 
     @staticmethod
-    def _status(ok: bool, checked: int, head: tuple[int, str] | None, seq: int | None, id_: str | None, reason: str | None) -> AuditChainStatus:
+    def _status(
+        ok: bool, checked: int, head: tuple[int, str] | None, seq: int | None, id_: str | None, reason: str | None
+    ) -> AuditChainStatus:
         return AuditChainStatus(
-            ok=ok, checked=checked, head=ChainHead(seq=head[0], hash=head[1]) if head else None, broken_at_seq=seq, broken_id=id_, reason=reason
+            ok=ok,
+            checked=checked,
+            head=ChainHead(seq=head[0], hash=head[1]) if head else None,
+            broken_at_seq=seq,
+            broken_id=id_,
+            reason=reason,
         )
 
-    async def export_csv(self, session: AsyncSession, case_id: str | None = None, entity_id: str | None = None) -> AsyncIterator[str]:
+    async def export_csv(
+        self, session: AsyncSession, case_id: str | None = None, entity_id: str | None = None
+    ) -> AsyncIterator[str]:
         """CSV lines for the whole log (or one case or entity), oldest first, a page at a time so memory stays flat."""
         yield csv_line(EXPORT_COLUMNS)
         after_seq = 0
@@ -131,14 +198,32 @@ class AuditService:
                 conditions.append(AuditEvent.case_id == case_id)
             if entity_id:
                 conditions.append(AuditEvent.entity_id == entity_id)
-            rows = (await session.scalars(select(AuditEvent).where(and_(*conditions)).order_by(asc(AuditEvent.seq)).limit(VERIFY_PAGE))).all()
+            rows = (
+                await session.scalars(
+                    select(AuditEvent).where(and_(*conditions)).order_by(asc(AuditEvent.seq)).limit(VERIFY_PAGE)
+                )
+            ).all()
             if not rows:
                 return
             for r in rows:
                 yield csv_line(
                     [
-                        r.seq, r.id, to_iso(r.at), r.actor_type, r.actor_id, r.actor_name, r.action, r.entity_type, r.entity_id, r.case_id, r.run_id,
-                        r.summary, r.before, r.after, r.prev_hash, r.hash,
+                        r.seq,
+                        r.id,
+                        to_iso(r.at),
+                        r.actor_type,
+                        r.actor_id,
+                        r.actor_name,
+                        r.action,
+                        r.entity_type,
+                        r.entity_id,
+                        r.case_id,
+                        r.run_id,
+                        r.summary,
+                        r.before,
+                        r.after,
+                        r.prev_hash,
+                        r.hash,
                     ]
                 )
             after_seq = rows[-1].seq
@@ -158,8 +243,19 @@ class AuditService:
 
             at = datetime.fromisoformat(cursor["at"])
             conditions.append(or_(AuditEvent.at < at, and_(AuditEvent.at == at, AuditEvent.id < cursor["id"])))
-        rows = list((await session.scalars(select(AuditEvent).where(*conditions).order_by(desc(AuditEvent.at), desc(AuditEvent.id)).limit(query.limit + 1))).all())
+        rows = list(
+            (
+                await session.scalars(
+                    select(AuditEvent)
+                    .where(*conditions)
+                    .order_by(desc(AuditEvent.at), desc(AuditEvent.id))
+                    .limit(query.limit + 1)
+                )
+            ).all()
+        )
         page = rows[: query.limit]
         last = page[-1] if page else None
-        next_cursor = encode_cursor({"at": to_iso(last.at), "id": last.id}) if len(rows) > query.limit and last else None
+        next_cursor = (
+            encode_cursor({"at": to_iso(last.at), "id": last.id}) if len(rows) > query.limit and last else None
+        )
         return Page[AuditEventItem](items=[to_audit_item(r) for r in page], next_cursor=next_cursor)

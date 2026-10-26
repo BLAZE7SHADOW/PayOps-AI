@@ -4,7 +4,8 @@ from .base import CamelModel
 
 
 class PerformanceMetrics(CamelModel):
-    """Last-7-day performance. A null value means there was nothing to measure, which the UI shows as "No data", never as zero."""
+    """Last-7-day performance. A null value means there was nothing to measure, which the UI shows as "No data", never
+    as zero."""
 
     resolution_time_median_ms: int | None
     resolved_count: int

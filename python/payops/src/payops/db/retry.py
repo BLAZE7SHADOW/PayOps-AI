@@ -1,6 +1,7 @@
-"""Retry for a genuine Postgres serialization failure (SQLSTATE 40001), the error a SERIALIZABLE or REPEATABLE READ transaction gets when it loses a
-write-write race it cannot detect until commit. Standard guidance is to retry the whole transaction from scratch. Only 40001 is retried; a broken
-query, a constraint violation or an outage fails at once. (packages/core db/retry.ts)"""
+"""Retry for a genuine Postgres serialization failure (SQLSTATE 40001), the error a SERIALIZABLE or REPEATABLE READ
+transaction gets when it loses a write-write race it cannot detect until commit. Standard guidance is to retry the whole
+transaction from scratch. Only 40001 is retried; a broken query, a constraint violation or an outage fails at once.
+(packages/core db/retry.ts)"""
 
 from __future__ import annotations
 

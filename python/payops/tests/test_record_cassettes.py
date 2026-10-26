@@ -37,7 +37,9 @@ def test_upsert_manifest_replaces_a_pair_and_sorts_by_seed(tmp_path: Path) -> No
 
 
 @pytest.mark.asyncio
-async def test_the_original_three_runs_replay_through_the_recorder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_original_three_runs_replay_through_the_recorder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     directory = tmp_path / "cassettes"
     shutil.copytree(REPO_CASSETTES, directory)
     monkeypatch.setenv("CASSETTE_DIR", str(directory))

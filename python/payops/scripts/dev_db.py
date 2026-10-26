@@ -1,5 +1,5 @@
-"""A local Postgres for development, with no install and no Docker (the `pgserver` package). It keeps its data in `~/.payops-devdb` (a path without spaces,
-which pgserver needs) and runs until you stop it.
+"""A local Postgres for development, with no install and no Docker (the `pgserver` package). It keeps its data in
+`~/.payops-devdb` (a path without spaces, which pgserver needs) and runs until you stop it.
 
     uv run python scripts/dev_db.py        # prints DATABASE_URL, then waits
 

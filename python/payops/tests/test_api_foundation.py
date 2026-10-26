@@ -25,7 +25,10 @@ async def client(engine: AsyncEngine) -> AsyncIterator[httpx.AsyncClient]:
     async def echo(body: dict[str, int]) -> dict[str, int]:
         return body
 
-    async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://t") as c:
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://t") as c,
+    ):
         yield c
 
 
@@ -39,7 +42,9 @@ async def test_health_checks_the_database_and_the_agent_store(client: httpx.Asyn
 async def test_unknown_routes_use_the_shared_error_shape(client: httpx.AsyncClient) -> None:
     res = await client.get("/api/nope", headers={"x-request-id": "req-abcdef123"})
     assert res.status_code == 404
-    assert res.json() == {"error": {"code": "NOT_FOUND", "message": "No route for GET /api/nope", "requestId": "req-abcdef123"}}
+    assert res.json() == {
+        "error": {"code": "NOT_FOUND", "message": "No route for GET /api/nope", "requestId": "req-abcdef123"}
+    }
 
 
 async def test_app_errors_carry_their_status_and_details(client: httpx.AsyncClient) -> None:

@@ -38,7 +38,8 @@ class ChainHead(CamelModel):
 
 
 class AuditChainStatus(CamelModel):
-    """Result of walking the hash chain (D077). `head` is the newest verified link; keep it outside the database to detect a cut tail."""
+    """Result of walking the hash chain (D077). `head` is the newest verified link; keep it outside the database to
+    detect a cut tail."""
 
     ok: bool
     checked: int

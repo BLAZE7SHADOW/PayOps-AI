@@ -75,7 +75,9 @@ def seeded_template_uri(pg_uri: str, template_uri: str) -> str:
         conn.execute("SET session_replication_role = replica")
         for table, rows in load_contract_dump()["tables"].items():
             for row in rows:
-                conn.execute(f'INSERT INTO "{table}" SELECT * FROM jsonb_populate_record(NULL::"{table}", %s)', [Jsonb(row)])
+                conn.execute(
+                    f'INSERT INTO "{table}" SELECT * FROM jsonb_populate_record(NULL::"{table}", %s)', [Jsonb(row)]
+                )
     return url
 
 

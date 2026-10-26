@@ -1,8 +1,9 @@
-"""Golden scenarios (docs/03 §17). Each one pins a simulator scenario and seed to a driver and a set of expectations. Two drivers exist: `cassette` replays
-real recorded Gemini and Jev responses (`fixtures/cassettes/*.jsonl`), `fixture` uses hand-written deterministic answers for scenarios with no recording.
+"""Golden scenarios (docs/03 §17). Each one pins a simulator scenario and seed to a driver and a set of expectations.
+Two drivers exist: `cassette` replays real recorded Gemini and Jev responses (`fixtures/cassettes/*.jsonl`), `fixture`
+uses hand-written deterministic answers for scenarios with no recording.
 
-Root cause is never a hard gate: the diagnosis is a model guess, so it is only measured. `status`, `verdict` and `tier` ARE hard gates: they come from the
-policy, executor and validator, which are code."""
+Root cause is never a hard gate: the diagnosis is a model guess, so it is only measured. `status`, `verdict` and `tier`
+ARE hard gates: they come from the policy, executor and validator, which are code."""
 
 from __future__ import annotations
 
@@ -24,7 +25,8 @@ class Golden:
     verdict: str | None
     expected_root_cause: str
     tier: str | None = None
-    #: Documented, known mismatch of the recorded diagnosis, so the report explains a miss instead of flagging a regression.
+    #: Documented, known mismatch of the recorded diagnosis, so the report explains a miss instead of flagging a
+    #: regression.
     known_root_cause_caveat: str | None = None
     allowed_action_sets: tuple[tuple[str, ...], ...] | None = None
     forbidden_action_types: tuple[str, ...] = ()

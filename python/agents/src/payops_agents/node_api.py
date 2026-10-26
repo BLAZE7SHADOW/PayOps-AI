@@ -1,8 +1,8 @@
-"""The only way the graph reaches data or authority: loading the case, running tools, the policy gate, execute, validate, close, and recording steps.
+"""The only way the graph reaches data or authority: loading the case, running tools, the policy gate, execute,
+validate, close, and recording steps.
 
-The graph depends on this interface and never on the backend, so it never opens a connection to the application tables. The backend implements it
-in process (`payops.agent_tools.node_api.InProcessNodeApi`).
-"""
+The graph depends on this interface and never on the backend, so it never opens a connection to the application tables.
+The backend implements it in process (`payops.agent_tools.node_api.InProcessNodeApi`)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ from typing import Any, Protocol
 class NodeApiPort(Protocol):
     async def case_brief(self, case_id: str) -> dict[str, Any]: ...
     async def run_tools(self, case_id: str, tools: list[str]) -> list[dict[str, Any]]: ...
-    async def proposal(self, case_id: str, diagnosis: dict[str, Any], history: list[dict[str, Any]]) -> dict[str, Any]: ...
+    async def proposal(
+        self, case_id: str, diagnosis: dict[str, Any], history: list[dict[str, Any]]
+    ) -> dict[str, Any]: ...
     async def policy_gate(
         self, case_id: str, run_id: str, proposal: dict[str, Any], diagnosis_confidence: float
     ) -> dict[str, Any]: ...

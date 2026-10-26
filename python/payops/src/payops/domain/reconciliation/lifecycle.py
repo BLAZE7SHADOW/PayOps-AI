@@ -1,5 +1,5 @@
-"""Merged, chronological lifecycle of one order across every system. This is what an analyst would otherwise assemble by hand from four
-dashboards. Titles are plain ops language."""
+"""Merged, chronological lifecycle of one order across every system. This is what an analyst would otherwise assemble by
+hand from four dashboards. Titles are plain ops language."""
 
 from __future__ import annotations
 
@@ -33,13 +33,23 @@ def _order(s: OrderSnapshot) -> list[LifecycleEvent]:
     order = s.order
     timeline = order.timeline
     if not timeline or timeline[0]["from"] is not None:
-        out.append(_event(to_iso(order.created_at), "ORDER", "Order created", format_money(order.amount_minor), "neutral"))
+        out.append(
+            _event(to_iso(order.created_at), "ORDER", "Order created", format_money(order.amount_minor), "neutral")
+        )
     for t in timeline:
         reason = f" · {t['reason']}" if t.get("reason") else ""
         if t["from"] is None:
-            out.append(_event(t["at"], "ORDER", "Order created", f"{format_money(order.amount_minor)} · by {t['by']}", "neutral"))
+            out.append(
+                _event(
+                    t["at"], "ORDER", "Order created", f"{format_money(order.amount_minor)} · by {t['by']}", "neutral"
+                )
+            )
         else:
-            out.append(_event(t["at"], "ORDER", f"Order {t['from']} to {t['to']}", f"by {t['by']}{reason}", ORDER_TONE[t["to"]]))
+            out.append(
+                _event(
+                    t["at"], "ORDER", f"Order {t['from']} to {t['to']}", f"by {t['by']}{reason}", ORDER_TONE[t["to"]]
+                )
+            )
     return out
 
 
@@ -48,7 +58,9 @@ def _gateway(s: OrderSnapshot) -> list[LifecycleEvent]:
     captures = sorted((g for g in s.gateway if g.captured_at), key=lambda g: g.captured_at)  # type: ignore[arg-type,return-value]
     for g in s.gateway:
         card = f" · {g.card['network']} {g.card['last4']} ({g.card['country']})" if g.card else ""
-        out.append(_event(to_iso(g.created_at), "GATEWAY", "Gateway payment created", f"{g.id} · {g.method}{card}", "neutral"))
+        out.append(
+            _event(to_iso(g.created_at), "GATEWAY", "Gateway payment created", f"{g.id} · {g.method}{card}", "neutral")
+        )
         if g.status == "FAILED":
             out.append(_event(to_iso(g.created_at), "GATEWAY", "Gateway payment failed", g.id, "bad"))
     for index, g in enumerate(captures):
@@ -57,7 +69,9 @@ def _gateway(s: OrderSnapshot) -> list[LifecycleEvent]:
             _event(
                 to_iso(g.captured_at),  # type: ignore[arg-type]
                 "GATEWAY",
-                f"Captured {format_money(g.amount_minor)} again at gateway" if repeat else f"Captured {format_money(g.amount_minor)} at gateway",
+                f"Captured {format_money(g.amount_minor)} again at gateway"
+                if repeat
+                else f"Captured {format_money(g.amount_minor)} at gateway",
                 f"{g.id} · capture {index + 1} for this order" if repeat else g.id,
                 "bad" if repeat else "ok",
             )
@@ -75,8 +89,11 @@ def _webhooks(s: OrderSnapshot) -> list[LifecycleEvent]:
             attempt = f"Attempt {i + 1} of {total} · " if total > 1 else ""
             out.append(
                 _event(
-                    a.at, "WEBHOOK", f"{w.event} delivery failed" if failed else f"{w.event} delivered",
-                    f"{attempt}{code} · {group_indian(a.latency_ms)} ms", "bad" if failed else "ok",
+                    a.at,
+                    "WEBHOOK",
+                    f"{w.event} delivery failed" if failed else f"{w.event} delivered",
+                    f"{attempt}{code} · {group_indian(a.latency_ms)} ms",
+                    "bad" if failed else "ok",
                 )
             )
     return out
@@ -99,36 +116,74 @@ def _ledger(s: OrderSnapshot) -> list[LifecycleEvent]:
         else:
             title = "Capture posted to ledger"
         direction = "debit" if payable is not None and payable.direction == "DEBIT" else "credit"
-        out.append(_event(to_iso(first.posted_at), "LEDGER", title, f"{format_money(amount)} {direction} to MERCHANT_PAYABLE · {first.source}", "warn" if reversal else "ok"))
+        out.append(
+            _event(
+                to_iso(first.posted_at),
+                "LEDGER",
+                title,
+                f"{format_money(amount)} {direction} to MERCHANT_PAYABLE · {first.source}",
+                "warn" if reversal else "ok",
+            )
+        )
     return out
 
 
 def _refunds(s: OrderSnapshot) -> list[LifecycleEvent]:
     out: list[LifecycleEvent] = []
     for r in s.refunds:
-        out.append(_event(to_iso(r.requested_at), "REFUND", "Refund requested", f"{format_money(r.amount_minor)} · {r.reason}", "neutral"))
+        out.append(
+            _event(
+                to_iso(r.requested_at),
+                "REFUND",
+                "Refund requested",
+                f"{format_money(r.amount_minor)} · {r.reason}",
+                "neutral",
+            )
+        )
         if r.status in ("PROCESSED", "FAILED"):
             processed = r.status == "PROCESSED"
             out.append(
                 _event(
-                    to_iso(r.updated_at), "REFUND",
+                    to_iso(r.updated_at),
+                    "REFUND",
                     "Refund marked processed internally" if processed else "Refund failed internally",
-                    format_money(r.amount_minor), "ok" if processed else "bad",
+                    format_money(r.amount_minor),
+                    "ok" if processed else "bad",
                 )
             )
     for g in s.gw_refunds:
-        out.append(_event(to_iso(g.created_at), "REFUND", "Refund initiated at gateway", f"{g.id} · {format_money(g.amount_minor)}", "neutral"))
+        out.append(
+            _event(
+                to_iso(g.created_at),
+                "REFUND",
+                "Refund initiated at gateway",
+                f"{g.id} · {format_money(g.amount_minor)}",
+                "neutral",
+            )
+        )
         if g.status == "PROCESSED" and g.processed_at:
-            out.append(_event(to_iso(g.processed_at), "REFUND", "Refund processed at gateway", f"{g.id} · {format_money(g.amount_minor)}", "ok"))
+            out.append(
+                _event(
+                    to_iso(g.processed_at),
+                    "REFUND",
+                    "Refund processed at gateway",
+                    f"{g.id} · {format_money(g.amount_minor)}",
+                    "ok",
+                )
+            )
         elif g.status == "FAILED":
-            out.append(_event(to_iso(g.processed_at or g.created_at), "REFUND", "Refund failed at gateway", g.id, "bad"))
+            out.append(
+                _event(to_iso(g.processed_at or g.created_at), "REFUND", "Refund failed at gateway", g.id, "bad")
+            )
     return out
 
 
 def _settlement(s: OrderSnapshot) -> list[LifecycleEvent]:
     return [
         _event(
-            to_iso(line.settled_on), "SETTLEMENT", f"Settled in batch {line.batch_id}",
+            to_iso(line.settled_on),
+            "SETTLEMENT",
+            f"Settled in batch {line.batch_id}",
             f"Gross {format_money(line.gross_minor)} · fee {format_money(line.fee_minor)} · tax {format_money(line.tax_minor)} · net {format_money(line.net_minor)}",
             "neutral",
         )
@@ -146,7 +201,10 @@ def _risk(s: OrderSnapshot) -> list[LifecycleEvent]:
     codes = sorted({a.failure_code for a in failed if a.failure_code is not None})
     detail = " · ".join(
         part
-        for part in (f"Card countries: {', '.join(countries)}" if countries else None, f"Codes: {', '.join(codes)}" if codes else None)
+        for part in (
+            f"Card countries: {', '.join(countries)}" if countries else None,
+            f"Codes: {', '.join(codes)}" if codes else None,
+        )
         if part
     )
     return [_event(to_iso(last.at), "RISK", f"{len(failed)} failed payment attempts in {span_min} min", detail, "warn")]

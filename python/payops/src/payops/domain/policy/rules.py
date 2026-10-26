@@ -1,5 +1,6 @@
-"""Policy rules P0 to P12 (docs/03-agent-system.md §11). Each rule is a small pure function that either fires with a tier and a plain
-reason, or stays silent. The table shown to users is `POLICY_RULES` in `dto/policy.py` and must describe exactly this code."""
+"""Policy rules P0 to P12 (docs/03-agent-system.md §11). Each rule is a small pure function that either fires with a
+tier and a plain reason, or stays silent. The table shown to users is `POLICY_RULES` in `dto/policy.py` and must
+describe exactly this code."""
 
 from __future__ import annotations
 
@@ -95,14 +96,17 @@ def p2(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
 
 def p3(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
     if f.moves_money and f.money_minor > T.ops_refund_max_minor:
-        return _fire("P3", "MANAGER", f"Refund of {format_money(f.money_minor)} is over {format_money(T.ops_refund_max_minor)}.")
+        return _fire(
+            "P3", "MANAGER", f"Refund of {format_money(f.money_minor)} is over {format_money(T.ops_refund_max_minor)}."
+        )
     return None
 
 
 def p4(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
     if f.moves_money and T.auto_refund_max_minor < f.money_minor <= T.ops_refund_max_minor:
         return _fire(
-            "P4", "OPS",
+            "P4",
+            "OPS",
             f"Refund of {format_money(f.money_minor)} is over {format_money(T.auto_refund_max_minor)} and up to {format_money(T.ops_refund_max_minor)}.",
         )
     return None
@@ -113,7 +117,11 @@ def p5(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
         return None
     if f.is_agent and _confidence(inp) < T.auto_refund_min_confidence:
         return None
-    return _fire("P5", "AUTO", f"Refund of {format_money(f.money_minor)} is within {format_money(T.auto_refund_max_minor)} and risk is LOW.")
+    return _fire(
+        "P5",
+        "AUTO",
+        f"Refund of {format_money(f.money_minor)} is within {format_money(T.auto_refund_max_minor)} and risk is LOW.",
+    )
 
 
 def p6(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
@@ -157,7 +165,17 @@ def p12(inp: PolicyInput, f: PolicyFacts) -> PolicyReason | None:
 
 #: Evaluation order is display order; the outcome does not depend on it (strictest tier wins).
 POLICY_RULE_TABLE: Final[tuple[tuple[str, PolicyRule], ...]] = (
-    ("P0", p0), ("P1", p1), ("P2", p2), ("P3", p3), ("P4", p4), ("P5", p5), ("P6", p6), ("P7", p7), ("P8", p8), ("P9", p9), ("P10", p10),
+    ("P0", p0),
+    ("P1", p1),
+    ("P2", p2),
+    ("P3", p3),
+    ("P4", p4),
+    ("P5", p5),
+    ("P6", p6),
+    ("P7", p7),
+    ("P8", p8),
+    ("P9", p9),
+    ("P10", p10),
     # P11 is the default: evaluate_policy adds it when no other rule fired.
     ("P11", lambda inp, f: None),
     ("P12", p12),

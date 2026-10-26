@@ -1,5 +1,6 @@
-"""Encrypts small secrets (the TOTP seed) before they go into the database, so a copy of the table alone does not let anyone generate codes. AES-256-GCM:
-the auth tag makes any change to the stored text fail to open. The key is derived from the server's signing secret."""
+"""Encrypts small secrets (the TOTP seed) before they go into the database, so a copy of the table alone does not let
+anyone generate codes. AES-256-GCM: the auth tag makes any change to the stored text fail to open. The key is derived
+from the server's signing secret."""
 
 from __future__ import annotations
 
@@ -19,7 +20,9 @@ def seal_secret(plain: str, secret: str) -> str:
     iv = os.urandom(12)
     sealed = AESGCM(_key_from(secret)).encrypt(iv, plain.encode("utf-8"), None)
     data, tag = sealed[:-16], sealed[-16:]
-    return "$".join(["v1", base64.b64encode(iv).decode(), base64.b64encode(data).decode(), base64.b64encode(tag).decode()])
+    return "$".join(
+        ["v1", base64.b64encode(iv).decode(), base64.b64encode(data).decode(), base64.b64encode(tag).decode()]
+    )
 
 
 def open_secret(sealed: str, secret: str) -> str | None:

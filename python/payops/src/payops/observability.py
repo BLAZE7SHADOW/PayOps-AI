@@ -67,7 +67,14 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         if request.url.path != "/health":
             log.info(
                 "request",
-                extra={"fields": {"requestId": rid, "method": request.method, "path": request.url.path, "status": response.status_code,
-                                  "ms": round((time.perf_counter() - started) * 1000)}},
+                extra={
+                    "fields": {
+                        "requestId": rid,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status": response.status_code,
+                        "ms": round((time.perf_counter() - started) * 1000),
+                    }
+                },
             )
         return response

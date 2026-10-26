@@ -1,4 +1,5 @@
-"""Wording sent to Jev with each Choice question. It is part of the cassette key, so changing a string needs a re-recording."""
+"""Wording sent to Jev with each Choice question. It is part of the cassette key, so changing a string needs a
+re-recording."""
 
 from __future__ import annotations
 

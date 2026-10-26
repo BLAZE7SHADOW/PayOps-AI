@@ -1,9 +1,9 @@
 """Executes a resolution's actions in order. Every step:
-  1. claims an `executions` row by idempotency key (a replay finds the stored result instead),
-  2. re-checks preconditions on FRESH data (the world may have moved since the proposal),
-  3. runs the handler, records SUCCEEDED or FAILED, audits and publishes.
-Execution stops at the first FAILED step. Each step uses its own short transactions; nothing holds a transaction while calling the gateway.
-(packages/core execution/executor.service.ts)"""
+1. claims an `executions` row by idempotency key (a replay finds the stored result instead),
+2. re-checks preconditions on FRESH data (the world may have moved since the proposal),
+3. runs the handler, records SUCCEEDED or FAILED, audits and publishes. Execution stops at the first FAILED step. Each
+   step uses its own short transactions; nothing holds a transaction while calling the gateway. (packages/core
+   execution/executor.service.ts)"""
 
 from __future__ import annotations
 
@@ -45,7 +45,10 @@ class ExecutionOutcome:
 
 def _record_facts(state: CaseState) -> list[dict[str, Any]]:
     """Compact copy of the source records, kept so the case page can show before and after (D060)."""
-    return [{"system": r.system, "kind": r.kind, "id": r.id, "status": r.status, "amountMinor": r.amount_minor} for r in project_case_source_records(state).records]
+    return [
+        {"system": r.system, "kind": r.kind, "id": r.id, "status": r.status, "amountMinor": r.amount_minor}
+        for r in project_case_source_records(state).records
+    ]
 
 
 def _to_error(err: Exception) -> dict[str, str]:
@@ -55,7 +58,9 @@ def _to_error(err: Exception) -> dict[str, str]:
 
 
 class ExecutorService:
-    def __init__(self, deps: ExecDeps, audit: AuditService, events: EventPublisher, queries: ResolutionQueryService) -> None:
+    def __init__(
+        self, deps: ExecDeps, audit: AuditService, events: EventPublisher, queries: ResolutionQueryService
+    ) -> None:
         self._deps = deps
         self._sessions: async_sessionmaker[AsyncSession] = deps.sessions
         self._clock: Clock = deps.clock
@@ -85,14 +90,24 @@ class ExecutorService:
                 await s.execute(
                     pg_insert(Execution)
                     .values(
-                        id=new_id("execution"), idempotency_key=key, resolution_id=resolution.id, case_id=resolution.case_id, action_index=index,
-                        action=action.to_json(), status="STARTED", started_at=self._clock.now(),
+                        id=new_id("execution"),
+                        idempotency_key=key,
+                        resolution_id=resolution.id,
+                        case_id=resolution.case_id,
+                        action_index=index,
+                        action=action.to_json(),
+                        status="STARTED",
+                        started_at=self._clock.now(),
                     )
                     .on_conflict_do_nothing(index_elements=[Execution.idempotency_key])
                     .returning(Execution.id)
                 )
             ).scalar_one_or_none()
-            existing = None if claimed_id else (await s.scalars(select(Execution).where(Execution.idempotency_key == key))).one_or_none()
+            existing = (
+                None
+                if claimed_id
+                else (await s.scalars(select(Execution).where(Execution.idempotency_key == key))).one_or_none()
+            )
         if claimed_id is None:
             # Replay of a step that already ran: return what happened, never act twice.
             if existing is None:
@@ -121,21 +136,38 @@ class ExecutorService:
             error = _to_error(err)
             summary = f"{ACTION_META[action.type].label} failed: {error['message']}"
 
-        # Recording the outcome is the one write here that could see a genuine serialization failure, and it is safe to redo from scratch.
+        # Recording the outcome is the one write here that could see a genuine serialization failure, and it is safe to
+        # redo from scratch.
         async def record() -> None:
             async with transaction(self._sessions) as s:
                 await s.execute(
                     update(Execution)
                     .where(Execution.id == claimed_id, Execution.status == "STARTED")
-                    .values(status=status, summary=summary, result=result, error=error, before=before, finished_at=self._clock.now())
+                    .values(
+                        status=status,
+                        summary=summary,
+                        result=result,
+                        error=error,
+                        before=before,
+                        finished_at=self._clock.now(),
+                    )
                 )
                 outcome_text = summary if status == "SUCCEEDED" else f"FAILED. {summary}"
                 await self._audit.record(
                     s,
                     audit_from(
-                        ctx, action="action.executed", entity_type="resolution", entity_id=resolution.id,
+                        ctx,
+                        action="action.executed",
+                        entity_type="resolution",
+                        entity_id=resolution.id,
                         summary=f"Step {index + 1} {ACTION_META[action.type].label}: {outcome_text}",
-                        after={"index": index, "type": action.type, "status": status, "idempotencyKey": key, "error": error},
+                        after={
+                            "index": index,
+                            "type": action.type,
+                            "status": status,
+                            "idempotencyKey": key,
+                            "error": error,
+                        },
                     ),
                 )
 

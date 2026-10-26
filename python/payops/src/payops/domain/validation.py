@@ -1,11 +1,9 @@
-"""The pure half of the validator. The validator never trusts the executor or stored state: it loads a fresh case snapshot and checks
-(1) each action's postconditions and (2) global invariants for the case entities:
-  - the state matrix shows no system disagreeing with the gateway, except SETTLEMENT on a settlement case whose difference is covered by an
-    open dispute;
-  - detection, re-run now, has no hit for the case's fingerprint.
-Verdict: FAIL if any postcondition fails, PARTIAL if only an invariant fails, else PASS. Loading the state and storing the result live in the
-services layer.
-"""
+"""The pure half of the validator. The validator never trusts the executor or stored state: it loads a fresh case
+snapshot and checks (1) each action's postconditions and (2) global invariants for the case entities:
+  - the state matrix shows no system disagreeing with the gateway, except SETTLEMENT on a settlement case whose
+    difference is covered by an open dispute;
+  - detection, re-run now, has no hit for the case's fingerprint. Verdict: FAIL if any postcondition fails, PARTIAL if
+    only an invariant fails, else PASS. Loading the state and storing the result live in the services layer."""
 
 from __future__ import annotations
 
@@ -19,11 +17,19 @@ from .reconciliation.matrix import build_matrix
 from .reconciliation.rules import run_order_rules
 
 
-def _invariant(key: str, *, subject: str, description: str, expected: str, actual: str, passed: bool) -> ValidationCheck:
+def _invariant(
+    key: str, *, subject: str, description: str, expected: str, actual: str, passed: bool
+) -> ValidationCheck:
     return ValidationCheck.model_validate(
         {
-            "id": f"inv.{key}", "kind": "INVARIANT", "actionIndex": None, "subject": subject, "description": description,
-            "expected": expected, "actual": actual, "pass": passed,
+            "id": f"inv.{key}",
+            "kind": "INVARIANT",
+            "actionIndex": None,
+            "subject": subject,
+            "description": description,
+            "expected": expected,
+            "actual": actual,
+            "pass": passed,
         }
     )
 
@@ -39,11 +45,19 @@ def case_invariants(state: CaseState) -> list[ValidationCheck]:
         allowed = {"SETTLEMENT"} if disputed else set()
         wrong = [k for k in matrix.mismatched if k not in allowed]
         if not wrong:
-            actual = "only SETTLEMENT differs, covered by an open dispute" if disputed and "SETTLEMENT" in matrix.mismatched else "no mismatched systems"
+            actual = (
+                "only SETTLEMENT differs, covered by an open dispute"
+                if disputed and "SETTLEMENT" in matrix.mismatched
+                else "no mismatched systems"
+            )
             checks.append(
                 _invariant(
-                    "matrix", subject="state matrix", description="Every system agrees with the gateway", expected="no mismatched systems",
-                    actual=actual, passed=True,
+                    "matrix",
+                    subject="state matrix",
+                    description="Every system agrees with the gateway",
+                    expected="no mismatched systems",
+                    actual=actual,
+                    passed=True,
                 )
             )
         for k in (s for s in SYSTEMS if s in wrong):
@@ -51,8 +65,12 @@ def case_invariants(state: CaseState) -> list[ValidationCheck]:
             actual = ": ".join(part for part in (cell.status, cell.detail) if part) or "mismatch"
             checks.append(
                 _invariant(
-                    f"matrix.{k}", subject=f"{k.lower()} cell", description=f"{k} agrees with the gateway", expected="agrees with gateway",
-                    actual=actual, passed=False,
+                    f"matrix.{k}",
+                    subject=f"{k.lower()} cell",
+                    description=f"{k} agrees with the gateway",
+                    expected="agrees with gateway",
+                    actual=actual,
+                    passed=False,
                 )
             )
 
@@ -63,8 +81,12 @@ def case_invariants(state: CaseState) -> list[ValidationCheck]:
     hits = [h for h in hits if fingerprint_of(h) == state.case.fingerprint]
     checks.append(
         _invariant(
-            "detection", subject="detection rules", description="Re-running detection finds nothing for this case", expected="no rule fires",
-            actual=" ".join(f"{h.rule_id}: {h.reason}" for h in hits) if hits else "no rule fires", passed=not hits,
+            "detection",
+            subject="detection rules",
+            description="Re-running detection finds nothing for this case",
+            expected="no rule fires",
+            actual=" ".join(f"{h.rule_id}: {h.reason}" for h in hits) if hits else "no rule fires",
+            passed=not hits,
         )
     )
     return checks

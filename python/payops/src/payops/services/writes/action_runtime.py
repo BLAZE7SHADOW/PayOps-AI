@@ -1,5 +1,6 @@
-"""What each catalog action does to the world. Preconditions and postconditions are pure and live in `domain/actions`; execution writes, so it lives
-here. Each handler opens its own short transactions and never holds one while calling the gateway. (packages/core actions/handlers/*)"""
+"""What each catalog action does to the world. Preconditions and postconditions are pure and live in `domain/actions`;
+execution writes, so it lives here. Each handler opens its own short transactions and never holds one while calling the
+gateway. (packages/core actions/handlers/*)"""
 
 from __future__ import annotations
 
@@ -80,16 +81,28 @@ async def _mark_order_paid(action: Any, state: CaseState, ctx: ExecContext) -> E
     payment, previous = s.payment, s.order.status
     async with transaction(ctx.deps.sessions) as session:
         await ctx.deps.orders.transition(
-            session, p.order_id, "PAID",
-            TransitionOptions(by="executor", reason=f"Gateway capture {payment.gw_payment_id} verified", expected_version=s.order.version, payment_id=p.payment_id),
+            session,
+            p.order_id,
+            "PAID",
+            TransitionOptions(
+                by="executor",
+                reason=f"Gateway capture {payment.gw_payment_id} verified",
+                expected_version=s.order.version,
+                payment_id=p.payment_id,
+            ),
             ctx.write,
         )
         updated = False
         if payment.status not in CAPTURE_KNOWN_STATUSES:
-            await ctx.deps.payments.set_status(session, p.payment_id, "CAPTURED", f"gateway capture {payment.gw_payment_id} verified", ctx.write)
+            await ctx.deps.payments.set_status(
+                session, p.payment_id, "CAPTURED", f"gateway capture {payment.gw_payment_id} verified", ctx.write
+            )
             updated = True
     note = "; internal payment marked CAPTURED" if updated else ""
-    return ExecOutcome(f"Order {p.order_id} moved {previous} to PAID and linked to {p.payment_id}{note}", {"from": previous, "to": "PAID", "paymentUpdated": updated})
+    return ExecOutcome(
+        f"Order {p.order_id} moved {previous} to PAID and linked to {p.payment_id}{note}",
+        {"from": previous, "to": "PAID", "paymentUpdated": updated},
+    )
 
 
 async def _post_ledger_entry(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:
@@ -98,23 +111,40 @@ async def _post_ledger_entry(action: Any, state: CaseState, ctx: ExecContext) ->
         raise RuntimeError(NO_ORDER)
     p = action.params
     async with transaction(ctx.deps.sessions) as session:
-        journal_id = await ctx.deps.ledger.post_capture(session, payment_id=p.payment_id, merchant_id=payment.merchant_id, amount_minor=p.amount_minor, source="EXECUTOR", ctx=ctx.write)
-    return ExecOutcome(f"Posted capture journal {journal_id} for {format_money(p.amount_minor)}: debit settlement clearing, credit merchant payable", {"journalId": journal_id})
+        journal_id = await ctx.deps.ledger.post_capture(
+            session,
+            payment_id=p.payment_id,
+            merchant_id=payment.merchant_id,
+            amount_minor=p.amount_minor,
+            source="EXECUTOR",
+            ctx=ctx.write,
+        )
+    return ExecOutcome(
+        f"Posted capture journal {journal_id} for {format_money(p.amount_minor)}: debit settlement clearing, credit merchant payable",
+        {"journalId": journal_id},
+    )
 
 
 async def _reverse_ledger_entry(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:
     journal_id = action.params.journal_id
-    journal = next((j for j in summarize_journals(state.order.ledger if state.order else []) if j.journal_id == journal_id), None)
+    journal = next(
+        (j for j in summarize_journals(state.order.ledger if state.order else []) if j.journal_id == journal_id), None
+    )
     async with transaction(ctx.deps.sessions) as session:
         reversal_id = await ctx.deps.ledger.reverse_journal(session, journal_id, "EXECUTOR", ctx.write)
     amount = f" ({format_money(journal.amount_minor)})" if journal else ""
-    return ExecOutcome(f"Reversed journal {journal_id}{amount} with {reversal_id}; the original stays on the ledger", {"reversalId": reversal_id})
+    return ExecOutcome(
+        f"Reversed journal {journal_id}{amount} with {reversal_id}; the original stays on the ledger",
+        {"reversalId": reversal_id},
+    )
 
 
 async def _initiate_refund(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:
     p, deps = action.params, ctx.deps
     async with transaction(deps.sessions) as session:
-        requested = await deps.refunds.create_requested(session, gw_payment_id=p.gw_payment_id, amount_minor=p.amount_minor, reason=p.reason, ctx=ctx.write)
+        requested = await deps.refunds.create_requested(
+            session, gw_payment_id=p.gw_payment_id, amount_minor=p.amount_minor, reason=p.reason, ctx=ctx.write
+        )
     try:
         gw_refund = await deps.gateway.create_refund(p.gw_payment_id, p.amount_minor)
     except Exception as err:
@@ -160,7 +190,10 @@ async def _sync_refund_status(action: Any, state: CaseState, ctx: ExecContext) -
             await deps.refunds.apply_gateway_status(session, row, gw_refund, gw_payment, "EXECUTOR", ctx.write)
     to = REFUND_STATUS_FROM_GATEWAY[gw_refund.status]
     posted = f"; refund journal of {format_money(refund.amount_minor)} posted" if to == "PROCESSED" else ""
-    return ExecOutcome(f"Refund {refund.id} moved {previous} to {to} to match gateway refund {gw_refund.id}{posted}", {"from": previous, "to": to, "gwRefundId": gw_refund.id})
+    return ExecOutcome(
+        f"Refund {refund.id} moved {previous} to {to} to match gateway refund {gw_refund.id}{posted}",
+        {"from": previous, "to": to, "gwRefundId": gw_refund.id},
+    )
 
 
 async def _raise_settlement_dispute(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:
@@ -171,16 +204,30 @@ async def _raise_settlement_dispute(action: Any, state: CaseState, ctx: ExecCont
     reason = f"Batch net {direction} by {format_money(p.amount_minor)} across {lines} line{'' if lines == 1 else 's'} charged off contract"
     async with transaction(ctx.deps.sessions) as session:
         dispute = await ctx.deps.disputes.raise_settlement(
-            session, batch_id=p.batch_id, gw_payment_id=p.gw_payment_id, amount_minor=p.amount_minor, reason=reason, resolution_id=ctx.resolution_id, ctx=ctx.write
+            session,
+            batch_id=p.batch_id,
+            gw_payment_id=p.gw_payment_id,
+            amount_minor=p.amount_minor,
+            reason=reason,
+            resolution_id=ctx.resolution_id,
+            ctx=ctx.write,
         )
-    return ExecOutcome(f"Raised settlement dispute {dispute.id} for {format_money(p.amount_minor)} on batch {p.batch_id}", {"disputeId": dispute.id})
+    return ExecOutcome(
+        f"Raised settlement dispute {dispute.id} for {format_money(p.amount_minor)} on batch {p.batch_id}",
+        {"disputeId": dispute.id},
+    )
 
 
 async def _hold_payment(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:
     p = action.params
     async with transaction(ctx.deps.sessions) as session:
-        payment = await ctx.deps.payments.hold(session, p.payment_id, f"review for case {state.case.display_id}", ctx.write)
-    return ExecOutcome(f"Payment {p.payment_id} ({format_money(payment.amount_minor)}) is on hold and excluded from payouts", {"hold": True})
+        payment = await ctx.deps.payments.hold(
+            session, p.payment_id, f"review for case {state.case.display_id}", ctx.write
+        )
+    return ExecOutcome(
+        f"Payment {p.payment_id} ({format_money(payment.amount_minor)}) is on hold and excluded from payouts",
+        {"hold": True},
+    )
 
 
 async def _escalate(action: Any, state: CaseState, ctx: ExecContext) -> ExecOutcome:

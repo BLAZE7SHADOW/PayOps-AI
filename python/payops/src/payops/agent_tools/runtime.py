@@ -1,5 +1,6 @@
-"""Runs the agent graph inside the API process. Starting a run and resuming one paused for a person are both idempotent (the queue may deliver a job twice):
-the graph's checkpoint decides what to do, and a run already executing here is left alone. (packages/agents run.ts, python/agents run.py)"""
+"""Runs the agent graph inside the API process. Starting a run and resuming one paused for a person are both idempotent
+(the queue may deliver a job twice): the graph's checkpoint decides what to do, and a run already executing here is left
+alone. (packages/agents run.ts, python/agents run.py)"""
 
 from __future__ import annotations
 
@@ -25,7 +26,9 @@ log = logging.getLogger("payops.agents")
 class AgentRuntime:
     """Implements the jobs' `AgentJobs` and the approvals' `AgentResumer`."""
 
-    def __init__(self, services: Services, store: AgentStore, runner: AgentRunner, ai_mode: str, checkpointer: Any) -> None:
+    def __init__(
+        self, services: Services, store: AgentStore, runner: AgentRunner, ai_mode: str, checkpointer: Any
+    ) -> None:
         self._services = services
         self.store = store
         self._runner = runner
@@ -33,9 +36,16 @@ class AgentRuntime:
         self.checkpointer = checkpointer
 
     @classmethod
-    async def create(cls, stack: AsyncExitStack, services: Services, settings: Settings, store: AgentStore) -> AgentRuntime:
+    async def create(
+        cls, stack: AsyncExitStack, services: Services, settings: Settings, store: AgentStore
+    ) -> AgentRuntime:
         checkpointer = await create_checkpointer(
-            stack, AgentSettings(database_url=settings.database_url, checkpointer=settings.checkpointer, checkpoint_pool_max=settings.checkpoint_pool_max)
+            stack,
+            AgentSettings(
+                database_url=settings.database_url,
+                checkpointer=settings.checkpointer,
+                checkpoint_pool_max=settings.checkpoint_pool_max,
+            ),
         )
         runner = AgentRunner(InProcessNodeApi(services, store), checkpointer)
         return cls(services, store, runner, settings.ai_mode, checkpointer)
@@ -56,7 +66,9 @@ class AgentRuntime:
         if run is None:
             raise AppError("NOT_FOUND", f"agent run {run_id} not found")
         try:
-            result = await self._runner.resume(run_id, run.case_id, run.scenario_key, self._ai_mode, {"approvalId": None, "decision": decision})
+            result = await self._runner.resume(
+                run_id, run.case_id, run.scenario_key, self._ai_mode, {"approvalId": None, "decision": decision}
+            )
         except RunConflict as err:
             log.warning("agent run cannot be resumed now: %s", err, extra={"runId": run_id})
             return
@@ -64,7 +76,10 @@ class AgentRuntime:
 
     @staticmethod
     def _log(run_id: str, result: RunResult) -> None:
-        log.info("agent run finished its turn", extra={"runId": run_id, "status": result.status, "interrupted": result.interrupted})
+        log.info(
+            "agent run finished its turn",
+            extra={"runId": run_id, "status": result.status, "interrupted": result.interrupted},
+        )
 
 
 class QueueResumer:

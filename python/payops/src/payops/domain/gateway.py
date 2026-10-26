@@ -1,4 +1,5 @@
-"""What PayOps needs from a payment gateway, as plain records (packages/core ports/gateway.ts). All amounts are in paise."""
+"""What PayOps needs from a payment gateway, as plain records (packages/core ports/gateway.ts). All amounts are in
+paise."""
 
 from __future__ import annotations
 
@@ -81,7 +82,8 @@ class CaptureSummary:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-#: Where the gateway delivers webhooks. In production an HTTP endpoint; with the simulator our in-process consumer. It answers like an HTTP handler.
+#: Where the gateway delivers webhooks. In production an HTTP endpoint; with the simulator our in-process consumer. It
+#: answers like an HTTP handler.
 WebhookSink = Callable[[GatewayWebhookDelivery], Awaitable[int]]
 
 

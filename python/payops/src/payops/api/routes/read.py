@@ -8,7 +8,16 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from ...domain.money import format_money
 from ...domain.source_records import project_case_source_records
-from ...dto.api import AgentControlItem, CaseListItem, CaseListQuery, OverviewMetrics, Page, PaymentDetail, PaymentListItem, PaymentListQuery
+from ...dto.api import (
+    AgentControlItem,
+    CaseListItem,
+    CaseListQuery,
+    OverviewMetrics,
+    Page,
+    PaymentDetail,
+    PaymentListItem,
+    PaymentListQuery,
+)
 from ...dto.case_detail import ApprovalDetail, CaseDetail, CaseSourceRecords
 from ...dto.policy import APPROVER_ROLE, POLICY_RULES, POLICY_THRESHOLDS, POLICY_VERSION
 from ...dto.resolution import ApprovalItem, ApprovalListQuery
@@ -25,12 +34,17 @@ async def policy() -> dict[str, object]:
     t = POLICY_THRESHOLDS
     return {
         "version": POLICY_VERSION,
-        "rules": [{"id": r.id, "condition": r.condition, "tier": r.tier, "appliesTo": r.applies_to} for r in POLICY_RULES],
+        "rules": [
+            {"id": r.id, "condition": r.condition, "tier": r.tier, "appliesTo": r.applies_to} for r in POLICY_RULES
+        ],
         "thresholds": [
             {"label": "Refunds approved automatically up to", "value": format_money(t.auto_refund_max_minor)},
             {"label": "Refunds an OPS user can approve up to", "value": format_money(t.ops_refund_max_minor)},
             {"label": "Agent confidence for automatic refunds", "value": f"{t.auto_refund_min_confidence:.2f}"},
-            {"label": "Agent confidence for automatic state corrections", "value": f"{t.auto_correction_min_confidence:.2f}"},
+            {
+                "label": "Agent confidence for automatic state corrections",
+                "value": f"{t.auto_correction_min_confidence:.2f}",
+            },
             {"label": "Agent confidence below which a person reviews", "value": f"{t.low_confidence:.2f}"},
         ],
         "approverRoles": [
@@ -48,7 +62,9 @@ async def overview(services: ServicesDep, session: SessionDep) -> OverviewMetric
 
 
 @router.get("/payments", dependencies=[Depends(require_permission("payment.view"))])
-async def list_payments(query: Annotated[PaymentListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[PaymentListItem]:
+async def list_payments(
+    query: Annotated[PaymentListQuery, Query()], services: ServicesDep, session: SessionDep
+) -> Page[PaymentListItem]:
     return await services.payments.list(session, query)
 
 
@@ -58,7 +74,9 @@ async def get_payment(payment_id: str, services: ServicesDep, session: SessionDe
 
 
 @router.get("/cases", dependencies=[Depends(require_permission("case.view"))])
-async def list_cases(query: Annotated[CaseListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[CaseListItem]:
+async def list_cases(
+    query: Annotated[CaseListQuery, Query()], services: ServicesDep, session: SessionDep
+) -> Page[CaseListItem]:
     return await services.cases.list(session, query)
 
 
@@ -79,7 +97,9 @@ async def case_records(case_id: str, services: ServicesDep, session: SessionDep)
 
 
 @router.get("/runs", dependencies=[Depends(require_permission("run.view"))])
-async def list_runs(query: Annotated[RunListQuery, Query()], services: ServicesDep, session: SessionDep) -> Page[AgentRunItem]:
+async def list_runs(
+    query: Annotated[RunListQuery, Query()], services: ServicesDep, session: SessionDep
+) -> Page[AgentRunItem]:
     return await services.runs.list(session, query)
 
 
@@ -99,10 +119,14 @@ async def run_feedback(run_id: str, services: ServicesDep, session: SessionDep) 
 
 
 @router.get("/approvals", dependencies=[Depends(require_permission("approval.view"))])
-async def list_approvals(query: Annotated[ApprovalListQuery, Query()], request: Request, services: ServicesDep, session: SessionDep) -> Page[ApprovalItem]:
+async def list_approvals(
+    query: Annotated[ApprovalListQuery, Query()], request: Request, services: ServicesDep, session: SessionDep
+) -> Page[ApprovalItem]:
     return await services.approvals.list(session, query, current_user(request))
 
 
 @router.get("/approvals/{approval_id}", dependencies=[Depends(require_permission("approval.view"))])
-async def get_approval(approval_id: str, request: Request, services: ServicesDep, session: SessionDep) -> ApprovalDetail:
+async def get_approval(
+    approval_id: str, request: Request, services: ServicesDep, session: SessionDep
+) -> ApprovalDetail:
     return await services.approvals.get(session, approval_id, current_user(request))

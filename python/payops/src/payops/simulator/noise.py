@@ -1,4 +1,5 @@
-"""Background traffic: healthy payments spread over the last three days so tables look real. Noise must never open a case; the scenario tests assert that."""
+"""Background traffic: healthy payments spread over the last three days so tables look real. Noise must never open a
+case; the scenario tests assert that."""
 
 from __future__ import annotations
 
@@ -38,6 +39,12 @@ async def write_noise(ctx: ScenarioContext, count: int) -> None:
         await checkout(
             ctx,
             CheckoutOptions(
-                amount_minor=amount, at=at, customer=customer, merchant=ctx.world.merchants[key], method=method, card=card, batch_group=f"noise:{at.date().isoformat()}"
+                amount_minor=amount,
+                at=at,
+                customer=customer,
+                merchant=ctx.world.merchants[key],
+                method=method,
+                card=card,
+                batch_group=f"noise:{at.date().isoformat()}",
             ),
         )

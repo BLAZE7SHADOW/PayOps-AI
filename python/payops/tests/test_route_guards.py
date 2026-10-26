@@ -58,7 +58,9 @@ def test_every_route_names_a_permission_or_is_explicitly_public() -> None:
 def test_every_permission_in_the_table_guards_at_least_one_route() -> None:
     used = set().union(*FOUND.values())
     unused = {p for p in PERMISSIONS if p not in used}
-    assert unused == PENDING_PERMISSIONS & unused, f"unguarded permissions that are not on the pending list: {sorted(unused - PENDING_PERMISSIONS)}"
+    assert unused == PENDING_PERMISSIONS & unused, (
+        f"unguarded permissions that are not on the pending list: {sorted(unused - PENDING_PERMISSIONS)}"
+    )
 
 
 def test_the_pending_list_has_no_permission_that_is_already_used() -> None:

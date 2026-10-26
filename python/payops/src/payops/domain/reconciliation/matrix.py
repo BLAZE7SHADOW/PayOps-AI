@@ -1,5 +1,5 @@
-"""The state matrix: one payment as each system sees it. The gateway is the reference for money movement; every other cell is marked
-`mismatch` when it disagrees with what the gateway did."""
+"""The state matrix: one payment as each system sees it. The gateway is the reference for money movement; every other
+cell is marked `mismatch` when it disagrees with what the gateway did."""
 
 from __future__ import annotations
 
@@ -33,7 +33,12 @@ LEDGER_CODES: Final = {
     "refundMissing": "REFUND MISSING",
     "notExpected": "NOT EXPECTED",
 }
-SETTLEMENT_CODES: Final = {"settled": "SETTLED", "feeMismatch": "FEE MISMATCH", "pending": "PENDING", "notExpected": "NOT EXPECTED"}
+SETTLEMENT_CODES: Final = {
+    "settled": "SETTLED",
+    "feeMismatch": "FEE MISMATCH",
+    "pending": "PENDING",
+    "notExpected": "NOT EXPECTED",
+}
 
 
 def _cell(system: SystemKey, **fields: object) -> MatrixCell:
@@ -129,19 +134,36 @@ def _ledger_cell(s: OrderSnapshot) -> MatrixCell:
     elif credit == 0:
         status, detail = LEDGER_CODES["missing"], f"No capture credit for {format_money(primary.amount_minor)}"
     elif credit != primary.amount_minor:
-        status, detail = LEDGER_CODES["partial"], f"Credit {format_money(credit)} vs captured {format_money(primary.amount_minor)}"
+        status, detail = (
+            LEDGER_CODES["partial"],
+            f"Credit {format_money(credit)} vs captured {format_money(primary.amount_minor)}",
+        )
     elif refund_gap > 0:
-        status, detail = LEDGER_CODES["refundMissing"], f"Refund {format_money(refund_gap)} processed at gateway, not posted"
+        status, detail = (
+            LEDGER_CODES["refundMissing"],
+            f"Refund {format_money(refund_gap)} processed at gateway, not posted",
+        )
     else:
         status, detail = LEDGER_CODES["posted"], "Capture journal posted"
     mismatch = status in (LEDGER_CODES["missing"], LEDGER_CODES["partial"], LEDGER_CODES["refundMissing"])
-    return _cell("LEDGER", status=status, amount_minor=credit if has_capture_entries else None, at=_iso(last_posted), detail=detail, mismatch=mismatch)
+    return _cell(
+        "LEDGER",
+        status=status,
+        amount_minor=credit if has_capture_entries else None,
+        at=_iso(last_posted),
+        detail=detail,
+        mismatch=mismatch,
+    )
 
 
 def relevant_deliveries(s: OrderSnapshot) -> list[GatewayWebhookDelivery]:
     """The payment.captured delivery of the primary gateway payment plus any refund deliveries."""
     primary_id = s.primary_gw.id if s.primary_gw else None
-    return [w for w in s.webhooks if (w.event == "payment.captured" and w.gw_payment_id == primary_id) or w.event.startswith("refund.")]
+    return [
+        w
+        for w in s.webhooks
+        if (w.event == "payment.captured" and w.gw_payment_id == primary_id) or w.event.startswith("refund.")
+    ]
 
 
 def _last_attempt_at(w: GatewayWebhookDelivery) -> str | None:
@@ -153,13 +175,19 @@ def _latest(deliveries: list[GatewayWebhookDelivery]) -> GatewayWebhookDelivery 
 
 
 def delivery_caught_up(s: OrderSnapshot, w: GatewayWebhookDelivery) -> bool:
-    """A failed delivery stops mattering once our records caught up another way (for example an analyst marked the order paid, or synced the
-    refund). It is still shown, but not as a mismatch."""
+    """A failed delivery stops mattering once our records caught up another way (for example an analyst marked the order
+    paid, or synced the refund). It is still shown, but not as a mismatch."""
     if w.event == "payment.captured":
-        return s.payment is not None and s.payment.gw_payment_id == w.gw_payment_id and s.payment.status in CAPTURE_KNOWN_STATUSES
+        return (
+            s.payment is not None
+            and s.payment.gw_payment_id == w.gw_payment_id
+            and s.payment.status in CAPTURE_KNOWN_STATUSES
+        )
     if w.event in ("refund.processed", "refund.failed"):
         want = "PROCESSED" if w.event == "refund.processed" else "FAILED"
-        return any(r.gw_refund_id is not None and r.gw_refund_id == w.gw_refund_id and r.status == want for r in s.refunds)
+        return any(
+            r.gw_refund_id is not None and r.gw_refund_id == w.gw_refund_id and r.status == want for r in s.refunds
+        )
     return False
 
 
@@ -174,11 +202,15 @@ def _webhook_cell(s: OrderSnapshot) -> MatrixCell:
     failed_all = [w for w in relevant if w.final_status == "FAILED"]
     failed = _latest([w for w in failed_all if not delivery_caught_up(s, w)])
     if failed:
-        return _cell("WEBHOOK", status=_failure_code(failed), at=_last_attempt_at(failed), detail=failed.event, mismatch=True)
+        return _cell(
+            "WEBHOOK", status=_failure_code(failed), at=_last_attempt_at(failed), detail=failed.event, mismatch=True
+        )
     caught_up = _latest(failed_all)
     if caught_up:
         return _cell(
-            "WEBHOOK", status=_failure_code(caught_up), at=_last_attempt_at(caught_up),
+            "WEBHOOK",
+            status=_failure_code(caught_up),
+            at=_last_attempt_at(caught_up),
             detail=f"{caught_up.event} not delivered; internal records updated another way",
         )
     pending = _latest([w for w in relevant if w.final_status == "PENDING"])
@@ -203,7 +235,9 @@ def _settlement_cell(s: OrderSnapshot) -> MatrixCell:
             status=SETTLEMENT_CODES["feeMismatch"] if fee_mismatch else SETTLEMENT_CODES["settled"],
             amount_minor=line.net_minor,
             at=to_iso(line.settled_on),
-            detail=f"Fee {format_money(charged)} vs contract {format_money(contract)}" if fee_mismatch else f"Batch {line.batch_id}",
+            detail=f"Fee {format_money(charged)} vs contract {format_money(contract)}"
+            if fee_mismatch
+            else f"Batch {line.batch_id}",
             mismatch=fee_mismatch,
         )
     if is_captured(primary):

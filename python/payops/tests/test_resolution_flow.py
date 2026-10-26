@@ -47,7 +47,10 @@ async def prefilled(services: Services, case_id: str, types: list[str]) -> dict:
         view = (await services.cases.get(s, case_id, OPS)).resolution_view
     options = {o.type: o for o in view.action_options}
     assert all(options[t].available for t in types), [(t, options[t].reason) for t in types]
-    return {"actions": [options[t].action.to_json() for t in types], "rationale": "Fix the mismatch the detection found."}
+    return {
+        "actions": [options[t].action.to_json() for t in types],
+        "rationale": "Fix the mismatch the detection found.",
+    }
 
 
 async def scalar(services: Services, stmt):  # type: ignore[no-untyped-def]
@@ -57,13 +60,17 @@ async def scalar(services: Services, stmt):  # type: ignore[no-untyped-def]
 
 async def test_preview_names_the_tier_and_who_could_approve(services: Services) -> None:
     body = await prefilled(services, PAY_0004, ["MARK_ORDER_PAID", "POST_LEDGER_ENTRY"])
-    preview = await services.resolution_service.preview(PAY_0004, PreviewActionsBody.model_validate({"actions": body["actions"]}).actions)
+    preview = await services.resolution_service.preview(
+        PAY_0004, PreviewActionsBody.model_validate({"actions": body["actions"]}).actions
+    )
     assert preview.attempt == 1
     assert preview.decision.tier in ("AUTO", "OPS", "MANAGER")
     assert preview.precondition_failures == []
 
 
-async def test_a_state_correction_with_a_verified_capture_runs_automatically_and_resolves_the_case(services: Services) -> None:
+async def test_a_state_correction_with_a_verified_capture_runs_automatically_and_resolves_the_case(
+    services: Services,
+) -> None:
     body = await prefilled(services, PAY_0004, ["MARK_ORDER_PAID", "POST_LEDGER_ENTRY"])
     item = await services.resolution_service.propose(PAY_0004, ProposeActionsBody.model_validate(body), OPS)
     await services.executor.drain()
@@ -92,7 +99,15 @@ async def test_a_blocked_proposal_is_stored_and_rejected_with_the_reasons(servic
         await services.resolution_service.propose(case_id, ProposeActionsBody.model_validate(body), OPS)
     assert err.value.code == "VALIDATION_FAILED" and err.value.details["policy"]["tier"] == "BLOCKED"
     assert err.value.details["preconditionFailures"]
-    assert await scalar(services, select(func.count()).select_from(Resolution).where(Resolution.case_id == case_id, Resolution.status == "BLOCKED")) == 1
+    assert (
+        await scalar(
+            services,
+            select(func.count())
+            .select_from(Resolution)
+            .where(Resolution.case_id == case_id, Resolution.status == "BLOCKED"),
+        )
+        == 1
+    )
 
 
 async def test_a_refund_needs_another_person_to_approve_and_the_proposer_cannot(services: Services) -> None:
@@ -114,13 +129,17 @@ async def test_a_refund_needs_another_person_to_approve_and_the_proposer_cannot(
         await services.approval_service.decide(item.approval.id, ApprovalDecisionBody(decision="APPROVE"), MGR_A)
     assert four_eyes.value.code == "FORBIDDEN" and "proposed" in four_eyes.value.message
 
-    decided = await services.approval_service.decide(item.approval.id, ApprovalDecisionBody(decision="APPROVE", comment="Looks right"), MGR_B)
+    decided = await services.approval_service.decide(
+        item.approval.id, ApprovalDecisionBody(decision="APPROVE", comment="Looks right"), MGR_B
+    )
     await services.executor.drain()
     assert decided.status == "APPROVED" and decided.decided_by.id == "usr_mgr_b"
     async with services.sessions() as s:
         resolved = await services.resolutions.item(s, item.id)
         case = await s.get(Case, case_id)
-    assert resolved.status == "VALIDATED" and resolved.validation.verdict == "PASS", [c for c in resolved.validation.checks if not c.passed]
+    assert resolved.status == "VALIDATED" and resolved.validation.verdict == "PASS", [
+        c for c in resolved.validation.checks if not c.passed
+    ]
     assert case.status == "RESOLVED"
 
     with pytest.raises(AppError) as again:
@@ -134,7 +153,9 @@ async def test_rejecting_reopens_the_case_and_needs_a_reason(services: Services)
     item = await services.resolution_service.propose(case_id, ProposeActionsBody.model_validate(body), MGR_A)
     with pytest.raises(ValueError):
         ApprovalDecisionBody(decision="REJECT", comment="no")
-    await services.approval_service.decide(item.approval.id, ApprovalDecisionBody(decision="REJECT", comment="Wrong amount"), MGR_B)
+    await services.approval_service.decide(
+        item.approval.id, ApprovalDecisionBody(decision="REJECT", comment="Wrong amount"), MGR_B
+    )
     async with services.sessions() as s:
         assert (await s.get(Resolution, item.id)).status == "REJECTED"
         assert (await s.get(Case, case_id)).status == "OPEN"
@@ -145,7 +166,9 @@ async def test_escalating_an_approval_moves_the_case_to_a_person(services: Servi
     case_id = "case_ryxqgc2hh458n7"
     body = await prefilled(services, case_id, ["INITIATE_REFUND"])
     item = await services.resolution_service.propose(case_id, ProposeActionsBody.model_validate(body), MGR_A)
-    await services.approval_service.decide(item.approval.id, ApprovalDecisionBody(decision="ESCALATE", comment="Needs the manager"), MGR_B)
+    await services.approval_service.decide(
+        item.approval.id, ApprovalDecisionBody(decision="ESCALATE", comment="Needs the manager"), MGR_B
+    )
     assert await scalar(services, select(Case.status).where(Case.id == case_id)) == "ESCALATED"
 
 
@@ -156,12 +179,20 @@ async def test_undo_reverses_the_ledger_post_through_the_same_path(services: Ser
     legs_before = await scalar(services, select(func.count()).select_from(LedgerEntry))
     undone = await services.resolution_service.undo(item.id, OPS)
     assert any(a["type"] == "REVERSE_LEDGER_ENTRY" and a["params"]["undoOf"] == item.id for a in undone.actions)
-    if undone.status == "AWAITING_APPROVAL":  # an undo is a normal proposal: it waits for someone else when policy says so
+    if (
+        undone.status == "AWAITING_APPROVAL"
+    ):  # an undo is a normal proposal: it waits for someone else when policy says so
         approver = MGR_B if undone.approval.tier == "MANAGER" else OPS_B
-        await services.approval_service.decide(undone.approval.id, ApprovalDecisionBody(decision="APPROVE", comment="Undo is right"), approver)
+        await services.approval_service.decide(
+            undone.approval.id, ApprovalDecisionBody(decision="APPROVE", comment="Undo is right"), approver
+        )
     await services.executor.drain()
     assert await scalar(services, select(func.count()).select_from(LedgerEntry)) == legs_before + 2
-    assert await scalar(services, select(Case.status).where(Case.id == PAY_0004)) in ("OPEN", "AWAITING_APPROVAL", "EXECUTING")
+    assert await scalar(services, select(Case.status).where(Case.id == PAY_0004)) in (
+        "OPEN",
+        "AWAITING_APPROVAL",
+        "EXECUTING",
+    )
     with pytest.raises(AppError):  # the original resolution is no longer the latest, and the case is no longer resolved
         await services.resolution_service.undo(item.id, OPS)
 

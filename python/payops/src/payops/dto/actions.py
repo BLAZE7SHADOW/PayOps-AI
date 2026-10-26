@@ -1,8 +1,7 @@
 """The closed action catalog (docs/03-agent-system.md §10; packages/shared actions.ts).
 
-Every resolution, whether proposed by a person or the agent, is a list of these actions. Nothing outside this list can be executed.
-Parameters are validated here; preconditions, execution and postconditions live in `domain/actions`.
-"""
+Every resolution, whether proposed by a person or the agent, is a list of these actions. Nothing outside this list can
+be executed. Parameters are validated here; preconditions, execution and postconditions live in `domain/actions`."""
 
 from __future__ import annotations
 
@@ -52,7 +51,8 @@ class ReverseLedgerEntryParams(CamelModel):
     omit_when_none = frozenset({"undo_of"})
 
     journal_id: Id
-    #: Id of the resolution this reversal undoes. Set only by the Undo flow (D070); it changes the validator's expectation
+    #: Id of the resolution this reversal undoes. Set only by the Undo flow (D070); it changes the validator's
+    #: expectation
     #: from "net capture equals the gateway capture" to "no capture credit remains".
     undo_of: Id | None = None
 
@@ -147,7 +147,8 @@ CatalogAction = Annotated[
 class ActionMeta:
     label: str
     description: str
-    #: STATE_CORRECTION makes our records match what the gateway did (no money moves); MONEY_MOVEMENT moves customer or merchant
+    #: STATE_CORRECTION makes our records match what the gateway did (no money moves); MONEY_MOVEMENT moves customer or
+    #: merchant
     #: money; CLAIM raises a claim against a third party; CONTROL freezes or routes work to people.
     action_class: str
     money_moving: bool
@@ -156,22 +157,52 @@ class ActionMeta:
 
 ACTION_META: Final[dict[str, ActionMeta]] = {
     "REPLAY_WEBHOOK_EVENT": ActionMeta(
-        "Replay webhook event", "Ask the gateway to deliver the event again so our consumer processes it.", "STATE_CORRECTION", False, False
+        "Replay webhook event",
+        "Ask the gateway to deliver the event again so our consumer processes it.",
+        "STATE_CORRECTION",
+        False,
+        False,
     ),
-    "MARK_ORDER_PAID": ActionMeta("Mark order paid", "Move the order to PAID and link the captured payment.", "STATE_CORRECTION", False, True),
+    "MARK_ORDER_PAID": ActionMeta(
+        "Mark order paid", "Move the order to PAID and link the captured payment.", "STATE_CORRECTION", False, True
+    ),
     "POST_LEDGER_ENTRY": ActionMeta(
-        "Post capture to ledger", "Post the missing capture journal for a payment the gateway captured.", "STATE_CORRECTION", False, True
+        "Post capture to ledger",
+        "Post the missing capture journal for a payment the gateway captured.",
+        "STATE_CORRECTION",
+        False,
+        True,
     ),
     "REVERSE_LEDGER_ENTRY": ActionMeta(
-        "Reverse ledger journal", "Post an equal and opposite journal. The original entry stays.", "STATE_CORRECTION", False, False
+        "Reverse ledger journal",
+        "Post an equal and opposite journal. The original entry stays.",
+        "STATE_CORRECTION",
+        False,
+        False,
     ),
-    "INITIATE_REFUND": ActionMeta("Refund customer", "Create a refund at the gateway for a captured payment.", "MONEY_MOVEMENT", True, False),
+    "INITIATE_REFUND": ActionMeta(
+        "Refund customer", "Create a refund at the gateway for a captured payment.", "MONEY_MOVEMENT", True, False
+    ),
     "SYNC_REFUND_STATUS": ActionMeta(
-        "Sync refund status", "Copy the gateway refund status to our refund record and post it to the ledger.", "STATE_CORRECTION", False, False
+        "Sync refund status",
+        "Copy the gateway refund status to our refund record and post it to the ledger.",
+        "STATE_CORRECTION",
+        False,
+        False,
     ),
-    "RAISE_SETTLEMENT_DISPUTE": ActionMeta("Raise settlement dispute", "Open a dispute with the acquirer for the settlement shortfall.", "CLAIM", False, False),
-    "HOLD_PAYMENT_FOR_REVIEW": ActionMeta("Hold payment", "Freeze the payment so it is excluded from payouts until reviewed.", "CONTROL", False, True),
-    "ESCALATE_TO_HUMAN": ActionMeta("Escalate", "Route the case to a person with the reason attached.", "CONTROL", False, True),
+    "RAISE_SETTLEMENT_DISPUTE": ActionMeta(
+        "Raise settlement dispute",
+        "Open a dispute with the acquirer for the settlement shortfall.",
+        "CLAIM",
+        False,
+        False,
+    ),
+    "HOLD_PAYMENT_FOR_REVIEW": ActionMeta(
+        "Hold payment", "Freeze the payment so it is excluded from payouts until reviewed.", "CONTROL", False, True
+    ),
+    "ESCALATE_TO_HUMAN": ActionMeta(
+        "Escalate", "Route the case to a person with the reason attached.", "CONTROL", False, True
+    ),
 }
 
 #: Actions allowed when risk is CRITICAL (policy rule P1).

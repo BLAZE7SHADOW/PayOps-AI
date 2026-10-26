@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeGuard, TypeVar
 
 from ..errors import AppError
 from ..jsonjs import js_dumps
@@ -30,5 +30,5 @@ def decode_cursor(cursor: str | None, is_valid: Callable[[Any], bool]) -> Any | 
     raise AppError("BAD_REQUEST", "Invalid cursor")
 
 
-def is_record(value: Any) -> bool:
+def is_record(value: Any) -> TypeGuard[dict[str, Any]]:
     return isinstance(value, dict)

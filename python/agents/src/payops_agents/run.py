@@ -20,12 +20,28 @@ from .nodes import AgentDeps
 from .ports import FixtureOptions, ModelEnv, NoLlm, RetryNotice, create_decision_port, create_llm_port, fixture_decision
 from .state import initial_state
 
-DECISION_NODE = {"J2_PLAN": "plan", "J3_RISK": "riskAgent", "J4_GROUND": "groundCheck", "J5_REPLAN": "replan", "J6_DIAGNOSE": "diagnose"}
+DECISION_NODE = {
+    "J2_PLAN": "plan",
+    "J3_RISK": "riskAgent",
+    "J4_GROUND": "groundCheck",
+    "J5_REPLAN": "replan",
+    "J6_DIAGNOSE": "diagnose",
+}
 
 log = logging.getLogger("payops.run")
 
 SYNC_KEYS = (
-    "status", "diagnosis", "resolutionId", "approvalId", "attempt", "budget", "evidence", "findings", "proposal", "policy", "grounding",
+    "status",
+    "diagnosis",
+    "resolutionId",
+    "approvalId",
+    "attempt",
+    "budget",
+    "evidence",
+    "findings",
+    "proposal",
+    "policy",
+    "grounding",
 )
 
 
@@ -75,7 +91,12 @@ class AgentRunner:
         self._in_flight: set[str] = set()
 
     def _deps(
-        self, run_id: str, case_id: str, ai_mode: str, scenario_key: str | None, model_env: ModelEnv | None = None,
+        self,
+        run_id: str,
+        case_id: str,
+        ai_mode: str,
+        scenario_key: str | None,
+        model_env: ModelEnv | None = None,
         fixture: FixtureOptions | None = None,
     ) -> AgentDeps:
         on_event = make_event_sink(self._api, run_id, case_id)
@@ -83,10 +104,14 @@ class AgentRunner:
         async def on_retry(notice: RetryNotice) -> None:
             node = DECISION_NODE.get(notice.step or "", notice.step or "model")
             await on_event(
-                node, "MODEL_RETRY",
+                node,
+                "MODEL_RETRY",
                 {
-                    "provider": notice.provider, "attempt": notice.attempt, "maxAttempts": notice.max_attempts,
-                    "delayMs": notice.delay_ms, "reason": notice.reason,
+                    "provider": notice.provider,
+                    "attempt": notice.attempt,
+                    "maxAttempts": notice.max_attempts,
+                    "delayMs": notice.delay_ms,
+                    "reason": notice.reason,
                 },
             )
 
@@ -122,7 +147,12 @@ class AgentRunner:
             self._in_flight.discard(run_id)
 
     async def investigate(
-        self, run_id: str, case_id: str, scenario_key: str | None, ai_mode: str, model_env: ModelEnv | None = None,
+        self,
+        run_id: str,
+        case_id: str,
+        scenario_key: str | None,
+        ai_mode: str,
+        model_env: ModelEnv | None = None,
         fixture: FixtureOptions | None = None,
     ) -> RunResult:
         async def work() -> RunResult:
@@ -131,18 +161,28 @@ class AgentRunner:
             snapshot = await graph.aget_state({"configurable": {"thread_id": run_id}})
             phase = _phase(snapshot)
             if phase in ("finished", "paused"):
-                log.info("run already started, reporting its state", extra={"fields": {"runId": run_id, "phase": phase}})
+                log.info(
+                    "run already started, reporting its state", extra={"fields": {"runId": run_id, "phase": phase}}
+                )
                 return _stored(snapshot, phase == "paused")
             if phase == "crashed":
                 log.warning("continuing a run that stopped part way", extra={"fields": {"runId": run_id}})
                 return await self._drive(run_id, case_id, graph, deps, None)
-            return await self._drive(run_id, case_id, graph, deps, initial_state(case_id, run_id, ai_mode, scenario_key))
+            return await self._drive(
+                run_id, case_id, graph, deps, initial_state(case_id, run_id, ai_mode, scenario_key)
+            )
 
         return await self._guarded(run_id, work)
 
     async def resume(
-        self, run_id: str, case_id: str, scenario_key: str | None, ai_mode: str, decision: dict[str, Any],
-        model_env: ModelEnv | None = None, fixture: FixtureOptions | None = None,
+        self,
+        run_id: str,
+        case_id: str,
+        scenario_key: str | None,
+        ai_mode: str,
+        decision: dict[str, Any],
+        model_env: ModelEnv | None = None,
+        fixture: FixtureOptions | None = None,
     ) -> RunResult:
         async def work() -> RunResult:
             deps = self._deps(run_id, case_id, ai_mode, scenario_key, model_env, fixture)

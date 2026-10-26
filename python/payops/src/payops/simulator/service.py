@@ -51,7 +51,12 @@ class GenerateResult:
     cases_opened: list[dict[str, str]]
 
     def to_json(self) -> dict[str, Any]:
-        return {"scenario": self.scenario, "seed": self.seed, "created": self.created.to_json(), "casesOpened": self.cases_opened}
+        return {
+            "scenario": self.scenario,
+            "seed": self.seed,
+            "created": self.created.to_json(),
+            "casesOpened": self.cases_opened,
+        }
 
 
 def random_seed() -> int:
@@ -67,15 +72,22 @@ log = logging.getLogger("payops.simulator")
 
 class SimulatorService:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], clock: Clock, audit: AuditService, reconciliation: ReconciliationService, cassette_dir: Path | None,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Clock,
+        audit: AuditService,
+        reconciliation: ReconciliationService,
+        cassette_dir: Path | None,
         cooldown_seconds: float = 10.0,
     ) -> None:
         self._sessions = sessions
-        # The demo is public, so a reset or undo by one visitor affects everyone. A short cooldown and a one-at-a-time lock stop button mashing; every reset first
+        # The demo is public, so a reset or undo by one visitor affects everyone. A short cooldown and a one-at-a-time
+        # lock stop button mashing; every reset first
         # saves a snapshot that Undo restores.
         self._cooldown = cooldown_seconds
         self._busy = False
-        #: The demo cases load in the background after a reset: on the free hosted database they take a few minutes, longer than a proxy keeps a request open.
+        #: The demo cases load in the background after a reset: on the free hosted database they take a few minutes,
+        #: longer than a proxy keeps a request open.
         #: The flag blocks another reset or undo meanwhile.
         self.loading_demo = False
         self._last_change = float("-inf")
@@ -86,18 +98,28 @@ class SimulatorService:
         self._cassette_dir = cassette_dir
 
     async def generate_scenario(self, scenario: str, seed: int | None = None, noise: int = 0) -> GenerateResult:
-        """Writes a scenario (plus `noise` healthy payments) in one transaction, then runs detection on the touched orders and batches. The same (scenario,
-        seed) twice is rejected with CONFLICT (it would recreate the same deterministic ids); pick another seed or reset."""
+        """Writes a scenario (plus `noise` healthy payments) in one transaction, then runs detection on the touched
+        orders and batches. The same (scenario, seed) twice is rejected with CONFLICT (it would recreate the same
+        deterministic ids); pick another seed or reset."""
         seed = random_seed() if seed is None else seed
         key = f"{scenario}:{seed}"
         now = self._clock.now()
         title = next((s.title for s in SCENARIOS if s.key == scenario), scenario)
 
         def conflict() -> AppError:
-            return AppError("CONFLICT", f"Scenario {scenario} with seed {seed} was already generated. Use another seed or reset the demo data.")
+            return AppError(
+                "CONFLICT",
+                f"Scenario {scenario} with seed {seed} was already generated. Use another seed or reset the demo data.",
+            )
 
         async with self._sessions() as s:
-            if (await s.scalars(select(AuditEvent.id).where(AuditEvent.action == GENERATED_ACTION, AuditEvent.entity_id == key).limit(1))).first():
+            if (
+                await s.scalars(
+                    select(AuditEvent.id)
+                    .where(AuditEvent.action == GENERATED_ACTION, AuditEvent.entity_id == key)
+                    .limit(1)
+                )
+            ).first():
                 raise conflict()
         async with transaction(self._sessions) as s:
             await seed_world(s, now)
@@ -117,7 +139,12 @@ class SimulatorService:
                 await self._audit.record(
                     s,
                     AuditInput(
-                        a[0], a[1], a[2], GENERATED_ACTION, "scenario", key,
+                        a[0],
+                        a[1],
+                        a[2],
+                        GENERATED_ACTION,
+                        "scenario",
+                        key,
                         f'Generated "{title}" (seed {seed}) with {len(ctx.created.payment_ids)} payments, {noise} of them background noise',
                         after=ctx.created.to_json(),
                     ),
@@ -133,7 +160,9 @@ class SimulatorService:
         orders = await self._reconciliation.check_orders(created.order_ids)
         batches = await self._reconciliation.check_batches(created.batch_ids)
         opened = [
-            {"id": c.case.id, "displayId": c.case.display_id, "type": c.case.type} for c in [*orders.cases, *batches.cases] if c.created
+            {"id": c.case.id, "displayId": c.case.display_id, "type": c.case.type}
+            for c in [*orders.cases, *batches.cases]
+            if c.created
         ]
         return GenerateResult(scenario, seed, created, opened)
 
@@ -143,7 +172,18 @@ class SimulatorService:
             await s.execute(text(f"truncate {', '.join(chr(34) + t + chr(34) for t in RESET_TABLES)} cascade"))
             await seed_world(s, self._clock.now())
             a = _ACTOR
-            await self._audit.record(s, AuditInput(a[0], a[1], a[2], "simulator.reset", "system", "demo-data", "Demo data reset and base world re-seeded"))
+            await self._audit.record(
+                s,
+                AuditInput(
+                    a[0],
+                    a[1],
+                    a[2],
+                    "simulator.reset",
+                    "system",
+                    "demo-data",
+                    "Demo data reset and base world re-seeded",
+                ),
+            )
 
     async def snapshot(self) -> None:
         await snapshot_demo_data(self._sessions, self._clock)
@@ -163,8 +203,9 @@ class SimulatorService:
         return json.loads(manifest.read_text()) if manifest and manifest.exists() else []
 
     async def seed_demo_cases(self) -> None:
-        """Generates the demo data set: every fault scenario once, plus healthy background payments. Used by the seed script and by the hosted demo's reset, so
-        both give the same cases. Scenarios that already exist are skipped, so it is safe to run twice. Times are relative to the clock's "now"."""
+        """Generates the demo data set: every fault scenario once, plus healthy background payments. Used by the seed
+        script and by the hosted demo's reset, so both give the same cases. Scenarios that already exist are skipped, so
+        it is safe to run twice. Times are relative to the clock's "now"."""
         faults = [s for s in SCENARIOS if s.expected_case_type is not None]
         for i, info in enumerate(faults):
             recorded = self._recorded_seed(info.key)
@@ -197,8 +238,8 @@ class SimulatorService:
             return {**(await undo_status(s)).to_json(), "loadingDemo": self.loading_demo}
 
     async def reset(self, restore_demo: bool) -> dict[str, Any]:
-        """Resets the demo data. With `restore_demo` the demo cases are regenerated in the background (poll `status` for `loadingDemo`); without it only the
-        baseline world remains, which tests and clean LIVE walkthroughs rely on."""
+        """Resets the demo data. With `restore_demo` the demo cases are regenerated in the background (poll `status` for
+        `loadingDemo`); without it only the baseline world remains, which tests and clean LIVE walkthroughs rely on."""
 
         async def work() -> None:
             await self.snapshot()
@@ -235,4 +276,3 @@ class SimulatorService:
         """Waits for the background demo load. Tests call this."""
         while self._background:
             await asyncio.gather(*list(self._background))
-

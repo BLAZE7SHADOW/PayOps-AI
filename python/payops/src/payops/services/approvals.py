@@ -1,4 +1,5 @@
-"""Approval queue reads. (The decision itself is a write and lives with the executor in Phase B4.) (packages/core approval.service.ts)"""
+"""Approval queue reads. (The decision itself is a write and lives with the executor in Phase B4.) (packages/core
+approval.service.ts)"""
 
 from __future__ import annotations
 
@@ -29,7 +30,9 @@ if TYPE_CHECKING:
 
 def actions_summary(actions: list[dict]) -> str:
     return " · ".join(
-        f"{ACTION_META[a['type']].label} {format_money(a['params']['amountMinor'])}" if a["type"] == "INITIATE_REFUND" else ACTION_META[a["type"]].label
+        f"{ACTION_META[a['type']].label} {format_money(a['params']['amountMinor'])}"
+        if a["type"] == "INITIATE_REFUND"
+        else ACTION_META[a["type"]].label
         for a in actions
     )
 
@@ -41,7 +44,9 @@ def cannot_decide_reason(approval: Approval, resolution: Resolution, viewer: Ses
     if viewer is None:
         return "Sign in to decide."
     needed = APPROVER_ROLE[approval.tier]
-    allowed = has_permission(viewer.role, "approval.decide") and (needed != "MANAGER" or role_at_least(viewer.role, "MANAGER"))
+    allowed = has_permission(viewer.role, "approval.decide") and (
+        needed != "MANAGER" or role_at_least(viewer.role, "MANAGER")
+    )
     if not allowed:
         return "Needs a manager." if needed == "MANAGER" else "Needs an OPS user or above."
     if resolution.proposed_by["type"] == "USER" and resolution.proposed_by["id"] == viewer.id:
@@ -95,7 +100,9 @@ class ApprovalQueryService:
             raise not_found("Approval", approval_id)
         return row[0], row[1], row[2]
 
-    async def list(self, session: AsyncSession, query: ApprovalListQuery, viewer: SessionUser | None) -> Page[ApprovalItem]:
+    async def list(
+        self, session: AsyncSession, query: ApprovalListQuery, viewer: SessionUser | None
+    ) -> Page[ApprovalItem]:
         """Newest request first, keyset-paginated."""
         filters: list = []
         if query.scope == "pending":
@@ -106,7 +113,9 @@ class ApprovalQueryService:
         cursor = decode_cursor(query.cursor, _is_approval_cursor)
         if cursor:
             at = parse_iso(cursor["at"])
-            page_filters.append(or_(Approval.requested_at < at, and_(Approval.requested_at == at, Approval.id < cursor["id"])))
+            page_filters.append(
+                or_(Approval.requested_at < at, and_(Approval.requested_at == at, Approval.id < cursor["id"]))
+            )
         rows = (
             await session.execute(
                 select(Approval, Case, Resolution)
@@ -120,8 +129,14 @@ class ApprovalQueryService:
         total = (await session.execute(select(func.count()).select_from(Approval).where(*filters))).scalar_one()
         page = rows[: query.limit]
         last = page[-1][0] if page else None
-        next_cursor = encode_cursor({"at": to_iso(last.requested_at), "id": last.id}) if len(rows) > query.limit and last is not None else None
-        return Page[ApprovalItem](items=[to_approval_item(a, c, r, viewer) for a, c, r in page], next_cursor=next_cursor, total=total)
+        next_cursor = (
+            encode_cursor({"at": to_iso(last.requested_at), "id": last.id})
+            if len(rows) > query.limit and last is not None
+            else None
+        )
+        return Page[ApprovalItem](
+            items=[to_approval_item(a, c, r, viewer) for a, c, r in page], next_cursor=next_cursor, total=total
+        )
 
     async def item(self, session: AsyncSession, approval_id: str, viewer: SessionUser | None = None) -> ApprovalItem:
         """One approval as a list item (viewer-independent when viewer is None, for realtime fan-out)."""
@@ -132,7 +147,11 @@ class ApprovalQueryService:
         a, c, r = await self._load(session, approval_id)
         resolution = await self._resolutions.item(session, r.id)
         case_item = (await self._cases.list_items(session, [c.id]))[0]
-        return ApprovalDetail(**to_approval_item(a, c, r, viewer).model_dump(), resolution=resolution, case_item=case_item)
+        return ApprovalDetail(
+            **to_approval_item(a, c, r, viewer).model_dump(), resolution=resolution, case_item=case_item
+        )
 
     async def pending_count(self, session: AsyncSession) -> int:
-        return (await session.execute(select(func.count()).select_from(Approval).where(Approval.status == "PENDING"))).scalar_one()
+        return (
+            await session.execute(select(func.count()).select_from(Approval).where(Approval.status == "PENDING"))
+        ).scalar_one()

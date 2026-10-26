@@ -1,4 +1,5 @@
-"""Socket.IO room and event names (packages/shared events.ts, docs/03 §16). The web app subscribes to these exact strings."""
+"""Socket.IO room and event names (packages/shared events.ts, docs/03 §16). The web app subscribes to these exact
+strings."""
 
 from __future__ import annotations
 

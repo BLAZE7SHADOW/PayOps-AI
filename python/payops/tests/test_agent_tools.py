@@ -57,12 +57,15 @@ def test_the_tool_names_are_the_ones_typescript_has() -> None:
 
 
 @pytest.mark.parametrize("display_id", sorted(FIX["cases"]))
-async def test_the_brief_and_every_tool_match_typescript(world: tuple[Services, dict[str, str]], display_id: str) -> None:
+async def test_the_brief_and_every_tool_match_typescript(
+    world: tuple[Services, dict[str, str]], display_id: str
+) -> None:
     expected = FIX["cases"][display_id]
     state = await state_of(world, display_id)
     # Case ids are random in both implementations, so the brief is compared with the id taken from this run.
     assert {"brief": build_case_brief(state), "entityRefs": state.case.entity_refs} == {
-        "brief": {**expected["brief"]["brief"], "caseId": state.case.id}, "entityRefs": expected["brief"]["entityRefs"]
+        "brief": {**expected["brief"]["brief"], "caseId": state.case.id},
+        "entityRefs": expected["brief"]["entityRefs"],
     }
     for tool in expected["tools"]:
         mine = TOOLS_BY_NAME[tool["tool"]].run(state)
@@ -74,8 +77,16 @@ async def test_the_brief_and_every_tool_match_typescript(world: tuple[Services, 
 
 
 @pytest.mark.parametrize("display_id", sorted(FIX["cases"]))
-async def test_the_proposal_for_every_root_cause_matches_typescript(world: tuple[Services, dict[str, str]], display_id: str) -> None:
+async def test_the_proposal_for_every_root_cause_matches_typescript(
+    world: tuple[Services, dict[str, str]], display_id: str
+) -> None:
     state = await state_of(world, display_id)
     for root_cause, proposal in FIX["cases"][display_id]["proposals"].items():
-        diagnosis = {"rootCause": root_cause, "narrative": f"Narrative for {root_cause}.", "confidence": 0.9, "supportingFindingIds": [], "path": "FAST"}
+        diagnosis = {
+            "rootCause": root_cause,
+            "narrative": f"Narrative for {root_cause}.",
+            "confidence": 0.9,
+            "supportingFindingIds": [],
+            "path": "FAST",
+        }
         assert build_proposal(diagnosis, state) == proposal, f"{display_id} {root_cause}"

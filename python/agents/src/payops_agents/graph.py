@@ -32,7 +32,9 @@ def build_graph(deps: AgentDeps, checkpointer: BaseCheckpointSaver[Any]) -> Any:
 
     graph.add_edge(START, "loadCase")
     graph.add_edge("loadCase", "triage")
-    graph.add_conditional_edges("triage", lambda s: "closeEscalated" if _escalated(s) else "diagnose", ["diagnose", "closeEscalated"])
+    graph.add_conditional_edges(
+        "triage", lambda s: "closeEscalated" if _escalated(s) else "diagnose", ["diagnose", "closeEscalated"]
+    )
 
     def after_diagnose(s: dict[str, Any]) -> str:
         if _escalated(s):
@@ -52,7 +54,9 @@ def build_graph(deps: AgentDeps, checkpointer: BaseCheckpointSaver[Any]) -> Any:
     graph.add_edge("paymentAgent", "join")
     graph.add_edge("reconciliationAgent", "join")
     graph.add_edge("riskAgent", "join")
-    graph.add_conditional_edges("join", lambda s: "closeEscalated" if _escalated(s) else "groundCheck", ["groundCheck", "closeEscalated"])
+    graph.add_conditional_edges(
+        "join", lambda s: "closeEscalated" if _escalated(s) else "groundCheck", ["groundCheck", "closeEscalated"]
+    )
 
     def after_ground_check(s: dict[str, Any]) -> str:
         if _escalated(s):
@@ -60,7 +64,9 @@ def build_graph(deps: AgentDeps, checkpointer: BaseCheckpointSaver[Any]) -> Any:
         return "plan" if s.get("gaps") else "resolve"
 
     graph.add_conditional_edges("groundCheck", after_ground_check, ["plan", "resolve", "closeEscalated"])
-    graph.add_conditional_edges("resolve", lambda s: "closeEscalated" if _escalated(s) else "policyGate", ["policyGate", "closeEscalated"])
+    graph.add_conditional_edges(
+        "resolve", lambda s: "closeEscalated" if _escalated(s) else "policyGate", ["policyGate", "closeEscalated"]
+    )
 
     def after_policy_gate(s: dict[str, Any]) -> str:
         tier = (s.get("policy") or {}).get("tier")

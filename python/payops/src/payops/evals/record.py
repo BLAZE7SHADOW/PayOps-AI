@@ -1,12 +1,14 @@
-"""Records real Gemini and Jev responses into `fixtures/cassettes/<scenario>.jsonl` so REPLAY (tests, evals, the hosted demo) never calls a provider. Only
-model responses are recorded; the graph, tools, database, policy, executor and validator run for real against a throwaway Postgres.
+"""Records real Gemini and Jev responses into `fixtures/cassettes/<scenario>.jsonl` so REPLAY (tests, evals, the hosted
+demo) never calls a provider. Only model responses are recorded; the graph, tools, database, policy, executor and
+validator run for real against a throwaway Postgres.
 
     uv run python -m payops.evals.record                 # records the (scenario, seed) pairs missing from manifest.json
-    uv run python -m payops.evals.record --only refund_stuck,duplicate_capture
-    uv run python -m payops.evals.record --all           # clears each scenario's cassette first and records everything again
+    uv run python -m payops.evals.record --only refund_stuck,duplicate_capture uv run python -m payops.evals.record
+    --all           # clears each scenario's cassette first and records everything again
 
-This makes real, billed calls and needs GEMINI_API_KEY and TYPESAFE_JEV_API_KEY (read from the environment, never printed). Run it in a normal terminal
-with `--env-file`, for example `uv run --env-file ../../.env python -m payops.evals.record`. Commit `fixtures/cassettes/` afterwards. (record-cassettes.ts)"""
+This makes real, billed calls and needs GEMINI_API_KEY and TYPESAFE_JEV_API_KEY (read from the environment, never
+printed). Run it in a normal terminal with `--env-file`, for example `uv run --env-file ../../.env python -m
+payops.evals.record`. Commit `fixtures/cassettes/` afterwards. (record-cassettes.ts)"""
 
 from __future__ import annotations
 
@@ -55,7 +57,8 @@ class Spec:
     strict_diagnosis: bool = False
 
 
-# Every fault scenario, two seeds each, so the hosted REPLAY demo has plenty to show. Seeds 3201 to 3203 are the original recordings.
+# Every fault scenario, two seeds each, so the hosted REPLAY demo has plenty to show. Seeds 3201 to 3203 are the
+# original recordings.
 SPECS: tuple[Spec, ...] = (
     Spec("captured_order_failed", 3201, "WEBHOOK_PROCESSING_FAILURE", strict=True),
     Spec("refund_stuck", 3202, "REFUND_STATUS_NOT_SYNCED", strict=True),
@@ -92,16 +95,31 @@ def read_manifest(directory: Path) -> list[dict[str, Any]]:
 
 
 def upsert_manifest(directory: Path, entry: dict[str, Any]) -> None:
-    rest = [e for e in read_manifest(directory) if not (e["scenario"] == entry["scenario"] and e["seed"] == entry["seed"])]
+    rest = [
+        e for e in read_manifest(directory) if not (e["scenario"] == entry["scenario"] and e["seed"] == entry["seed"])
+    ]
     merged = sorted([*rest, entry], key=lambda e: e["seed"])
     manifest_path(directory).write_text(json.dumps(merged, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def select(specs: tuple[Spec, ...], done: set[tuple[str, int]], *, everything: bool, only: set[str] | None) -> list[Spec]:
-    return [s for s in specs if (only is None or s.scenario in only) and (everything or (s.scenario, s.seed) not in done)]
+def select(
+    specs: tuple[Spec, ...], done: set[tuple[str, int]], *, everything: bool, only: set[str] | None
+) -> list[Spec]:
+    return [
+        s for s in specs if (only is None or s.scenario in only) and (everything or (s.scenario, s.seed) not in done)
+    ]
 
 
-async def record_one(services: Services, runner: AgentRunner, store: AgentStore, spec: Spec, env: ModelEnv, directory: Path, *, fresh_file: bool) -> dict[str, Any]:
+async def record_one(
+    services: Services,
+    runner: AgentRunner,
+    store: AgentStore,
+    spec: Spec,
+    env: ModelEnv,
+    directory: Path,
+    *,
+    fresh_file: bool,
+) -> dict[str, Any]:
     path = cassette_path(spec.scenario, directory)
     # The recorder only appends, so a full re-record of a scenario starts from an empty file.
     if fresh_file and path.exists():
@@ -120,9 +138,16 @@ async def record_one(services: Services, runner: AgentRunner, store: AgentStore,
         if not result.interrupted:
             break
         approval_id = result.state["approvalId"]
-        print(f"  status={result.state.get('status')} tier={(result.state.get('policy') or {}).get('tier')}; approving as manager", file=sys.stderr)
-        manager = SessionUser(id="usr_record_manager", email="record@payops.dev", name="Recording manager", role="MANAGER")
-        await services.approval_service.decide(approval_id, ApprovalDecisionBody(decision="APPROVE", comment=""), manager)
+        print(
+            f"  status={result.state.get('status')} tier={(result.state.get('policy') or {}).get('tier')}; approving as manager",
+            file=sys.stderr,
+        )
+        manager = SessionUser(
+            id="usr_record_manager", email="record@payops.dev", name="Recording manager", role="MANAGER"
+        )
+        await services.approval_service.decide(
+            approval_id, ApprovalDecisionBody(decision="APPROVE", comment=""), manager
+        )
         decision = {"approvalId": approval_id, "decision": "APPROVE", "decidedBy": None, "comment": None}
         result = await runner.resume(run_id, case_id, spec.scenario, env.ai_mode, decision, env)
 
@@ -137,9 +162,17 @@ async def record_one(services: Services, runner: AgentRunner, store: AgentStore,
     if spec.expect_root_cause and root_cause != spec.expect_root_cause:
         if spec.strict_diagnosis:
             raise RuntimeError(f"{spec.scenario}: expected root cause {spec.expect_root_cause}, got {root_cause}")
-        print(f"  NOTE: the model diagnosed {root_cause}, not {spec.expect_root_cause} (see fixtures/cassettes/README.md)", file=sys.stderr)
+        print(
+            f"  NOTE: the model diagnosed {root_cause}, not {spec.expect_root_cause} (see fixtures/cassettes/README.md)",
+            file=sys.stderr,
+        )
     entry = {
-        "scenario": spec.scenario, "seed": spec.seed, "status": str(status), "tier": tier, "verdict": verdict, "rootCause": root_cause,
+        "scenario": spec.scenario,
+        "seed": spec.seed,
+        "status": str(status),
+        "tier": tier,
+        "verdict": verdict,
+        "rootCause": root_cause,
         "recordedAt": datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
     }
     upsert_manifest(directory, entry)
@@ -191,9 +224,15 @@ def main(argv: list[str] | None = None) -> int:
     if not todo:
         print("Nothing to record: every scenario and seed is in manifest.json (use --all to redo).", file=sys.stderr)
         return 0
-    print(f"Recording {len(todo)} run(s) with AI_MODEL={env.ai_model} JEV_MODEL={env.jev_model} (real, billed calls)", file=sys.stderr)
+    print(
+        f"Recording {len(todo)} run(s) with AI_MODEL={env.ai_model} JEV_MODEL={env.jev_model} (real, billed calls)",
+        file=sys.stderr,
+    )
     asyncio.run(record(todo, env, directory, everything=args.all))
-    print(f"\nRecorded {len(todo)} run(s). Next: run the tests and the evals, then commit fixtures/cassettes/.", file=sys.stderr)
+    print(
+        f"\nRecorded {len(todo)} run(s). Next: run the tests and the evals, then commit fixtures/cassettes/.",
+        file=sys.stderr,
+    )
     return 0
 
 

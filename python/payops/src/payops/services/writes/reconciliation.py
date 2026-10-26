@@ -1,5 +1,6 @@
-"""Runs detection: loads snapshots, stores each payment's matrix verdict, and opens or updates cases. Each case write (plus its audit row) is one
-transaction; realtime events go out only after the commit so the UI never sees a case that was rolled back. (packages/core reconciliation.service.ts)"""
+"""Runs detection: loads snapshots, stores each payment's matrix verdict, and opens or updates cases. Each case write
+(plus its audit row) is one transaction; realtime events go out only after the commit so the UI never sees a case that
+was rolled back. (packages/core reconciliation.service.ts)"""
 
 from __future__ import annotations
 
@@ -27,7 +28,8 @@ from .cases import CaseWriteService
 
 RECON_CHUNK_SIZE = 200
 
-#: J1 signal intake hook: screens a newly opened case's support notes once, outside the transaction (it makes a network call).
+#: J1 signal intake hook: screens a newly opened case's support notes once, outside the transaction (it makes a network
+#: call).
 ScreenCase = Callable[[str, dict[str, Any]], Awaitable[Any]]
 
 
@@ -57,7 +59,12 @@ def _chunks(items: list[str], size: int) -> list[list[str]]:
 
 class ReconciliationService:
     def __init__(
-        self, sessions: async_sessionmaker[AsyncSession], clock: Clock, gateway: PaymentGateway, cases: CaseWriteService, case_queries: CaseQueryService,
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        clock: Clock,
+        gateway: PaymentGateway,
+        cases: CaseWriteService,
+        case_queries: CaseQueryService,
         events: EventPublisher,
     ) -> None:
         self._sessions = sessions
@@ -85,7 +92,13 @@ class ReconciliationService:
         for snap in snapshots:
             evaluation = evaluate_order(snap)
             if snap.payment:
-                recon_rows.append((snap.payment.id, {"mismatched": evaluation.matrix.mismatched, "checkedAt": to_iso(now)}, bool(evaluation.matrix.mismatched)))
+                recon_rows.append(
+                    (
+                        snap.payment.id,
+                        {"mismatched": evaluation.matrix.mismatched, "checkedAt": to_iso(now)},
+                        bool(evaluation.matrix.mismatched),
+                    )
+                )
             candidates.extend(evaluation.candidates)
             if not evaluation.hits and not evaluation.matrix.mismatched:
                 clean.append(snap.order.id)
@@ -136,15 +149,23 @@ class ReconciliationService:
                     update(Settlement)
                     .where(Settlement.id == batch.settlement.id)
                     .values(
-                        expected_net_minor=result.expected_net_minor, reported_net_minor=result.reported_net_minor,
-                        status="MATCHED" if result.diff_minor == 0 else "MISMATCH", updated_at=now,
+                        expected_net_minor=result.expected_net_minor,
+                        reported_net_minor=result.reported_net_minor,
+                        status="MATCHED" if result.diff_minor == 0 else "MISMATCH",
+                        updated_at=now,
                     )
                 )
                 if not result.hit:
                     continue
                 gw_id = result.offending_lines[0].line.gw_payment_id if result.offending_lines else None
                 snap = snapshot_by_gw.get(gw_id) if gw_id else None
-                matrix = build_matrix(snap) if snap else blank_matrix({"SETTLEMENT": {"status": "NET MISMATCH", "mismatch": True, "detail": result.hit.reason}})
+                matrix = (
+                    build_matrix(snap)
+                    if snap
+                    else blank_matrix(
+                        {"SETTLEMENT": {"status": "NET MISMATCH", "mismatch": True, "detail": result.hit.reason}}
+                    )
+                )
                 refs = snapshot_entity_refs(snap) if snap else {"merchantId": batch.merchant.id}
                 if snap and gw_id:
                     refs["gwPaymentId"] = gw_id
@@ -154,7 +175,8 @@ class ReconciliationService:
         return summary
 
     async def sweep(self, since_days: int = 30) -> ReconciliationSummary:
-        """Periodic full check: every order and settlement batch from the last `since_days` days, in chunks so memory stays flat."""
+        """Periodic full check: every order and settlement batch from the last `since_days` days, in chunks so memory
+        stays flat."""
         since = self._clock.now() - timedelta(milliseconds=since_days * DAY_MS)
         summary = ReconciliationSummary()
         for model, handler in ((Order, self._check_order_chunk), (Settlement, self._check_batch_chunk)):
@@ -162,7 +184,16 @@ class ReconciliationService:
             date_column = Order.created_at if model is Order else Settlement.settled_on
             while True:
                 async with self._sessions() as s:
-                    ids = list((await s.scalars(select(model.id).where(date_column >= since, model.id > after_id).order_by(model.id).limit(RECON_CHUNK_SIZE))).all())
+                    ids = list(
+                        (
+                            await s.scalars(
+                                select(model.id)
+                                .where(date_column >= since, model.id > after_id)
+                                .order_by(model.id)
+                                .limit(RECON_CHUNK_SIZE)
+                            )
+                        ).all()
+                    )
                 if not ids:
                     break
                 summary.merge(await handler(ids))
@@ -183,10 +214,13 @@ class ReconciliationService:
                 summary.updated += 1
             if result.changed:
                 touched.append((result.case.id, result.created))
-            # J1 signal intake: screen a newly opened case's support notes once, outside the DB transaction, before the case is published to the UI.
+            # J1 signal intake: screen a newly opened case's support notes once, outside the DB transaction, before the
+            # case is published to the UI.
             if result.created and self.screen_case is not None:
                 refs = result.case.entity_refs
-                await self.screen_case(result.case.id, {"paymentId": refs.get("paymentId"), "orderId": refs.get("orderId")})
+                await self.screen_case(
+                    result.case.id, {"paymentId": refs.get("paymentId"), "orderId": refs.get("orderId")}
+                )
         # After commit: publish only what changed, so a sweep over stable data is silent.
         async with self._sessions() as s:
             items = {i.id: i for i in await self._case_queries.list_items(s, [t[0] for t in touched])}
@@ -195,5 +229,7 @@ class ReconciliationService:
             if item is None:
                 continue
             summary.cases.append(TouchedCase(item, created))
-            self._events.publish(ROOM_OPS, OpsEvents.CASE_CREATED if created else OpsEvents.CASE_UPDATED, item.to_json())
+            self._events.publish(
+                ROOM_OPS, OpsEvents.CASE_CREATED if created else OpsEvents.CASE_UPDATED, item.to_json()
+            )
         return summary

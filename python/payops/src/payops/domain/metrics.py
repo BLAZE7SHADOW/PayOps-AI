@@ -47,7 +47,10 @@ def median(values: Sequence[float]) -> int | None:
 
 
 def compute_performance(
-    resolved: Sequence[ResolvedCaseRow], approvals: Sequence[DecidedApprovalRow], feedback: Sequence[FeedbackRow], runs: Sequence[RunCostRow]
+    resolved: Sequence[ResolvedCaseRow],
+    approvals: Sequence[DecidedApprovalRow],
+    feedback: Sequence[FeedbackRow],
+    runs: Sequence[RunCostRow],
 ) -> PerformanceMetrics:
     rated = len(feedback)
     right = sum(1 for f in feedback if f.verdict == "RIGHT")
@@ -56,7 +59,9 @@ def compute_performance(
     return PerformanceMetrics(
         resolution_time_median_ms=median([ms_between(c.resolved_at, c.opened_at) for c in resolved]),
         resolved_count=len(resolved),
-        auto_resolution_rate=(sum(1 for c in resolved if c.resolved_by == "AGENT") / len(resolved)) if resolved else None,
+        auto_resolution_rate=(sum(1 for c in resolved if c.resolved_by == "AGENT") / len(resolved))
+        if resolved
+        else None,
         agent_accuracy=(right / rated) if rated else None,
         rated_count=rated,
         approval_turnaround_median_ms=median([ms_between(a.decided_at, a.requested_at) for a in approvals]),

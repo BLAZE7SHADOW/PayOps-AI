@@ -117,7 +117,9 @@ async def test_the_real_worker_picks_up_a_job_from_postgres_through_listen_notif
 
     handlers, agents = JobHandlers(), RecordingAgents()
     handlers.agents = agents
-    jobs = ProcrastinateJobs(PsycopgConnector(conninfo=database_url, min_size=1, max_size=3), handlers, sweep_enabled=False)
+    jobs = ProcrastinateJobs(
+        PsycopgConnector(conninfo=database_url, min_size=1, max_size=3), handlers, sweep_enabled=False
+    )
     async with jobs.app.open_async():
         worker = asyncio.get_running_loop().create_task(jobs.run_worker(fetch_job_polling_interval=60))
         await asyncio.sleep(0.5)  # the worker is now waiting for NOTIFY

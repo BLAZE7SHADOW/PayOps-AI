@@ -1,5 +1,5 @@
-"""Batched loading of OrderSnapshots and settlement batches. The number of queries is constant (about fifteen) no matter how many orders are
-requested, so list endpoints and the sweep never do N+1 reads. (packages/core snapshot.loader.ts)"""
+"""Batched loading of OrderSnapshots and settlement batches. The number of queries is constant (about fifteen) no matter
+how many orders are requested, so list endpoints and the sweep never do N+1 reads. (packages/core snapshot.loader.ts)"""
 
 from __future__ import annotations
 
@@ -10,7 +10,19 @@ from typing import Any, TypeVar
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import Case, Customer, Device, Dispute, LedgerEntry, Merchant, Order, Payment, PaymentAttempt, Refund, Settlement
+from ..db.models import (
+    Case,
+    Customer,
+    Device,
+    Dispute,
+    LedgerEntry,
+    Merchant,
+    Order,
+    Payment,
+    PaymentAttempt,
+    Refund,
+    Settlement,
+)
 from ..domain.actions.types import BatchData, BatchState, CaseState
 from ..domain.gateway import GatewaySettlementLine, PaymentGateway
 from ..domain.reconciliation.rules import RULE_THRESHOLDS
@@ -36,7 +48,9 @@ def _uniq(values: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
-async def load_order_snapshots(session: AsyncSession, gateway: PaymentGateway, order_ids: Sequence[str], now: datetime) -> list[OrderSnapshot]:
+async def load_order_snapshots(
+    session: AsyncSession, gateway: PaymentGateway, order_ids: Sequence[str], now: datetime
+) -> list[OrderSnapshot]:
     """Snapshots in the order of `order_ids`; unknown ids are skipped."""
     ids = _uniq(order_ids)
     if not ids:
@@ -57,35 +71,56 @@ async def load_order_snapshots(session: AsyncSession, gateway: PaymentGateway, o
     gw_refund_rows = await gateway.list_refunds(gw_ids)
     lines = await gateway.list_settlement_lines(gw_payment_ids=gw_ids)
 
-    refund_rows: list[Refund] = list((await session.scalars(select(Refund).where(Refund.gw_payment_id.in_(gw_ids)))).all()) if gw_ids else []
-    # Capture postings by internal payment, plus refund postings for any of the order's gateway payments (a refunded duplicate capture has a refund
+    refund_rows: list[Refund] = (
+        list((await session.scalars(select(Refund).where(Refund.gw_payment_id.in_(gw_ids)))).all()) if gw_ids else []
+    )
+    # Capture postings by internal payment, plus refund postings for any of the order's gateway payments (a refunded
+    # duplicate capture has a refund
     # journal but no internal payment).
     ledger_conditions: list[Any] = []
     if payment_ids:
         ledger_conditions.append(LedgerEntry.payment_id.in_(payment_ids))
     if gw_ids:
         ledger_conditions.append(LedgerEntry.refund_id.in_(select(Refund.id).where(Refund.gw_payment_id.in_(gw_ids))))
-    ledger_rows = list((await session.scalars(select(LedgerEntry).where(or_(*ledger_conditions)))).all()) if ledger_conditions else []
+    ledger_rows = (
+        list((await session.scalars(select(LedgerEntry).where(or_(*ledger_conditions)))).all())
+        if ledger_conditions
+        else []
+    )
     merchant_rows = (await session.scalars(select(Merchant).where(Merchant.id.in_(merchant_ids)))).all()
     customer_rows = (await session.scalars(select(Customer).where(Customer.id.in_(customer_ids)))).all()
     attempt_rows = (
         await session.scalars(
             select(PaymentAttempt).where(
-                and_(PaymentAttempt.customer_id.in_(customer_ids), PaymentAttempt.at >= earliest, PaymentAttempt.at < now + timedelta(milliseconds=DAY_MS))
+                and_(
+                    PaymentAttempt.customer_id.in_(customer_ids),
+                    PaymentAttempt.at >= earliest,
+                    PaymentAttempt.at < now + timedelta(milliseconds=DAY_MS),
+                )
             )
         )
     ).all()
     device_rows = (await session.scalars(select(Device).where(Device.customer_id.in_(customer_ids)))).all()
 
     batch_ids = _uniq(line.batch_id for line in lines)
-    settlement_rows = (await session.scalars(select(Settlement).where(Settlement.id.in_(batch_ids)))).all() if batch_ids else []
+    settlement_rows = (
+        (await session.scalars(select(Settlement).where(Settlement.id.in_(batch_ids)))).all() if batch_ids else []
+    )
 
-    # Merchant exposure: every settlement batch belonging to these merchants, then every dispute raised against any of them. This is the closest
-    # signal the schema has to how often a merchant's money has been disputed (a merchant-level proxy, not a per-customer chargeback history).
-    merchant_batches = (await session.execute(select(Settlement.id, Settlement.merchant_id).where(Settlement.merchant_id.in_(merchant_ids)))).all()
+    # Merchant exposure: every settlement batch belonging to these merchants, then every dispute raised against any of
+    # them. This is the closest
+    # signal the schema has to how often a merchant's money has been disputed (a merchant-level proxy, not a
+    # per-customer chargeback history).
+    merchant_batches = (
+        await session.execute(
+            select(Settlement.id, Settlement.merchant_id).where(Settlement.merchant_id.in_(merchant_ids))
+        )
+    ).all()
     merchant_by_batch = {bid: mid for bid, mid in merchant_batches}
     dispute_rows = (
-        (await session.scalars(select(Dispute).where(Dispute.batch_id.in_(_uniq(merchant_by_batch))))).all() if merchant_by_batch else []
+        (await session.scalars(select(Dispute).where(Dispute.batch_id.in_(_uniq(merchant_by_batch))))).all()
+        if merchant_by_batch
+        else []
     )
     disputes_by_merchant = group_by(dispute_rows, lambda d: merchant_by_batch.get(d.batch_id))
 
@@ -118,12 +153,16 @@ async def load_order_snapshots(session: AsyncSession, gateway: PaymentGateway, o
         )
         gateway_payments = sorted(gw_by_order.get(oid, []), key=lambda g: g.created_at)
         primary = pick_primary_gw(gateway_payments, payment)
-        order_lines: list[GatewaySettlementLine] = [line for g in gateway_payments for line in lines_by_gw.get(g.id, [])]
+        order_lines: list[GatewaySettlementLine] = [
+            line for g in gateway_payments for line in lines_by_gw.get(g.id, [])
+        ]
         primary_line = next((line for line in order_lines if primary and line.gw_payment_id == primary.id), None)
-        window_end = (primary.captured_at if primary and primary.captured_at else now)
+        window_end = primary.captured_at if primary and primary.captured_at else now
         window_start = window_end - RISK_WINDOW
 
-        order_refunds = sorted((r for g in gateway_payments for r in refunds_by_gw.get(g.id, [])), key=lambda r: r.requested_at)
+        order_refunds = sorted(
+            (r for g in gateway_payments for r in refunds_by_gw.get(g.id, [])), key=lambda r: r.requested_at
+        )
         ledger_by_id: dict[str, LedgerEntry] = {}
         for e in ledger_by_payment.get(payment.id, []) if payment else []:
             ledger_by_id[e.id] = e
@@ -147,7 +186,8 @@ async def load_order_snapshots(session: AsyncSession, gateway: PaymentGateway, o
                 merchant=merchant,
                 customer=customer,
                 recent_attempts=sorted(
-                    (a for a in attempts_by_customer.get(customer.id, []) if window_start <= a.at < window_end), key=lambda a: a.at
+                    (a for a in attempts_by_customer.get(customer.id, []) if window_start <= a.at < window_end),
+                    key=lambda a: a.at,
                 ),
                 devices=devices_by_customer.get(customer.id, []),
                 merchant_disputes=disputes_by_merchant.get(order.merchant_id, []),
@@ -166,9 +206,17 @@ async def load_batches(session: AsyncSession, gateway: PaymentGateway, batch_ids
     if not settlement_rows:
         return []
     gw_ids = _uniq(line.gw_payment_id for line in lines)
-    merchant_rows = (await session.scalars(select(Merchant).where(Merchant.id.in_(_uniq(s.merchant_id for s in settlement_rows))))).all()
+    merchant_rows = (
+        await session.scalars(select(Merchant).where(Merchant.id.in_(_uniq(s.merchant_id for s in settlement_rows))))
+    ).all()
     payment_rows = (
-        (await session.execute(select(Payment.id, Payment.order_id, Payment.gw_payment_id).where(Payment.gw_payment_id.in_(gw_ids)))).all() if gw_ids else []
+        (
+            await session.execute(
+                select(Payment.id, Payment.order_id, Payment.gw_payment_id).where(Payment.gw_payment_id.in_(gw_ids))
+            )
+        ).all()
+        if gw_ids
+        else []
     )
     dispute_rows = (await session.scalars(select(Dispute).where(Dispute.batch_id.in_(ids)))).all()
     disputes_by_batch = group_by(dispute_rows, lambda d: d.batch_id)
@@ -182,7 +230,9 @@ async def load_batches(session: AsyncSession, gateway: PaymentGateway, batch_ids
         merchant = merchant_by_id.get(settlement.merchant_id) if settlement else None
         if settlement is None or merchant is None:
             continue
-        out.append(BatchData(settlement, lines_by_batch.get(bid, []), merchant, payments_by_gw, disputes_by_batch.get(bid, [])))
+        out.append(
+            BatchData(settlement, lines_by_batch.get(bid, []), merchant, payments_by_gw, disputes_by_batch.get(bid, []))
+        )
     return out
 
 
@@ -206,5 +256,7 @@ async def load_case_state(session: AsyncSession, gateway: PaymentGateway, case: 
         now=now,
         case=row,
         order=snapshots[0] if snapshots else None,
-        batch=BatchState(batch, check_batch(batch.settlement.id, batch.lines, batch.merchant, batch.disputes)) if batch else None,
+        batch=BatchState(batch, check_batch(batch.settlement.id, batch.lines, batch.merchant, batch.disputes))
+        if batch
+        else None,
     )

@@ -1,7 +1,7 @@
 """Resolutions, approvals and the case page's resolution view (packages/shared dto/resolution.ts).
 
-`actions`, `policy`, `budget` and the like are stored as JSON in exactly the shape the web app reads, so they pass through as plain dicts.
-"""
+`actions`, `policy`, `budget` and the like are stored as JSON in exactly the shape the web app reads, so they pass
+through as plain dicts."""
 
 from __future__ import annotations
 

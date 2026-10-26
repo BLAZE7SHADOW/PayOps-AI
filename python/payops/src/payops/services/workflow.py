@@ -1,4 +1,5 @@
-"""Operator workflow reads: the shift handoff, case notes and saved queue views. (packages/core handoff.service.ts, case-note.service.ts, saved-view.service.ts)"""
+"""Operator workflow reads: the shift handoff, case notes and saved queue views. (packages/core handoff.service.ts,
+case-note.service.ts, saved-view.service.ts)"""
 
 from __future__ import annotations
 
@@ -28,7 +29,8 @@ MAX_RECENT_NOTES = 10
 
 
 class HandoffService:
-    """Everything here is counted and ordered by code from the database; no model writes or rewords any of it (rule 4)."""
+    """Everything here is counted and ordered by code from the database; no model writes or rewords any of it (rule
+    4)."""
 
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
@@ -37,7 +39,11 @@ class HandoffService:
         now = self._clock.now()
         since = now - timedelta(hours=since_hours)
         open_rows = (
-            await session.execute(select(Case, User.name).join(User, User.id == Case.assignee_id, isouter=True).where(Case.status.in_(OPEN_CASE_STATUSES)))
+            await session.execute(
+                select(Case, User.name)
+                .join(User, User.id == Case.assignee_id, isouter=True)
+                .where(Case.status.in_(OPEN_CASE_STATUSES))
+            )
         ).all()
 
         by_severity = {s: 0 for s in SEVERITIES}
@@ -58,8 +64,17 @@ class HandoffService:
             if not reasons:
                 continue
             ref = HandoffCaseRef(
-                id=row.id, display_id=row.display_id, type=row.type, severity=row.severity, status=row.status, amount_minor=row.amount_minor,
-                due_at=to_iso(row.due_at) if row.due_at else None, overdue=late, assignee_name=assignee_name, reasons=reasons, last_note=None,
+                id=row.id,
+                display_id=row.display_id,
+                type=row.type,
+                severity=row.severity,
+                status=row.status,
+                amount_minor=row.amount_minor,
+                due_at=to_iso(row.due_at) if row.due_at else None,
+                overdue=late,
+                assignee_name=assignee_name,
+                reasons=reasons,
+                last_note=None,
             )
             attention.append((row.priority, row.opened_at.timestamp(), ref))
         # Same order as the queue: priority high to low, then oldest first.
@@ -70,12 +85,18 @@ class HandoffService:
         if top:
             notes = (
                 await session.scalars(
-                    select(CaseNote).where(CaseNote.case_id.in_([t.id for t in top])).order_by(desc(CaseNote.created_at), desc(CaseNote.id))
+                    select(CaseNote)
+                    .where(CaseNote.case_id.in_([t.id for t in top]))
+                    .order_by(desc(CaseNote.created_at), desc(CaseNote.id))
                 )
             ).all()
             for n in notes:
-                last_notes.setdefault(n.case_id, HandoffNote(text=n.text_, author_name=n.author_name, at=to_iso(n.created_at)))
-        resolved_rows = (await session.execute(select(Case.resolution).where(Case.status == "RESOLVED", Case.resolved_at >= since))).all()
+                last_notes.setdefault(
+                    n.case_id, HandoffNote(text=n.text_, author_name=n.author_name, at=to_iso(n.created_at))
+                )
+        resolved_rows = (
+            await session.execute(select(Case.resolution).where(Case.status == "RESOLVED", Case.resolved_at >= since))
+        ).all()
         resolved_by = {a: 0 for a in ACTOR_TYPES}
         for (resolution,) in resolved_rows:
             if resolution:
@@ -93,11 +114,23 @@ class HandoffService:
             generated_at=to_iso(now),
             since_hours=since_hours,
             since=to_iso(since),
-            open=HandoffOpen(total=len(open_rows), overdue=overdue, awaiting_approval=awaiting, unassigned=unassigned, by_severity=by_severity),
+            open=HandoffOpen(
+                total=len(open_rows),
+                overdue=overdue,
+                awaiting_approval=awaiting,
+                unassigned=unassigned,
+                by_severity=by_severity,
+            ),
             needs_attention=[t.model_copy(update={"last_note": last_notes.get(t.id)}) for t in top],
             resolved=HandoffResolved(total=len(resolved_rows), by=resolved_by),
             recent_notes=[
-                HandoffRecentNote(case_id=n.case_id, display_id=display_id, text=n.text_, author_name=n.author_name, at=to_iso(n.created_at))
+                HandoffRecentNote(
+                    case_id=n.case_id,
+                    display_id=display_id,
+                    text=n.text_,
+                    author_name=n.author_name,
+                    at=to_iso(n.created_at),
+                )
                 for n, display_id in recent
             ],
         )
@@ -108,14 +141,33 @@ class CaseNoteQueryService:
         """Newest first."""
         if (await session.get(Case, case_id)) is None:
             raise not_found("Case", case_id)
-        rows = (await session.scalars(select(CaseNote).where(CaseNote.case_id == case_id).order_by(desc(CaseNote.created_at), desc(CaseNote.id)))).all()
+        rows = (
+            await session.scalars(
+                select(CaseNote)
+                .where(CaseNote.case_id == case_id)
+                .order_by(desc(CaseNote.created_at), desc(CaseNote.id))
+            )
+        ).all()
         return [
-            OperatorNoteItem(id=r.id, case_id=r.case_id, text=r.text_, author_id=r.author_id, author_name=r.author_name, created_at=to_iso(r.created_at))
+            OperatorNoteItem(
+                id=r.id,
+                case_id=r.case_id,
+                text=r.text_,
+                author_id=r.author_id,
+                author_name=r.author_name,
+                created_at=to_iso(r.created_at),
+            )
             for r in rows
         ]
 
 
 class SavedViewQueryService:
     async def list(self, session: AsyncSession, owner_id: str) -> list[SavedViewItem]:
-        rows = (await session.scalars(select(SavedView).where(SavedView.owner_id == owner_id).order_by(asc(SavedView.created_at), asc(SavedView.id)))).all()
+        rows = (
+            await session.scalars(
+                select(SavedView)
+                .where(SavedView.owner_id == owner_id)
+                .order_by(asc(SavedView.created_at), asc(SavedView.id))
+            )
+        ).all()
         return [SavedViewItem(id=r.id, name=r.name, filters=r.filters, created_at=to_iso(r.created_at)) for r in rows]

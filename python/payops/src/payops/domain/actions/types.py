@@ -1,5 +1,6 @@
-"""Action runtime types. Each action type has pure preconditions (plain reasons it cannot run on this data) and pure postconditions
-(checks the validator runs on FRESH data afterwards). Execution touches the database and the gateway, so it lives in the services layer."""
+"""Action runtime types. Each action type has pure preconditions (plain reasons it cannot run on this data) and pure
+postconditions (checks the validator runs on FRESH data afterwards). Execution touches the database and the gateway, so
+it lives in the services layer."""
 
 from __future__ import annotations
 
@@ -43,11 +44,19 @@ class CaseState:
     batch: BatchState | None
 
 
-def postcondition(index: int, key: str, *, subject: str, description: str, expected: str, actual: str, passed: bool) -> ValidationCheck:
+def postcondition(
+    index: int, key: str, *, subject: str, description: str, expected: str, actual: str, passed: bool
+) -> ValidationCheck:
     """Builds a postcondition check with a stable id."""
     return ValidationCheck.model_validate(
         {
-            "id": f"a{index}.{key}", "kind": "POSTCONDITION", "actionIndex": index, "subject": subject, "description": description,
-            "expected": expected, "actual": actual, "pass": passed,
+            "id": f"a{index}.{key}",
+            "kind": "POSTCONDITION",
+            "actionIndex": index,
+            "subject": subject,
+            "description": description,
+            "expected": expected,
+            "actual": actual,
+            "pass": passed,
         }
     )

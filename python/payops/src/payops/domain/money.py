@@ -1,4 +1,5 @@
-"""Money helpers. All money is integer paise in fields named `*_minor`; floats never enter money paths and formatting happens only here."""
+"""Money helpers. All money is integer paise in fields named `*_minor`; floats never enter money paths and formatting
+happens only here."""
 
 from __future__ import annotations
 

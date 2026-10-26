@@ -1,5 +1,5 @@
-"""Rules-only risk tier. Used for every proposal and as the deterministic fallback when Jev J3 is unavailable. It never returns CRITICAL:
-that needs more than rules."""
+"""Rules-only risk tier. Used for every proposal and as the deterministic fallback when Jev J3 is unavailable. It never
+returns CRITICAL: that needs more than rules."""
 
 from __future__ import annotations
 

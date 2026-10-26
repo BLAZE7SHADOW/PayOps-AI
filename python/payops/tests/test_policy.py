@@ -33,8 +33,14 @@ def refund(amount_minor: int) -> Any:
 
 
 BASE = PolicyInput(
-    proposer="USER", actions=[replay], risk_tier="LOW", attempt=1, diagnosis_confidence=None, grounding_violations=0,
-    precondition_failures=0, gateway_capture_verified=True,
+    proposer="USER",
+    actions=[replay],
+    risk_tier="LOW",
+    attempt=1,
+    diagnosis_confidence=None,
+    grounding_violations=0,
+    precondition_failures=0,
+    gateway_capture_verified=True,
 )
 
 AGENT = dict(proposer="AGENT")
@@ -45,15 +51,35 @@ TABLE: list[tuple[str, dict[str, Any], str, list[str]]] = [
     ("refund_never_initiated: ₹78,000 refund", dict(actions=[refund(7_800_000)]), "MANAGER", ["P3"]),
     ("settlement_mismatch: dispute", dict(actions=[dispute]), "OPS", ["P9"]),
     ("duplicate_capture: ₹4,999 refund", dict(actions=[refund(499_900)]), "OPS", ["P4"]),
-    ("suspicious_payment: hold + escalate, risk HIGH", dict(actions=[hold, escalate], risk_tier="HIGH"), "MANAGER", ["P2", "P10"]),
-    ("replay_fails attempt 2: mark paid + post ledger", dict(actions=[mark_paid, post_ledger], attempt=2), "OPS", ["P6", "P7"]),
+    (
+        "suspicious_payment: hold + escalate, risk HIGH",
+        dict(actions=[hold, escalate], risk_tier="HIGH"),
+        "MANAGER",
+        ["P2", "P10"],
+    ),
+    (
+        "replay_fails attempt 2: mark paid + post ledger",
+        dict(actions=[mark_paid, post_ledger], attempt=2),
+        "OPS",
+        ["P6", "P7"],
+    ),
     ("refund exactly ₹1,000 is AUTO", dict(actions=[refund(1_000_00)]), "AUTO", ["P5"]),
     ("refund ₹1,000.01 is OPS", dict(actions=[refund(1_000_01)]), "OPS", ["P4"]),
     ("refund exactly ₹10,000 is OPS", dict(actions=[refund(10_000_00)]), "OPS", ["P4"]),
     ("refund ₹10,000.01 is MANAGER", dict(actions=[refund(10_000_01)]), "MANAGER", ["P3"]),
-    ("small refund with MEDIUM risk falls back to OPS", dict(actions=[refund(500_00)], risk_tier="MEDIUM"), "OPS", ["P11"]),
+    (
+        "small refund with MEDIUM risk falls back to OPS",
+        dict(actions=[refund(500_00)], risk_tier="MEDIUM"),
+        "OPS",
+        ["P11"],
+    ),
     ("two refunds are summed", dict(actions=[refund(6_000_00), refund(6_000_00)]), "MANAGER", ["P3"]),
-    ("CRITICAL risk + refund is BLOCKED", dict(actions=[refund(500_00)], risk_tier="CRITICAL"), "BLOCKED", ["P1", "P2"]),
+    (
+        "CRITICAL risk + refund is BLOCKED",
+        dict(actions=[refund(500_00)], risk_tier="CRITICAL"),
+        "BLOCKED",
+        ["P1", "P2"],
+    ),
     ("CRITICAL risk + hold is MANAGER", dict(actions=[hold], risk_tier="CRITICAL"), "MANAGER", ["P2", "P10"]),
     ("precondition failure is BLOCKED", dict(precondition_failures=1), "BLOCKED", ["P0", "P6"]),
     ("empty proposal is BLOCKED", dict(actions=[]), "BLOCKED", ["P0"]),
@@ -63,15 +89,50 @@ TABLE: list[tuple[str, dict[str, Any], str, list[str]]] = [
     ("mixed control and correction has no auto rule", dict(actions=[mark_paid, hold]), "OPS", ["P11"]),
     ("attempt 3 raises AUTO to OPS", dict(attempt=3), "OPS", ["P6", "P7"]),
     ("agent correction with 0.9 confidence is AUTO", dict(**AGENT, diagnosis_confidence=0.9), "AUTO", ["P6"]),
-    ("agent correction, propose-only: OPS approves", dict(**AGENT, diagnosis_confidence=0.95, agent_control="PROPOSE_ONLY"), "OPS", ["P6", "P12"]),
-    ("agent correction, paused: OPS approves", dict(**AGENT, diagnosis_confidence=0.95, agent_control="PAUSED"), "OPS", ["P6", "P12"]),
-    ("agent correction, normal mode: still AUTO", dict(**AGENT, diagnosis_confidence=0.95, agent_control="NORMAL"), "AUTO", ["P6"]),
-    ("agent hold and escalate stay AUTO while paused", dict(**AGENT, diagnosis_confidence=0.95, actions=[hold, escalate], agent_control="PAUSED"), "AUTO", ["P10"]),
-    ("a person's correction is not held by the agent pause", dict(proposer="USER", agent_control="PAUSED"), "AUTO", ["P6"]),
+    (
+        "agent correction, propose-only: OPS approves",
+        dict(**AGENT, diagnosis_confidence=0.95, agent_control="PROPOSE_ONLY"),
+        "OPS",
+        ["P6", "P12"],
+    ),
+    (
+        "agent correction, paused: OPS approves",
+        dict(**AGENT, diagnosis_confidence=0.95, agent_control="PAUSED"),
+        "OPS",
+        ["P6", "P12"],
+    ),
+    (
+        "agent correction, normal mode: still AUTO",
+        dict(**AGENT, diagnosis_confidence=0.95, agent_control="NORMAL"),
+        "AUTO",
+        ["P6"],
+    ),
+    (
+        "agent hold and escalate stay AUTO while paused",
+        dict(**AGENT, diagnosis_confidence=0.95, actions=[hold, escalate], agent_control="PAUSED"),
+        "AUTO",
+        ["P10"],
+    ),
+    (
+        "a person's correction is not held by the agent pause",
+        dict(proposer="USER", agent_control="PAUSED"),
+        "AUTO",
+        ["P6"],
+    ),
     ("agent correction with 0.8 confidence needs OPS", dict(**AGENT, diagnosis_confidence=0.8), "OPS", ["P11"]),
     ("agent with 0.5 confidence triggers P8", dict(**AGENT, diagnosis_confidence=0.5), "OPS", ["P8"]),
-    ("agent small refund needs 0.9 for AUTO", dict(**AGENT, actions=[refund(500_00)], diagnosis_confidence=0.89), "OPS", ["P11"]),
-    ("agent small refund at 0.95 is AUTO", dict(**AGENT, actions=[refund(500_00)], diagnosis_confidence=0.95), "AUTO", ["P5"]),
+    (
+        "agent small refund needs 0.9 for AUTO",
+        dict(**AGENT, actions=[refund(500_00)], diagnosis_confidence=0.89),
+        "OPS",
+        ["P11"],
+    ),
+    (
+        "agent small refund at 0.95 is AUTO",
+        dict(**AGENT, actions=[refund(500_00)], diagnosis_confidence=0.95),
+        "AUTO",
+        ["P5"],
+    ),
     ("P8 is skipped for people", dict(proposer="USER", diagnosis_confidence=0.1), "AUTO", ["P6"]),
 ]
 
@@ -108,7 +169,9 @@ CAPTURED_AT = datetime(2026, 9, 28, 11, 50, tzinfo=UTC)
 def with_failures(n: int, amount_minor: int):
     s = healthy_snapshot(amount_minor)
     gw = gw_payment(amount_minor=amount_minor, captured_at=CAPTURED_AT)
-    return with_snapshot(s, gateway=[gw], recent_attempts=[attempt(at=CAPTURED_AT - timedelta(minutes=(i + 1) * 5)) for i in range(n)])
+    return with_snapshot(
+        s, gateway=[gw], recent_attempts=[attempt(at=CAPTURED_AT - timedelta(minutes=(i + 1) * 5)) for i in range(n)]
+    )
 
 
 def test_risk_is_high_at_five_failures_before_a_capture_of_10000_or_more() -> None:

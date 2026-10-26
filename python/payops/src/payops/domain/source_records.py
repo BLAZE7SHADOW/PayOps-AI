@@ -1,8 +1,9 @@
-"""Read-only operator view of fresh domain and gateway records behind a case. No model output is used. (packages/core case-source-records.ts)"""
+"""Read-only operator view of fresh domain and gateway records behind a case. No model output is used. (packages/core
+case-source-records.ts)"""
 
 from __future__ import annotations
 
-from ..dto.case_detail import CaseSourceDetail, CaseSourceRecord, CaseSourceRecords
+from ..dto.case_detail import CaseSourceDetail, CaseSourceRecord, CaseSourceRecords, SourceSystem
 from .actions.types import CaseState
 from .money import format_money
 from .timeutil import to_iso
@@ -15,8 +16,26 @@ def _d(label: str, value: str) -> CaseSourceDetail:
 def project_case_source_records(state: CaseState) -> CaseSourceRecords:
     records: list[CaseSourceRecord] = []
 
-    def add(system: str, kind: str, id_: str, status: str, amount_minor: int | None, at, details: list[CaseSourceDetail]) -> None:
-        records.append(CaseSourceRecord(system=system, kind=kind, id=id_, status=status, amount_minor=amount_minor, at=to_iso(at), details=details))  # type: ignore[arg-type]
+    def add(
+        system: SourceSystem,
+        kind: str,
+        id_: str,
+        status: str,
+        amount_minor: int | None,
+        at,
+        details: list[CaseSourceDetail],
+    ) -> None:
+        records.append(
+            CaseSourceRecord(
+                system=system,
+                kind=kind,
+                id=id_,
+                status=status,
+                amount_minor=amount_minor,
+                at=to_iso(at),
+                details=details,
+            )
+        )  # type: ignore[arg-type]
 
     order = state.order
     if order:
@@ -61,7 +80,10 @@ def project_case_source_records(state: CaseState) -> CaseSourceRecords:
                     _d("Event", w.event),
                     _d("Gateway payment", w.gw_payment_id),
                     *[
-                        _d(f"Attempt {i + 1}", f"HTTP {a.http_status if a.http_status is not None else 'no response'} · {a.at}")
+                        _d(
+                            f"Attempt {i + 1}",
+                            f"HTTP {a.http_status if a.http_status is not None else 'no response'} · {a.at}",
+                        )
                         for i, a in enumerate(w.attempts)
                     ],
                 ],
@@ -87,7 +109,15 @@ def project_case_source_records(state: CaseState) -> CaseSourceRecords:
                 [_d("Gateway payment", r.gw_payment_id), _d("Gateway refund", r.gw_refund_id or "None")],
             )
         for r in order.gw_refunds:
-            add("REFUND", "Gateway refund", r.id, r.status, r.amount_minor, r.processed_at or r.created_at, [_d("Gateway payment", r.gw_payment_id)])
+            add(
+                "REFUND",
+                "Gateway refund",
+                r.id,
+                r.status,
+                r.amount_minor,
+                r.processed_at or r.created_at,
+                [_d("Gateway payment", r.gw_payment_id)],
+            )
         for line in order.settlement_lines:
             add(
                 "SETTLEMENT",
@@ -138,5 +168,13 @@ def project_case_source_records(state: CaseState) -> CaseSourceRecords:
                 ],
             )
         for d in data.disputes:
-            add("DISPUTE", "Settlement dispute", d.id, d.status, d.amount_minor, d.updated_at, [_d("Batch", d.batch_id), _d("Reason", d.reason)])
+            add(
+                "DISPUTE",
+                "Settlement dispute",
+                d.id,
+                d.status,
+                d.amount_minor,
+                d.updated_at,
+                [_d("Batch", d.batch_id), _d("Reason", d.reason)],
+            )
     return CaseSourceRecords(case_id=state.case.id, read_at=to_iso(state.now), records=records)
