@@ -14,9 +14,9 @@ async def test_a_new_database_gets_every_table_and_the_audit_triggers(engine: As
         tables = (await conn.execute(text("select count(*) from information_schema.tables where table_schema = 'public'"))).scalar()
         triggers = {r[0] for r in await conn.execute(text("select tgname from pg_trigger where not tgisinternal"))}
         revision = (await conn.execute(text("select version_num from alembic_version"))).scalar()
-    assert tables == 35  # the 34 application tables plus alembic_version
+    assert tables == 39  # the 34 application tables, alembic_version and the 4 job queue tables
     assert {"audit_events_no_update", "audit_events_no_delete"} <= triggers
-    assert revision == "0001"
+    assert revision == "0002"
 
 
 async def test_the_audit_log_cannot_be_edited_or_deleted(engine: AsyncEngine) -> None:
@@ -53,4 +53,4 @@ def test_a_database_drizzle_already_built_is_adopted_not_rebuilt(pg_uri: str) ->
                     conn.execute(statement)
     upgrade(uri)
     with psycopg.connect(uri) as conn:
-        assert conn.execute("select version_num from alembic_version").fetchone() == ("0001",)
+        assert conn.execute("select version_num from alembic_version").fetchone() == ("0002",)

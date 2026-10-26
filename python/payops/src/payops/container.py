@@ -12,6 +12,7 @@ from .auth.sessions import SessionStore
 from .auth.tokens import SessionConfig, session_config
 from .domain.gateway import PaymentGateway
 from .infra.gateway import SimulatorGateway
+from .jobs.queue import JobQueue
 from .ports import Clock, EventPublisher, NoopPublisher, SystemClock
 from .services.agent_control import AgentControlService
 from .services.approvals import ApprovalQueryService
@@ -72,6 +73,7 @@ class Services:
     feedback: FeedbackService
     agent_control_writes: AgentControlWriteService
     session_store: SessionStore
+    jobs: JobQueue | None
     limiter: RateLimiter
     auth: AuthService
     simulator: SimulatorService
@@ -81,6 +83,7 @@ class Services:
 def build_services(
     sessions: async_sessionmaker[AsyncSession], *, clock: Clock | None = None, events: EventPublisher | None = None, gateway: PaymentGateway | None = None,
     auth_config: SessionConfig | None = None, demo_mode: bool = True, cassette_dir: Path | None = None, reset_cooldown_seconds: float = 10.0,
+    jobs: JobQueue | None = None,
 ) -> Services:
     clock = clock or SystemClock()
     gateway = gateway or SimulatorGateway(sessions, clock)
@@ -112,6 +115,8 @@ def build_services(
             return (await approvals.item(s, approval_id)).to_json()
 
     resolution_service.use_approval_items(approval_payload)
+    if jobs is not None:
+        webhook_events.set_scheduler(jobs)
     if isinstance(gateway, SimulatorGateway):
         # The simulated gateway delivers webhooks to our log, which runs the consumer and records the attempt.
         gateway.set_webhook_sink(webhook_events.receive)
@@ -144,6 +149,7 @@ def build_services(
         feedback=FeedbackService(clock, audit),
         agent_control_writes=AgentControlWriteService(clock, audit, agent_control),
         session_store=session_store,
+        jobs=jobs,
         limiter=limiter,
         signal_intake=signal_intake,
         simulator=SimulatorService(sessions, clock, audit, reconciliation, cassette_dir, reset_cooldown_seconds),

@@ -26,8 +26,18 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     ai_mode: Literal["LIVE", "RECORD", "REPLAY"] = "REPLAY"
     demo_mode: bool = True
+    #: How often the reconcile sweep runs, in ms. 0 turns it off (the hosted demo does: the database bills egress).
+    reconcile_sweep_ms: int = Field(default=60_000, ge=0)
+    #: `worker` runs a job worker in this process; `inline` runs each job at once in the background (tests, and running without a queue).
+    jobs: Literal["worker", "inline"] | None = None
+    #: How long a Procrastinate worker waits between looks for delayed jobs. NOTIFY wakes it for new ones, so this only affects retries.
+    job_poll_seconds: float = Field(default=30, ge=1)
     #: Recorded model responses (and the manifest of which scenarios have them). Defaults to the repository's `fixtures/cassettes`.
     cassette_dir: Path | None = None
+
+    @property
+    def jobs_mode(self) -> Literal["worker", "inline"]:
+        return self.jobs or ("inline" if self.node_env == "test" else "worker")
 
     @property
     def cassettes(self) -> Path:

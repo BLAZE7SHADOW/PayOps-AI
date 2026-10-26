@@ -7,6 +7,7 @@ import gzip
 import itertools
 import json
 import logging
+import os
 import tempfile
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -20,6 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from payops.db.engine import create_engine
 from payops.db.migrate import upgrade
+
+# Tests build the app many times and have no job worker: jobs run inline in the background of the same process.
+os.environ.setdefault("JOBS", "inline")
 
 # pgserver logs from an exit hook after pytest has closed stderr; the failure is harmless and only noisy.
 logging.raiseExceptions = False

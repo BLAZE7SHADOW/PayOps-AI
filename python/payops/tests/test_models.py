@@ -12,7 +12,7 @@ async def test_every_table_and_column_in_the_database_has_a_model_and_the_revers
             await conn.execute(
                 text(
                     "select table_name, column_name, is_nullable from information_schema.columns "
-                    "where table_schema = 'public' and table_name <> 'alembic_version'"
+                    "where table_schema = 'public' and table_name <> 'alembic_version' and table_name not like 'procrastinate_%'"
                 )
             )
         ).all()

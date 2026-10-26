@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B5 batch 1: the job queue and realtime in Python
+- Jobs on Postgres with Procrastinate (migration 0002 adds its four tables): agent run and resume, the reconcile sweep (a cron job, only registered when `RECONCILE_SWEEP_MS` is above 0) and webhook retries scheduled for the time the event log asks. The worker runs inside the API process and sleeps until Postgres NOTIFY wakes it; polling is every 30 s (only delayed jobs need it) and the heartbeat every 5 min, to keep idle traffic low (D083). `JOBS=inline` runs jobs at once in the background for tests.
+- Realtime with python-socketio mounted at `/socket.io`: the handshake needs a valid session cookie, everyone joins `ops`, case rooms are joined on demand, and revoking a session closes its sockets. The services publish through it. Tests use the real Socket.IO client against a real uvicorn server (added `aiohttp` as a dev dependency for that client).
+- 10 new tests (jobs forward arguments, delayed retries wait, sweep switch, handlers; realtime refusal, ops events, rooms, revocation). 485 tests, ruff and pyright clean.
+- Next: the agents in process (the tool layer, run rows and the node API as direct service calls), run start and resume.
+
 ### 2026-10-26 · Phase B4 done on the Python side: the simulator, reset and undo
 - `payops/simulator/`: the world (merchants, customers, devices), checkout lifecycle, noise, all 21 scenarios, generate, reset, undo and the demo seed. J1 signal intake (`writes/signal_intake.py`) runs for new cases; it needs a Jev adapter, which arrives with the agents in B5 (without one, notes stay unscreened, as in the TypeScript fallback).
 - Parity with TypeScript is tested row for row: `tests/fixtures/simulator_seed.json.gz` (made by `packages/evals/scripts/export-simulator-seed.ts`) holds every table after the demo seed. 16 tables match exactly (same ids from the seeded generators, same timestamps, same detection results) and the 20 cases match apart from their random ids.
