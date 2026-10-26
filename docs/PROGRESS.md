@@ -111,6 +111,11 @@ Shivam's Mac directly, same as task 9 did.
 - Docs: README, CLAUDE.md, D090, DEPLOY, OPERATIONS rewritten or bannered. `docs/02` is rewritten for the Python layout and `docs/03` has its paths and §18 (runtime) updated; both keep a small old-to-new path map at the top.
 - Merge only after the bandwidth check on Render passes (master is what Render deploys; a deploy of the old Node service needs the tag).
 - Added the Python cassette recorder `payops/evals/record.py` (`pnpm cassette:record`, flags `--all`, `--only`). Its run, approval and manifest handling is tested by replaying the original three scenarios; a real RECORD run has not been done (needs the keys and billed calls), so the first one should be a single scenario with `--only`.
+### 2026-10-26 · Case page: a clear next step for every status
+- Shivam hit an escalated case with an empty Approvals page and could not tell who acts or where. Escalation (no fix proposed, no approval) was worded like a waiting state.
+- New five-stage progress path on the case page (`CaseProgress`, `case-progress.ts`): Detected, Investigated, Approval, Fix applied, Verified, each Done, Now, Next or Stopped, with a short note (for example "Waiting for a manager", "Nothing to approve yet").
+- Verdict line, story outcome ("What happens next") and the Next step card now say who acts and where; an escalated case leads with Resolve manually as the main button; the approval card says who can approve and whether that is you (role and four-eyes). The empty Approvals page explains that escalated cases have no approval.
+- Web tests 207 pass (new `case-progress.test.ts`); checked on the mock UI in a browser.
 
 ### 2026-10-26 · Phase B6 batch 3: Render blueprint for the Python backend
 - `render.yaml` is now one Python service (`payops-backend`); the Node blueprint moved to `render.node.yaml` (rollback until B7); `render.python.yaml` (agent-only service) removed. `docs/DEPLOY.md` has the new steps.

@@ -23,10 +23,10 @@ export function caseVerdict(c: CaseDetail): CaseVerdict {
     case 'AWAITING_APPROVAL': {
       const tier = latest?.approval?.tier;
       const who = tier === 'MANAGER' ? 'a manager' : tier === 'OPS' ? 'an operator' : 'an approver';
-      return { tone: 'warn', text: `Waiting for ${who} to approve the proposed fix. Nothing has changed yet.` };
+      return { tone: 'warn', text: `Waiting for ${who} to approve the proposed fix. They decide it under Approvals. Nothing has changed yet.` };
     }
     case 'ESCALATED':
-      return { tone: 'bad', text: 'The agent could not fix this safely. A person needs to take over.' };
+      return { tone: 'bad', text: 'The agent could not fix this safely, so no approval was created. A person takes over: choose a fix with Resolve manually.' };
     case 'REJECTED':
       return { tone: 'neutral', text: 'Closed. The proposed fix was rejected and nothing was changed.' };
     case 'EXECUTING':
