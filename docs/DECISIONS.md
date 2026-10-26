@@ -1461,3 +1461,18 @@ New project `python/payops` (FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3), t
 - Handlers are split: preconditions and postconditions are pure and live in `domain/actions`; execution (which writes) is ported with the services in B3.
 - Not ported yet because they need the database: the case, payment and resolution services, the executor and the validator's loading and storing, `sealLegacyAuditRows`, the gateway adapter. The route-guard test (every route names a permission) is ported with the routes in B3 and B4.
 
+
+## D089 · B3 to B6: deliberate differences between the Python and TypeScript backends (2026-10-26)
+
+The Python backend (`python/payops`) matches the TypeScript API on everything the web app reads (208 recorded route responses, 16 simulator tables row for row, 15 of 15 golden evals with 83 exact replay lookups and 0 fallback). These are the places where it differs on purpose.
+
+- **`updated_at` comes from the injected clock.** The TypeScript code stamped the real wall-clock time for settlements and for cases tagged by screening, so two runs of the same seed gave different rows. Python uses the clock port everywhere, so a test clock gives repeatable rows. Parity tests ignore those two columns.
+- **Reset keeps `sessions` and `auth_rate_limits`.** Reset wipes business data and regenerates the demo cases. Clearing sessions would sign the visitor out in the middle of a demo, and the rate-limit rows are not demo data.
+- **Gateway reads use their own connection pool** (`GATEWAY_POOL_MAX`, default 5, 3 on Render). A request holds one connection and the simulated gateway then asked the same pool for a second, so a burst of page requests deadlocked on the pool ("QueuePool limit of size 10 reached"). Found in the browser pass, not by tests. Separate pools cannot wait on each other in a cycle.
+- **Job queue: Procrastinate, polling every 30 seconds, heartbeat every 5 minutes.** The worker sleeps until Postgres NOTIFY wakes it, so an idle API makes almost no queries. Polling only matters for delayed jobs (webhook retries). pg-boss polled every 2 seconds and was a main cause of the bandwidth suspension (D083). `RECONCILE_SWEEP_MS=0` still means "no periodic sweep" and then no cron job is registered.
+- **Jobs run in the API process.** One Render service instead of two. Tests use an inline queue (`JOBS=inline`) so they never wait for a worker.
+- **J1 signal intake goes through the agents' decision port.** The TypeScript API called its own Jev adapter. Python has one adapter (in `payops_agents`) and the intake service uses it, so there is one copy of the J1 prompt and one cassette key. Without an adapter, notes stay unscreened, which is the documented J1 fallback.
+- **Agents call services in process.** The `/internal/agent` HTTP seam, `AGENT_INTERNAL_SECRET` and the `AGENT_RUNTIME` switch have no Python equivalent. They go away with the TypeScript backend in B7, which supersedes the two-service layout of D085.
+- **Startup does the setup work.** With `MIGRATE_ON_START` (default on) the API applies migrations, seeds the demo users and seals legacy audit rows before it serves traffic. `/api/health` reports `database` and `agents` separately. This replaces the `pnpm seed` step in the Node start command.
+
+**Why record these.** Each is a place where "identical to TypeScript" is false, and a reader comparing the two codebases would otherwise take it for a bug. None changes what the web app shows.

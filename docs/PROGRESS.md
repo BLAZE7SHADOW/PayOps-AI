@@ -109,6 +109,7 @@ Shivam's Mac directly, same as task 9 did.
 - `render.yaml` is now one Python service (`payops-backend`); the Node blueprint moved to `render.node.yaml` (rollback until B7); `render.python.yaml` (agent-only service) removed. `docs/DEPLOY.md` has the new steps.
 - CI for 09d895b passed.
 - Deployed: `payops-backend-winx.onrender.com`, `/api/health` ok. First deploys failed on a `@` in the DATABASE_URL password (reset to letters and digits). `vercel.json` now points at it.
+- Added D089 (the deliberate differences between the Python and TypeScript backends).
 - Next: browser check on the Vercel URL, suspend old `payops-api`, bandwidth measurement for 3 to 4 days, then B7.
 
 ### 2026-10-26 · Phase B6 batch 2: browser pass on the real web app against the Python API
