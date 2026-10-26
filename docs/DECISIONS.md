@@ -1445,3 +1445,19 @@ New project `python/payops` (FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3), t
 
 **Baseline migration.** Revision `0001` applies the 13 Drizzle SQL files unchanged (statements go to the driver directly, because the audit trigger text contains `%`). On a database Drizzle already built, which the hosted one is, it finds `public.cases` and only records itself. After B7 the SQL files and Alembic are the only schema source. One TypeScript-side step does not exist in Python yet: `sealLegacyAuditRows()` runs after migrations to hash rows written before the audit chain; it is ported with the audit chain in B2.
 
+## D088 · B2: the domain layer in Python, checked against the TypeScript results (2026-10-26)
+
+`python/payops` now holds every pure piece of the backend: money, ids, time and the SLA clock; detection rules D1 to D8, the state matrix, lifecycle, case candidates and the settlement batch check; the policy engine (P0 to P12) and rules-only risk tier; the action layer (preconditions, postconditions, prefilled options, idempotency keys); the validator's invariants and verdict; the tamper-evident audit chain and its CSV export; performance metrics, webhook retry schedule, cursors, the permission table, bulk approve and the handoff text. 128 tests at the end of B2, ported from the TypeScript ones where they existed.
+
+**How equality with TypeScript is established, not assumed.**
+- Seeded ids reproduce the TypeScript generator exactly (a pinned hash and PRNG sequence, 32-bit arithmetic), so simulator output stays reproducible across both.
+- The audit chain hashes match the TypeScript implementation byte for byte on rows with unicode, nested objects, floats and negative zero. This is what lets Python verify the hosted database's existing chain.
+- `canonical_json`, `stable_json` and cursors print numbers the way `JSON.stringify` does (`jsonjs.py`).
+- The full policy table (35 cases), the lifecycle ordering and text, and the matrix cells match the TypeScript expectations. `docs/02-architecture.md` is still checked against `domain/permissions.py`.
+
+**Choices.**
+- Models are SQLAlchemy dataclasses generated from the migrated database (one drift test compares every table and column with the migrations), with relationships left out so no query can lazy-load by accident in async code.
+- The JSON shapes the web app reads are Pydantic `CamelModel`s: snake_case in Python, camelCase on the wire. The action catalog is a Pydantic discriminated union with the same limits as the Zod schemas.
+- Handlers are split: preconditions and postconditions are pure and live in `domain/actions`; execution (which writes) is ported with the services in B3.
+- Not ported yet because they need the database: the case, payment and resolution services, the executor and the validator's loading and storing, `sealLegacyAuditRows`, the gateway adapter. The route-guard test (every route names a permission) is ported with the routes in B3 and B4.
+

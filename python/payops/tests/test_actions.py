@@ -323,3 +323,42 @@ def test_the_catalog_accepts_undo_of_and_rejects_bad_params() -> None:
         act("INITIATE_REFUND", gwPaymentId="gwp_1", amountMinor=0, reason="x y z")
     with pytest.raises(ValidationError):
         act("ESCALATE_TO_HUMAN", reason="x", to="MANAGER")
+
+
+# ── validator (pure half) ──
+def test_a_healthy_case_has_a_clean_matrix_but_detection_still_looks_for_the_fingerprint() -> None:
+    from payops.domain.validation import case_invariants, verdict_of
+
+    checks = case_invariants(state(healthy_snapshot()))
+    assert [(c.id, c.passed) for c in checks] == [("inv.matrix", True), ("inv.detection", True)]
+    assert verdict_of(checks) == "PASS"
+
+
+def test_a_broken_case_fails_the_matrix_per_system_and_detection() -> None:
+    from payops.domain.validation import case_invariants, verdict_of
+
+    checks = case_invariants(state(captured_order_failed_snapshot()))
+    assert [(c.id, c.passed) for c in checks] == [("inv.matrix.ORDER", False), ("inv.matrix.LEDGER", False), ("inv.matrix.WEBHOOK", False), ("inv.detection", False)]
+    assert checks[1].actual == "MISSING: No capture credit for ₹12,499.00"
+    assert "D1_CAPTURED_NOT_PAID" in checks[3].actual
+    assert verdict_of(checks) == "PARTIAL"  # only invariants failed
+
+
+def test_the_verdict_is_fail_when_any_postcondition_fails() -> None:
+    from payops.domain.validation import case_invariants, verdict_of
+
+    broken = state(captured_order_failed_snapshot())
+    checks = [*postconditions_of(MARK, broken, 0), *case_invariants(broken)]
+    assert verdict_of(checks) == "FAIL"
+    assert verdict_of([]) == "PASS"
+
+
+def test_an_open_dispute_lets_a_settlement_case_pass_with_only_settlement_differing() -> None:
+    from payops.domain.validation import case_invariants
+
+    base = healthy_snapshot(1_180_000)
+    line = settlement_line(base.gateway[0], base.merchant, fee_bps=300)
+    snap = with_snapshot(base, settlement_lines=[line])
+    covered = state(snap, case=case_row(type="SETTLEMENT_MISMATCH", fingerprint="SETTLEMENT_MISMATCH:stb_1"), batch=batch([make_dispute()]))
+    checks = case_invariants(covered)
+    assert checks[0].id == "inv.matrix" and checks[0].passed and "covered by an open dispute" in checks[0].actual
