@@ -39,7 +39,7 @@ def to_minor(rupees: str | float) -> int:
     return -minor if sign else minor
 
 
-def _group_indian(whole: int) -> str:
+def group_indian(whole: int) -> str:
     digits = str(whole)
     if len(digits) <= 3:
         return digits
@@ -59,7 +59,7 @@ def format_money(minor: float, *, symbol: bool = True) -> str:
     minor = int(minor)
     sign = "-" if minor < 0 else ""
     rupees, paise = divmod(abs(minor), PAISE_PER_RUPEE)
-    return f"{sign}{'₹' if symbol else ''}{_group_indian(rupees)}.{paise:02d}"
+    return f"{sign}{'₹' if symbol else ''}{group_indian(rupees)}.{paise:02d}"
 
 
 def _trim_decimal(n: float) -> str:
@@ -77,7 +77,7 @@ def format_money_compact(minor: float) -> str:
         return f"{sign}₹{_trim_decimal(magnitude / 1_00_00_000)} Cr"
     if magnitude >= 1_00_000:
         return f"{sign}₹{_trim_decimal(magnitude / 1_00_000)} L"
-    return f"{sign}₹{_group_indian(magnitude)}"
+    return f"{sign}₹{group_indian(magnitude)}"
 
 
 def amount_band(minor: float) -> str:

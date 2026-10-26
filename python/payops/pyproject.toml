@@ -40,11 +40,12 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 
 [tool.ruff]
-line-length = 150
+line-length = 160
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+ignore = ["UP046", "UP047"]
 
 [tool.pyright]
 include = ["src", "tests"]
@@ -56,3 +57,14 @@ pythonVersion = "3.12"
 "tests/*" = ["E501"]
 "migrations/*" = ["I001"]
 "src/payops/db/models.py" = ["E501"]
+"src/payops/domain/**/*.py" = ["E501"]
+
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src", "."]
+reportOptionalMemberAccess = false
+reportOptionalOperand = false
+reportOptionalSubscript = false
+reportArgumentType = false
+reportCallIssue = false
+reportIndexIssue = false

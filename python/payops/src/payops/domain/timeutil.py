@@ -20,6 +20,15 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def to_iso(moment: datetime) -> str:
+    """`Date.prototype.toISOString`: UTC, millisecond precision, a trailing Z."""
+    return moment.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def parse_iso(text: str) -> datetime:
+    return datetime.fromisoformat(text)
+
+
 def ms_between(later: datetime, earlier: datetime) -> float:
     return (later - earlier).total_seconds() * 1000
 
