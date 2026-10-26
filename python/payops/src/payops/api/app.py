@@ -16,7 +16,7 @@ from ..observability import RequestIdMiddleware, configure_logging
 from ..ports import Clock, EventPublisher
 from ..settings import Settings, get_settings
 from .errors import install_error_handlers
-from .routes import read
+from .routes import ops, read
 
 
 def create_app(
@@ -51,6 +51,7 @@ def create_app(
         return {"status": "ok" if up else "degraded", "checks": {"database": "ok" if up else "down"}, "aiMode": settings.ai_mode}
 
     api.include_router(read.router)
+    api.include_router(ops.router)
     app.include_router(api)
     return app
 

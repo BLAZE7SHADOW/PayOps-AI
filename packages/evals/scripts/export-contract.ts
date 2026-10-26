@@ -110,7 +110,6 @@ async function main() {
     await paged('audit', '/api/audit');
     await get('audit default', '/api/audit');
     await get('audit verify', '/api/audit/verify');
-    await get('audit export', '/api/audit/export.csv');
     for (const c of caseItems.slice(0, 3)) await get(`audit case ${c.id}`, `/api/audit?caseId=${c.id}`);
 
     const runs = (await get('runs', '/api/runs')) as { items: Array<{ id: string; caseId: string }> };
@@ -137,8 +136,11 @@ async function main() {
       db[table] = (await t.pool.query(`select to_jsonb(x) as row from "${table}" x`)).rows.map((r: { row: unknown }) => r.row);
     }
 
+    // The CSV export writes its own audit row, so it is requested last and the database is dumped before it: the Python test starts from the same rows
+    // and adds the same row when it makes the same request.
     mkdirSync(OUT, { recursive: true });
     writeFileSync(resolve(OUT, 'db.json.gz'), gzipSync(JSON.stringify({ now: NOW, user: me, tables: db })));
+    await get('audit export', '/api/audit/export.csv');
     writeFileSync(resolve(OUT, 'routes.json.gz'), gzipSync(JSON.stringify(recorded)));
     const counts = Object.fromEntries(Object.entries(db).map(([k, v]) => [k, v.length]).filter(([, n]) => (n as number) > 0));
     console.warn(`recorded ${recorded.length} responses; rows: ${JSON.stringify(counts)}`);

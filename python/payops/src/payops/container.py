@@ -10,9 +10,12 @@ from .domain.gateway import PaymentGateway
 from .infra.gateway import SimulatorGateway
 from .ports import Clock, EventPublisher, NoopPublisher, SystemClock
 from .services.agent_control import AgentControlService
+from .services.audit import AuditService
 from .services.cases import CaseQueryService
 from .services.overview import OverviewService
 from .services.payments import PaymentQueryService
+from .services.webhooks import WebhookQueryService
+from .services.workflow import CaseNoteQueryService, HandoffService, SavedViewQueryService
 
 
 @dataclass
@@ -25,6 +28,11 @@ class Services:
     payments: PaymentQueryService
     overview: OverviewService
     agent_control: AgentControlService
+    audit: AuditService
+    webhooks: WebhookQueryService
+    handoff: HandoffService
+    notes: CaseNoteQueryService
+    views: SavedViewQueryService
 
 
 def build_services(
@@ -42,4 +50,9 @@ def build_services(
         payments=PaymentQueryService(clock, gateway, cases),
         overview=OverviewService(clock, gateway),
         agent_control=AgentControlService(),
+        audit=AuditService(clock),
+        webhooks=WebhookQueryService(),
+        handoff=HandoffService(clock),
+        notes=CaseNoteQueryService(),
+        views=SavedViewQueryService(),
     )

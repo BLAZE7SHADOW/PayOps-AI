@@ -94,5 +94,11 @@ async def test_route_matches_the_typescript_response(client: httpx.AsyncClient, 
     if route["contentType"] == "application/json":
         diff = _same(route["body"], res.json())
         assert diff is None, f"{route['path']}\n{diff}"
+    elif route["name"] == "audit export":
+        # The export audits itself, and that last row has a random id (and so a different hash) on every run: compare everything else.
+        expected, actual = route["body"].split("\r\n"), res.text.split("\r\n")
+        assert actual[:-2] == expected[:-2]
+        mine, theirs = actual[-2].split(","), expected[-2].split(",")
+        assert [c for i, c in enumerate(mine) if i not in (1, 15)] == [c for i, c in enumerate(theirs) if i not in (1, 15)]
     else:
         assert res.text == route["body"]

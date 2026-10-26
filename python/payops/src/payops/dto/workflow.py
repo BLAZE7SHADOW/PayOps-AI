@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Any
+
+from pydantic import Field
+
 from .base import CamelModel
 
 
@@ -57,3 +61,24 @@ class HandoffSummary(CamelModel):
     needs_attention: list[HandoffCaseRef]
     resolved: HandoffResolved
     recent_notes: list[HandoffRecentNote]
+
+
+class HandoffQuery(CamelModel):
+    hours: Annotated[int, Field(ge=1, le=72)] = 8
+
+
+class OperatorNoteItem(CamelModel):
+    id: str
+    case_id: str
+    text: str
+    author_id: str
+    author_name: str
+    created_at: str
+
+
+class SavedViewItem(CamelModel):
+    id: str
+    name: str
+    #: The filters exactly as the operator saved them (keys already camelCase).
+    filters: dict[str, Any]
+    created_at: str

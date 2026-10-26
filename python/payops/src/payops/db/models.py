@@ -20,8 +20,8 @@ from sqlalchemy import (
     PrimaryKeyConstraint,
     Text,
     UniqueConstraint,
-    text,
 )
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
@@ -38,10 +38,10 @@ class AgentControl(Base):
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     mode: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
+    reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
     changed_by_id: Mapped[str] = mapped_column(Text, nullable=False)
     changed_by_name: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class AuditEvent(Base):
@@ -55,7 +55,7 @@ class AuditEvent(Base):
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
-    at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     actor_type: Mapped[str] = mapped_column(Text, nullable=False)
     actor_id: Mapped[str] = mapped_column(Text, nullable=False)
     actor_name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -64,8 +64,8 @@ class AuditEvent(Base):
     entity_id: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    prev_hash: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
-    hash: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
+    prev_hash: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
+    hash: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
     before: Mapped[Any | None] = mapped_column(JSONB)
     after: Mapped[Any | None] = mapped_column(JSONB)
     run_id: Mapped[str | None] = mapped_column(Text)
@@ -103,9 +103,9 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     email_masked: Mapped[str] = mapped_column(Text, nullable=False)
     phone_masked: Mapped[str] = mapped_column(Text, nullable=False)
-    risk_flags: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    risk_flags: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class Dispute(Base):
@@ -122,8 +122,8 @@ class Dispute(Base):
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     gw_payment_id: Mapped[str | None] = mapped_column(Text)
     resolution_id: Mapped[str | None] = mapped_column(Text)
 
@@ -141,12 +141,12 @@ class GwPayment(Base):
     order_ref: Mapped[str] = mapped_column(Text, nullable=False)
     merchant_id: Mapped[str] = mapped_column(Text, nullable=False)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'INR'::text"))
+    currency: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("'INR'::text"))
     status: Mapped[str] = mapped_column(Text, nullable=False)
     method: Mapped[str] = mapped_column(Text, nullable=False)
-    refunded_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text('0'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    refunded_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=sa_text('0'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     card: Mapped[Any | None] = mapped_column(JSONB)
     captured_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
 
@@ -185,11 +185,11 @@ class Merchant(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     fee_bps: Mapped[int] = mapped_column(Integer, nullable=False)
-    fee_fixed_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text('0'))
-    tax_bps: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1800'))
-    settlement_cycle_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    fee_fixed_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=sa_text('0'))
+    tax_bps: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text('1800'))
+    settlement_cycle_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text('1'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class SupportNote(Base):
@@ -203,8 +203,8 @@ class SupportNote(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     author_type: Mapped[str] = mapped_column(Text, nullable=False)
     text_: Mapped[str] = mapped_column('text', Text, nullable=False)
-    quarantined: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    quarantined: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_text('false'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     payment_id: Mapped[str | None] = mapped_column(Text)
     order_id: Mapped[str | None] = mapped_column(Text)
     complaint_type: Mapped[str | None] = mapped_column(Text)
@@ -224,8 +224,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     role: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     totp_secret_sealed: Mapped[str | None] = mapped_column(Text)
     totp_enabled_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
     totp_last_step: Mapped[int | None] = mapped_column(Integer)
@@ -245,11 +245,11 @@ class WebhookEvent(Base):
     gw_payment_id: Mapped[str] = mapped_column(Text, nullable=False)
     payload: Mapped[Any] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    attempts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
-    last_message: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
-    first_received_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    attempts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text('0'))
+    last_message: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
+    first_received_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     gw_refund_id: Mapped[str | None] = mapped_column(Text)
     last_http_status: Mapped[int | None] = mapped_column(Integer)
     next_retry_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
@@ -277,12 +277,12 @@ class Case(Base):
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     rule_ids: Mapped[Any] = mapped_column(JSONB, nullable=False)
     matrix: Mapped[Any] = mapped_column(JSONB, nullable=False)
-    mismatched: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    mismatched: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
     entity_refs: Mapped[Any] = mapped_column(JSONB, nullable=False)
-    signals: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    signals: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'{}'::jsonb"))
     last_detected_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     opened_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     assignee_id: Mapped[str | None] = mapped_column(Text)
     active_run_id: Mapped[str | None] = mapped_column(Text)
     resolution: Mapped[Any | None] = mapped_column(JSONB)
@@ -318,8 +318,8 @@ class GwRefund(Base):
     gw_payment_id: Mapped[str] = mapped_column(Text, nullable=False)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     processed_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
 
 
@@ -342,7 +342,7 @@ class GwSettlementLine(Base):
     net_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     line_no: Mapped[int] = mapped_column(Integer, nullable=False)
     settled_on: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class GwWebhookDelivery(Base):
@@ -356,10 +356,10 @@ class GwWebhookDelivery(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     event: Mapped[str] = mapped_column(Text, nullable=False)
     gw_payment_id: Mapped[str] = mapped_column(Text, nullable=False)
-    attempts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    attempts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
     final_status: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     gw_refund_id: Mapped[str | None] = mapped_column(Text)
 
 
@@ -380,10 +380,10 @@ class Order(Base):
     customer_id: Mapped[str] = mapped_column(Text, nullable=False)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('0'))
-    timeline: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text('0'))
+    timeline: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     payment_id: Mapped[str | None] = mapped_column(Text)
     locked_reason: Mapped[str | None] = mapped_column(Text)
 
@@ -419,7 +419,7 @@ class SavedView(Base):
     owner_id: Mapped[str] = mapped_column(Text, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     filters: Mapped[Any] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class Session(Base):
@@ -432,12 +432,12 @@ class Session(Base):
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    last_seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    last_seen_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    ip: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
-    user_agent: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
-    mfa_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
+    ip: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
+    user_agent: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
+    mfa_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_text('false'))
     revoked_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(True))
 
 
@@ -452,12 +452,12 @@ class Settlement(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     merchant_id: Mapped[str] = mapped_column(Text, nullable=False)
     settled_on: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    payment_ids: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    payment_ids: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
     expected_net_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     reported_net_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class CaseNote(Base):
@@ -474,7 +474,7 @@ class CaseNote(Base):
     text_: Mapped[str] = mapped_column('text', Text, nullable=False)
     author_id: Mapped[str] = mapped_column(Text, nullable=False)
     author_name: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class Payment(Base):
@@ -499,10 +499,10 @@ class Payment(Base):
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     method: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    hold: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
-    mismatch: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    hold: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_text('false'))
+    mismatch: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_text('false'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     recon: Mapped[Any | None] = mapped_column(JSONB)
 
 
@@ -522,8 +522,8 @@ class Resolution(Base):
     proposed_by: Mapped[Any] = mapped_column(JSONB, nullable=False)
     policy: Mapped[Any] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     run_id: Mapped[str | None] = mapped_column(Text)
 
 
@@ -540,12 +540,12 @@ class AgentRun(Base):
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     case_id: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text('1'))
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default=sa_text('1'))
     budget: Mapped[Any] = mapped_column(JSONB, nullable=False)
-    evidence: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    findings: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    evidence: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+    findings: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     resolution_id: Mapped[str | None] = mapped_column(Text)
     approval_id: Mapped[str | None] = mapped_column(Text)
     path: Mapped[str | None] = mapped_column(Text)
@@ -597,7 +597,7 @@ class Execution(Base):
     action_index: Mapped[int] = mapped_column(Integer, nullable=False)
     action: Mapped[Any] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
+    summary: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
     started_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
     result: Mapped[Any | None] = mapped_column(JSONB)
     error: Mapped[Any | None] = mapped_column(JSONB)
@@ -622,8 +622,8 @@ class Refund(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     requested_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     gw_payment_id: Mapped[str] = mapped_column(Text, nullable=False)
     payment_id: Mapped[str | None] = mapped_column(Text)
     gw_refund_id: Mapped[str | None] = mapped_column(Text)
@@ -663,11 +663,11 @@ class AgentFinding(Base):
     agent: Mapped[str] = mapped_column(Text, nullable=False)
     code: Mapped[str] = mapped_column(Text, nullable=False)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_ids: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    evidence_ids: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'[]'::jsonb"))
     confidence: Mapped[float] = mapped_column(REAL, nullable=False)
-    grounded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('true'))
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    grounded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=sa_text('true'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
 
 class AgentStep(Base):
@@ -683,7 +683,7 @@ class AgentStep(Base):
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     node: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(Text, nullable=False)
-    payload: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    payload: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'{}'::jsonb"))
     at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False)
 
 
@@ -702,11 +702,11 @@ class DiagnosisFeedback(Base):
     case_id: Mapped[str] = mapped_column(Text, nullable=False)
     diagnosed_root_cause: Mapped[str] = mapped_column(Text, nullable=False)
     verdict: Mapped[str] = mapped_column(Text, nullable=False)
-    reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''::text"))
+    reason: Mapped[str] = mapped_column(Text, nullable=False, server_default=sa_text("''::text"))
     given_by_id: Mapped[str] = mapped_column(Text, nullable=False)
     given_by_name: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
-    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
     correct_root_cause: Mapped[str | None] = mapped_column(Text)
 
 
@@ -725,7 +725,7 @@ class Evidence(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     system: Mapped[str] = mapped_column(Text, nullable=False)
     entity_ref: Mapped[str] = mapped_column(Text, nullable=False)
-    facts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    facts: Mapped[Any] = mapped_column(JSONB, nullable=False, server_default=sa_text("'{}'::jsonb"))
     step_id: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=text('now()'))
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(True), nullable=False, server_default=sa_text('now()'))
 
