@@ -3,6 +3,7 @@ proposal."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from ..budget import zero_budget
@@ -13,6 +14,7 @@ from ..narratives import narrative_for
 from ..ports import LlmCallMeta
 from ..runids import next_finding_id
 from ..schemas import DiagnosisSchema
+from ..shapes import Evidence
 from ..tools_catalog import FOLLOWUP_TOOLS
 from .shared import Node, NodeContext, State, Update, evidence_from
 
@@ -20,7 +22,7 @@ from .shared import Node, NodeContext, State, Update, evidence_from
 def _apply_reconciliation(
     diagnosis: dict[str, Any],
     reconciliation: dict[str, Any],
-    evidence: list[dict[str, Any]],
+    evidence: Sequence[Evidence],
     existing_findings: list[dict[str, Any]],
     out: list[dict[str, Any]],
 ) -> dict[str, Any]:

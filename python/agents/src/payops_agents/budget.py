@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from .constants import MAX_COST_USD, MAX_TOOL_CALLS
+from .shapes import Budget
 
-Budget = dict[str, Any]
 _KEYS = ("llmCalls", "jevCalls", "toolCalls", "tokensIn", "tokensOut", "costUsd")
 
 
@@ -15,11 +16,11 @@ def zero_budget() -> Budget:
     return {"llmCalls": 0, "jevCalls": 0, "toolCalls": 0, "tokensIn": 0, "tokensOut": 0, "costUsd": 0}
 
 
-def add_budgets(a: Budget | None, b: Budget | None) -> Budget:
+def add_budgets(a: Mapping[str, Any] | None, b: Mapping[str, Any] | None) -> Budget:
     """State reducer. Tolerates a missing side so the channel can start empty."""
     a = a or {}
     b = b or {}
-    return {k: a.get(k, 0) + b.get(k, 0) for k in _KEYS}
+    return Budget(**{k: a.get(k, 0) + b.get(k, 0) for k in _KEYS})  # type: ignore[typeddict-item]
 
 
 @dataclass(frozen=True)

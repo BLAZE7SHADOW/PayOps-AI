@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from ..budget import add_budgets, check_budget_guard, zero_budget
 from ..constants import estimate_call_cost_usd
 from ..node_api import NodeApiPort
 from ..ports import DecisionPort, LlmPort
 from ..runids import next_evidence_id, next_finding_id
+from ..shapes import Evidence
 
 State = dict[str, Any]
 Update = dict[str, Any]
@@ -53,13 +54,13 @@ def create_budget_guard(on_event: EventSink) -> GuardBudget:
     return guard_budget
 
 
-def evidence_from(existing: list[dict[str, Any]], results: list[dict[str, Any]], step_id: str) -> list[dict[str, Any]]:
+def evidence_from(existing: Sequence[Evidence], results: list[dict[str, Any]], step_id: str) -> list[Evidence]:
     """Turns the API's tool results into evidence items with run-scoped ids, in tool order."""
-    created: list[dict[str, Any]] = []
+    created: list[Evidence] = []
     pool = list(existing)
     for result in results:
         for draft in result["drafts"]:
-            item = {"id": next_evidence_id(pool), "stepId": step_id, **draft}
+            item = cast(Evidence, {"id": next_evidence_id(pool), "stepId": step_id, **draft})
             created.append(item)
             pool.append(item)
     return created

@@ -43,3 +43,13 @@ typeCheckingMode = "standard"
 reportMissingTypeStubs = false
 pythonVersion = "3.12"
 
+
+# Tests build small partial fixtures (a dict with only the keys a function reads), so argument-shape checks are off there.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["src", "."]
+reportArgumentType = false
+reportTypedDictNotRequiredAccess = false
+
+[[tool.pyright.executionEnvironments]]
+root = "."

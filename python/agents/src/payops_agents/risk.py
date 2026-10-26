@@ -3,10 +3,11 @@ risk.weights.ts)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .constants import RISK_TIERS_AGENT
+from .shapes import Evidence
 
 RISK_WEIGHTS = {"velocity_abuse": 0.3, "identity_mismatch": 0.25, "chargeback_pattern": 0.25, "merchant_exposure": 0.2}
 
@@ -30,7 +31,7 @@ def combine_risk_scores(scores: Mapping[str, float], mean_confidence: float) -> 
     return {"tier": tier, "scores": scores, "meanConfidence": mean_confidence}
 
 
-def _facts_of(evidence: list[dict[str, Any]], source: str) -> dict[str, Any]:
+def _facts_of(evidence: Sequence[Evidence], source: str) -> dict[str, Any]:
     return next((e["facts"] for e in evidence if e["source"] == source), {})
 
 
@@ -46,7 +47,7 @@ def _number(value: Any, default: float) -> float:
         return float("nan")
 
 
-def extract_risk_signals(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+def extract_risk_signals(evidence: Sequence[Evidence]) -> dict[str, Any]:
     history = _facts_of(evidence, "getCustomerHistory")
     device = _facts_of(evidence, "getDeviceSignals")
     attempts = _facts_of(evidence, "getFailedAttempts")

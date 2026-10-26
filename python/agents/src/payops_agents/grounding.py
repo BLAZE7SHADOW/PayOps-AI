@@ -6,14 +6,13 @@ they read evidence dicts and return decisions, with no model and no I/O.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from .constants import AGENT_NAMES
 from .questions import choice, noul
+from .shapes import Evidence, Finding
 from .text import scrub_pii_text
-
-Evidence = dict[str, Any]
-Finding = dict[str, Any]
 
 MAX_INVESTIGATION_ROUNDS = 2
 SUFFICIENCY_THRESHOLD = 0.5
@@ -30,11 +29,11 @@ SUPPORT_CRITERIA = {
 # ── fact helpers ─────────────────────────────────────────────────────────────
 
 
-def _by_system(cited: list[Evidence], system: str) -> list[Evidence]:
+def _by_system(cited: Sequence[Evidence], system: str) -> list[Evidence]:
     return [e for e in cited if e["system"] == system]
 
 
-def _by_source(cited: list[Evidence], source: str) -> list[Evidence]:
+def _by_source(cited: Sequence[Evidence], source: str) -> list[Evidence]:
     return [e for e in cited if e["source"] == source]
 
 
@@ -60,19 +59,19 @@ def _str(e: Evidence, key: str) -> str | None:
 # ── structural predicates (one per FindingCode) ──────────────────────────────
 
 
-def _ledger_credit_missing(cited: list[Evidence]) -> bool:
+def _ledger_credit_missing(cited: Sequence[Evidence]) -> bool:
     trigger = any(_str(e, "status") == "CAPTURED" for e in _by_system(cited, "GATEWAY")) or any(
         _str(e, "status") in ("PAID", "FULFILLED") for e in _by_system(cited, "ORDER")
     )
     return trigger and not any(_str(e, "direction") == "CREDIT" for e in _by_system(cited, "LEDGER"))
 
 
-def _duplicate_capture(cited: list[Evidence]) -> bool:
+def _duplicate_capture(cited: Sequence[Evidence]) -> bool:
     captured = [e for e in _by_system(cited, "GATEWAY") if _str(e, "status") == "CAPTURED"]
     return len({e["entityRef"] for e in captured}) >= 2
 
 
-def _refund_status_mismatch(cited: list[Evidence]) -> bool:
+def _refund_status_mismatch(cited: Sequence[Evidence]) -> bool:
     internal = next(iter(_by_source(cited, "getRefund")), None)
     gateway = next(iter(_by_source(cited, "getRefundGatewayStatus")), None)
     if internal is None or gateway is None:
@@ -108,11 +107,11 @@ FINDING_PREDICATES: dict[str, Any] = {
 }
 
 
-def apply_structural_grounding(findings: list[Finding], evidence_by_id: dict[str, Evidence]) -> dict[str, Any]:
+def apply_structural_grounding(findings: Sequence[Finding], evidence_by_id: dict[str, Evidence]) -> dict[str, Any]:
     violations: list[dict[str, str]] = []
-    sound: list[Finding] = []
+    sound: Sequence[Finding] = []
     for f in findings:
-        cited: list[Evidence] = []
+        cited: Sequence[Evidence] = []
         all_exist = True
         for eid in f["evidenceIds"]:
             item = evidence_by_id.get(eid)
@@ -144,7 +143,7 @@ def _scrub_facts(facts: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_grounding_request(
-    findings: list[Finding], evidence_by_id: dict[str, Evidence]
+    findings: Sequence[Finding], evidence_by_id: dict[str, Evidence]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     claims = [
         {
@@ -167,7 +166,7 @@ def build_grounding_request(
     return {"claims": claims}, questions
 
 
-def compute_gaps(agents_visited: list[str], surviving: list[Finding]) -> list[dict[str, str]]:
+def compute_gaps(agents_visited: list[str], surviving: Sequence[Finding]) -> list[dict[str, str]]:
     visited = {a for a in agents_visited if a in AGENT_NAMES}
     with_findings = {f["agent"] for f in surviving}
     return [
@@ -178,7 +177,7 @@ def compute_gaps(agents_visited: list[str], surviving: list[Finding]) -> list[di
 
 
 def apply_grounding_rules(
-    findings: list[Finding],
+    findings: Sequence[Finding],
     structural_violations: list[dict[str, str]],
     semantic_answers: list[dict[str, Any]] | None,
     sufficient_noul: float | None,
@@ -214,7 +213,7 @@ def apply_grounding_rules(
     }
 
 
-def surviving_findings(findings: list[Finding], violations: list[dict[str, str]] | None) -> list[Finding]:
+def surviving_findings(findings: Sequence[Finding], violations: list[dict[str, str]] | None) -> list[Finding]:
     if not violations:
         return list(findings)
     dropped = {v["findingId"] for v in violations}
@@ -231,15 +230,15 @@ def _fail(reason: str) -> Check:
     return (False, reason)
 
 
-def _from(ev: list[Evidence], source: str) -> list[Evidence]:
+def _from(ev: Sequence[Evidence], source: str) -> list[Evidence]:
     return [e for e in ev if e["source"] == source]
 
 
-def _captured_gateway(ev: list[Evidence]) -> list[Evidence]:
+def _captured_gateway(ev: Sequence[Evidence]) -> list[Evidence]:
     return [e for e in _from(ev, "getGatewayPayment") if _str(e, "status") == "CAPTURED"]
 
 
-def _settlement_differs(ev: list[Evidence]) -> Check:
+def _settlement_differs(ev: Sequence[Evidence]) -> Check:
     return (
         _OK
         if any(_num(e, "diffMinor") != 0 for e in _from(ev, "getFeeBreakdown"))
@@ -247,7 +246,7 @@ def _settlement_differs(ev: list[Evidence]) -> Check:
     )
 
 
-def _webhook_processing_failure(ev: list[Evidence]) -> Check:
+def _webhook_processing_failure(ev: Sequence[Evidence]) -> Check:
     return (
         _OK
         if any(_num(e, "lastHttpStatus") >= 400 for e in _from(ev, "getWebhookDeliveries"))
@@ -255,7 +254,7 @@ def _webhook_processing_failure(ev: list[Evidence]) -> Check:
     )
 
 
-def _webhook_not_delivered(ev: list[Evidence]) -> Check:
+def _webhook_not_delivered(ev: Sequence[Evidence]) -> Check:
     ok = any(
         _str(e, "finalStatus") != "DELIVERED" and _num(e, "lastHttpStatus") < 400
         for e in _from(ev, "getWebhookDeliveries")
@@ -269,7 +268,7 @@ def _webhook_not_delivered(ev: list[Evidence]) -> Check:
     )
 
 
-def _order_state_diverged(ev: list[Evidence]) -> Check:
+def _order_state_diverged(ev: Sequence[Evidence]) -> Check:
     if not _captured_gateway(ev):
         return _fail("The gateway does not show a captured payment to compare against.")
     order_behind = any((_str(e, "status") or "") in ("PENDING", "FAILED") for e in _from(ev, "getOrder"))
@@ -281,7 +280,7 @@ def _order_state_diverged(ev: list[Evidence]) -> Check:
     )
 
 
-def _ledger_posting_missing(ev: list[Evidence]) -> Check:
+def _ledger_posting_missing(ev: Sequence[Evidence]) -> Check:
     if not _captured_gateway(ev):
         return _fail("There is no captured gateway payment that should have a ledger credit.")
     if any(e["system"] == "LEDGER" and _str(e, "direction") == "CREDIT" for e in ev):
@@ -289,7 +288,7 @@ def _ledger_posting_missing(ev: list[Evidence]) -> Check:
     return _OK
 
 
-def _duplicate_capture_check(ev: list[Evidence]) -> Check:
+def _duplicate_capture_check(ev: Sequence[Evidence]) -> Check:
     return (
         _OK
         if len({e["entityRef"] for e in _captured_gateway(ev)}) >= 2
@@ -297,7 +296,7 @@ def _duplicate_capture_check(ev: list[Evidence]) -> Check:
     )
 
 
-def _refund_status_not_synced(ev: list[Evidence]) -> Check:
+def _refund_status_not_synced(ev: Sequence[Evidence]) -> Check:
     internal = next(iter(_from(ev, "getRefund")), None)
     gateway = next(iter(_from(ev, "getRefundGatewayStatus")), None)
     if internal is None or gateway is None:
@@ -311,7 +310,7 @@ def _refund_status_not_synced(ev: list[Evidence]) -> Check:
     )
 
 
-def _refund_not_initiated(ev: list[Evidence]) -> Check:
+def _refund_not_initiated(ev: Sequence[Evidence]) -> Check:
     if not _captured_gateway(ev):
         return _fail("There is no captured payment that would need a refund.")
     if not any(_str(e, "status") == "CANCELLED" for e in _from(ev, "getOrder")):
@@ -319,7 +318,7 @@ def _refund_not_initiated(ev: list[Evidence]) -> Check:
     return _OK if not _from(ev, "getRefund") else _fail("A refund record already exists.")
 
 
-def _refund_failed_at_gateway(ev: list[Evidence]) -> Check:
+def _refund_failed_at_gateway(ev: Sequence[Evidence]) -> Check:
     return (
         _OK
         if any(_str(e, "status") == "FAILED" for e in _from(ev, "getRefundGatewayStatus"))
@@ -327,7 +326,7 @@ def _refund_failed_at_gateway(ev: list[Evidence]) -> Check:
     )
 
 
-def _suspected_fraud(ev: list[Evidence]) -> Check:
+def _suspected_fraud(ev: Sequence[Evidence]) -> Check:
     signals = [e for e in ev if e["system"] == "RISK"]
     strong = (
         any(_num(e, "failed24h") >= 3 for e in signals)
@@ -354,7 +353,7 @@ ROOT_CAUSE_CHECKS: dict[str, Any] = {
 }
 
 
-def check_root_cause(root_cause: str, evidence: list[Evidence]) -> Check:
+def check_root_cause(root_cause: str, evidence: Sequence[Evidence]) -> Check:
     return ROOT_CAUSE_CHECKS[root_cause](evidence)
 
 
@@ -367,7 +366,7 @@ CAUSE_CHAINS: list[list[str]] = [
 ]
 
 
-def candidate_leaders(evidence: list[Evidence]) -> list[str]:
+def candidate_leaders(evidence: Sequence[Evidence]) -> list[str]:
     leaders: list[str] = []
     for chain in CAUSE_CHAINS:
         leader = next((cause for cause in chain if check_root_cause(cause, evidence)[0]), None)
@@ -376,7 +375,7 @@ def candidate_leaders(evidence: list[Evidence]) -> list[str]:
     return leaders
 
 
-def reconcile_diagnosis(chosen: str, evidence: list[Evidence]) -> dict[str, Any]:
+def reconcile_diagnosis(chosen: str, evidence: Sequence[Evidence]) -> dict[str, Any]:
     """KEEP, REPLACE (code substitutes a cause) or ESCALATE (no single supported cause)."""
     if chosen == "UNKNOWN":
         return {"kind": "KEEP"}

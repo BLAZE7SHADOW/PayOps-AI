@@ -1,4 +1,4 @@
-"""LangGraph state (docs/03 §6; packages/agents state.ts). Plain dicts in the JSON shapes the API uses.
+"""LangGraph state (docs/03 §6). Plain dicts in the JSON shapes the API uses, typed in `types.py`.
 
 `evidence` and `findings` merge by id, `agentsVisited` and `history` append, `budget` adds; everything else
 keeps the last value written.
@@ -9,9 +9,22 @@ from __future__ import annotations
 from typing import Annotated, Any, TypedDict
 
 from .budget import add_budgets
+from .shapes import (
+    Budget,
+    CaseBrief,
+    Diagnosis,
+    Evidence,
+    Finding,
+    Grounding,
+    InvestigationPlan,
+    Policy,
+    Proposal,
+    Risk,
+    Validation,
+)
 
 
-def merge_by_id(a: list[dict[str, Any]] | None, b: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+def merge_by_id[T: Evidence | Finding](a: list[T] | None, b: list[T] | None) -> list[T]:
     by_id = {x["id"]: x for x in (a or [])}
     for x in b or []:
         by_id[x["id"]] = x
@@ -27,27 +40,27 @@ class PayOpsState(TypedDict, total=False):
     runId: str
     aiMode: str
     scenarioKey: str | None
-    case: dict[str, Any] | None
+    case: CaseBrief | None
     entityRefs: dict[str, Any]
-    investigationPlan: dict[str, Any] | None
+    investigationPlan: InvestigationPlan | None
     investigationRound: int
     gaps: list[dict[str, Any]]
-    evidence: Annotated[list[dict[str, Any]], merge_by_id]
-    findings: Annotated[list[dict[str, Any]], merge_by_id]
+    evidence: Annotated[list[Evidence], merge_by_id]
+    findings: Annotated[list[Finding], merge_by_id]
     agentsVisited: Annotated[list[str], append_lists]
-    risk: dict[str, Any] | None
-    grounding: dict[str, Any] | None
-    diagnosis: dict[str, Any] | None
-    proposal: dict[str, Any] | None
-    policy: dict[str, Any] | None
+    risk: Risk | None
+    grounding: Grounding | None
+    diagnosis: Diagnosis | None
+    proposal: Proposal | None
+    policy: Policy | None
     approval: dict[str, Any] | None
     resolutionId: str | None
     approvalId: str | None
     executions: list[dict[str, Any]]
-    validation: dict[str, Any] | None
+    validation: Validation | None
     attempt: int
     history: Annotated[list[dict[str, Any]], append_lists]
-    budget: Annotated[dict[str, Any], add_budgets]
+    budget: Annotated[Budget, add_budgets]
     status: str
     error: str | None
 

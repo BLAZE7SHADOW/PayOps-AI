@@ -6,14 +6,14 @@ because they use the core's action options for the concrete case. Only the narra
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
+from .shapes import Evidence
 from .text import format_money
 
-Evidence = dict[str, Any]
 
-
-def _find(evidence: list[Evidence], predicate: Any) -> Evidence | None:
+def _find(evidence: Sequence[Evidence], predicate: Any) -> Evidence | None:
     return next((e for e in evidence if predicate(e)), None)
 
 
@@ -34,7 +34,7 @@ def _text(value: Any) -> str:
     return str(value)
 
 
-def narrative_for(root_cause: str, evidence: list[Evidence]) -> dict[str, Any]:
+def narrative_for(root_cause: str, evidence: Sequence[Evidence]) -> dict[str, Any]:
     if root_cause == "WEBHOOK_PROCESSING_FAILURE":
         w = _find(evidence, lambda e: e["system"] == "WEBHOOK" and _js_number(e["facts"].get("lastHttpStatus")) >= 500)
         if w:

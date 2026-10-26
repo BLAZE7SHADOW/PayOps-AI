@@ -1,0 +1,6 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/python/payops/.venv/bin/python",
+  "python.analysis.extraPaths": ["${workspaceFolder}/python/payops/src", "${workspaceFolder}/python/agents/src"],
+  "python.analysis.typeCheckingMode": "standard",
+  "[python]": { "editor.defaultFormatter": "charliermarsh.ruff" }
+}

@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from .constants import ACTION_TYPES, CONTEXT_BUDGET
 from .jsonutil import js_dumps, utf16_length
+from .shapes import Evidence, Finding
 from .text import format_money, scrub_pii_text
 from .tools_catalog import ToolDef
 
-Evidence = dict[str, Any]
 Message = dict[str, str]
 
 SYSTEM_PROMPT = " ".join(
@@ -139,7 +140,7 @@ def _number(value: Any) -> float | None:
         return None
 
 
-def computed_comparison_lines(agent: str, slice_: list[Evidence]) -> list[str]:
+def computed_comparison_lines(agent: str, slice_: Sequence[Evidence]) -> list[str]:
     if agent != "payment":
         return []
     gw = next((e for e in slice_ if e["source"] == "getGatewayPayment"), None)
@@ -152,7 +153,7 @@ def computed_comparison_lines(agent: str, slice_: list[Evidence]) -> list[str]:
     return [f"gatewayVsOrderAmount: {cmp} (gateway {format_money(gw_amount)}, order {format_money(ord_amount)})"]  # type: ignore[arg-type]
 
 
-def slice_evidence_for_agent(evidence: list[Evidence], own_tools: list[ToolDef]) -> list[Evidence]:
+def slice_evidence_for_agent(evidence: Sequence[Evidence], own_tools: list[ToolDef]) -> list[Evidence]:
     names = {t.name for t in own_tools}
     return [e for e in evidence if e["source"] in names]
 
@@ -286,7 +287,7 @@ def build_specialist_context(
     agent: str,
     call_type: str,
     brief: dict[str, Any],
-    evidence: list[Evidence],
+    evidence: Sequence[Evidence],
     own_tools: list[ToolDef],
     follow_up_tools: list[ToolDef] | None = None,
 ) -> BuiltContext:
@@ -318,10 +319,10 @@ def _js_fixed2(x: float) -> str:
     return str(Decimal(x).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def peer_summary_lines(findings: list[dict[str, Any]]) -> str:
+def peer_summary_lines(findings: Sequence[Finding]) -> str:
     if not findings:
         return ""
-    by_agent: dict[str, list[dict[str, Any]]] = {}
+    by_agent: dict[str, list[Finding]] = {}
     for f in findings:
         by_agent.setdefault(f["agent"], []).append(f)
     blocks = []
@@ -366,7 +367,7 @@ def _resolve_slice_text(evidence_count: int, risk: dict[str, Any] | None, ground
 
 def build_resolve_context(
     brief: dict[str, Any],
-    findings: list[dict[str, Any]],
+    findings: Sequence[Finding],
     evidence_count: int,
     risk: dict[str, Any] | None,
     grounding: dict[str, Any] | None,
