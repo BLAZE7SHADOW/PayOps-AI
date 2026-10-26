@@ -119,7 +119,7 @@ Shivam's Mac directly, same as task 9 did.
 ### 2026-10-25 · Phase B1 done: foundations and spikes (D087)
 - `python/payops` created: settings, errors, request-id logs, `/api/health`, async engine, Alembic baseline over the 13 Drizzle SQL files, pgserver-backed test harness. 9 tests, ruff and pyright clean, added to CI and `pnpm py:test`.
 - Spikes: pgserver (works), Procrastinate (15 ms pickup, retries work), python-socketio with the real client (14 of 14).
-- Open: run `scripts/check_listen_notify.py` against the Supabase Session pooler (needs the hosted connection string, so it is a step for Shivam).
+- Done 2026-10-26: `scripts/check_listen_notify.py` passed against the Supabase Session pooler (NOTIFY received in 54 ms), so Procrastinate can use it in B5.
 - Next: B2, the domain logic ported test-first (money, policy, action options, reconciliation matrix and lifecycle, executor, validator, audit hash chain).
 
 ### 2026-10-25 · Phase A clean-up and hardening done (D086)
