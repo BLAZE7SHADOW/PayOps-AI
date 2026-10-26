@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     web_origin: str = "http://localhost:5173"
     #: `postgres://` or `postgresql://`; converted for SQLAlchemy by `sqlalchemy_url`.
     database_url: str = Field(default="postgres://postgres:postgres@127.0.0.1:54329/postgres", repr=False)
+    #: Connections kept for reading the gateway's tables. They are a separate pool on purpose: a request holds one application connection while it asks the
+    #: gateway, so sharing one pool lets a burst of requests each wait for a second connection the others hold (a deadlock). A pool of leaf reads cannot.
+    gateway_pool_max: int = Field(default=5, ge=1, le=20)
     database_pool_max: int | None = Field(default=None, ge=1, le=50)
     jwt_secret: str | None = Field(default=None, min_length=16, repr=False)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

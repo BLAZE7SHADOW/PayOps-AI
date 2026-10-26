@@ -9,7 +9,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from fastapi import APIRouter, Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from procrastinate import PsycopgConnector
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from .. import __version__
 from ..agent_tools.runtime import AgentRuntime, QueueResumer
@@ -17,9 +17,10 @@ from ..agent_tools.store import AgentStore
 from ..auth.tokens import session_config
 from ..container import Services, build_services
 from ..db.engine import create_engine, ping, session_factory
+from ..infra.gateway import SimulatorGateway
 from ..jobs.queue import InlineJobs, JobHandlers, JobQueue, ProcrastinateJobs
 from ..observability import RequestIdMiddleware, configure_logging
-from ..ports import Clock, EventPublisher
+from ..ports import Clock, EventPublisher, SystemClock
 from ..settings import Settings, get_settings
 from .errors import install_error_handlers
 from .routes import auth, ops, read, simulator, write
@@ -50,12 +51,16 @@ def create_app(
             queue = InlineJobs(handlers)
         else:
             queue = ProcrastinateJobs(
-                PsycopgConnector(conninfo=settings.database_url, kwargs={"autocommit": True}, min_size=1, max_size=4),
+                PsycopgConnector(conninfo=settings.database_url, min_size=1, max_size=4),
                 handlers, sweep_enabled=settings.reconcile_sweep_ms > 0,
             )
+        gateway_engine = create_async_engine(
+            app.state.engine.url, pool_size=settings.gateway_pool_max, max_overflow=0, pool_pre_ping=True, pool_recycle=1800
+        )
+        gateway = SimulatorGateway(session_factory(gateway_engine), clock or SystemClock())
         app.state.services = services or build_services(
-            session_factory(app.state.engine), clock=clock, events=events or realtime, auth_config=app.state.session_config, demo_mode=settings.demo_mode,
-            cassette_dir=settings.cassettes, reset_cooldown_seconds=0 if settings.node_env == "test" else 10, jobs=queue,
+            session_factory(app.state.engine), clock=clock, events=events or realtime, gateway=gateway, auth_config=app.state.session_config,
+            demo_mode=settings.demo_mode, cassette_dir=settings.cassettes, reset_cooldown_seconds=0 if settings.node_env == "test" else 10, jobs=queue,
         )
         handlers.services = app.state.services
         app.state.jobs = queue
@@ -81,6 +86,7 @@ def create_app(
                     await queue.app.close_async()
                 if isinstance(queue, InlineJobs):
                     await queue.idle()
+        await gateway_engine.dispose()
         if owned:
             await app.state.engine.dispose()
 

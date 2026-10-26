@@ -105,6 +105,12 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B6 batch 2: browser pass on the real web app against the Python API
+- Ran the real web app (Vite) against the Python API and a local Postgres (`scripts/dev_db.py`, pgserver, no Docker), in REPLAY with the real queue worker and Socket.IO. Passed: landing page, demo accounts list, sign in as the ops analyst, overview, exceptions, PAY-0001 investigation (steps stream in live, resolves, independent verification PASS), RFD-0002 investigation pausing for a manager, sign in as the manager, approve the ₹78,000 refund (run resumes through the queue, executes, validates PASS, case resolved), and the Simulator reset from the UI (back to 20 exceptions). Zero server errors in the final run.
+- The pass found one real bug the tests could not: the first investigation failed with "QueuePool limit of size 10 reached". A request holds one application connection while the gateway reads take a second from the same pool, so a burst of requests (the page polls a lot) waited on each other. Gateway reads now have their own pool (`GATEWAY_POOL_MAX`, default 5), so the waits cannot form a cycle. A second find: the job worker's connector must not set `autocommit` itself; a new test runs the real Procrastinate connector against Postgres.
+- 535 tests, ruff and pyright clean.
+- Next in B6: the Render blueprint for one Python service, then the bandwidth measurement after it runs for a few days.
+
 ### 2026-10-26 · Phase B6 batch 1: evals in process, startup and health
 - `python -m payops.evals` (and `tests/test_evals.py`) runs the 15 golden scenarios in the Python API's own process in REPLAY: 15 of 15 pass their gates, root-cause accuracy 100%, and 83 exact replay lookups with 0 by fallback, the same gate `pnpm eval:python` held for the two-service setup. J1 signal intake now uses the agents' decision port; the evals answer it with the same fixture the TypeScript harness used.
 - The API prepares its database at start (migrations, demo users, audit seal; `MIGRATE_ON_START=0` for tests) and `/api/health` reports the database and the agent checkpoint store. 533 tests, ruff and pyright clean.

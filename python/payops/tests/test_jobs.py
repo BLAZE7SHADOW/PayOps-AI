@@ -106,3 +106,28 @@ async def test_a_job_without_a_runner_fails_loudly(seeded: tuple[Any, JobHandler
         assert "not configured" in str(err)
         return
     raise AssertionError("expected a RuntimeError")
+
+
+async def test_the_real_worker_picks_up_a_job_from_postgres_through_listen_notify(database_url: str) -> None:
+    """The in-memory connector cannot catch connection settings, so this one uses the real Procrastinate connector against a real Postgres: a job deferred
+    while the worker sleeps is run at once (NOTIFY), and a delayed retry waits for its time."""
+    import asyncio
+
+    from procrastinate import PsycopgConnector
+
+    handlers, agents = JobHandlers(), RecordingAgents()
+    handlers.agents = agents
+    jobs = ProcrastinateJobs(PsycopgConnector(conninfo=database_url, min_size=1, max_size=3), handlers, sweep_enabled=False)
+    async with jobs.app.open_async():
+        worker = asyncio.get_running_loop().create_task(jobs.run_worker(fetch_job_polling_interval=60))
+        await asyncio.sleep(0.5)  # the worker is now waiting for NOTIFY
+        await jobs.enqueue_agent_run("run_live", "case_live", None)
+        for _ in range(100):
+            if agents.calls:
+                break
+            await asyncio.sleep(0.05)
+        await jobs.schedule("evt_later", 3600)
+        await asyncio.sleep(0.3)
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    assert agents.calls == [("start", "run_live", "case_live", None)]
