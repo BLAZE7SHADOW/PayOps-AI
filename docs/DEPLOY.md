@@ -18,7 +18,7 @@ Gemini and Jev responses in `fixtures/cassettes/` and never calls a provider. No
 
 Free Render services sleep after 15 minutes idle; the first request then takes about 50 seconds. A free uptime monitor that pings `/api/health` every 10 minutes avoids that.
 
-**Bandwidth.** Render's free plan includes 5 GB of outbound traffic a month for the whole workspace, and the API's database round trips count as "service-initiated" traffic. An always-awake API that sweeps every minute and polls four job queues every 2 seconds used 5.45 GB in about two weeks and the workspace was suspended (D083). `render.yaml` therefore sets `RECONCILE_SWEEP_MS=0` and `JOB_POLL_SECONDS=10`. Check Render, Billing, Included Usage after a few days. A queued job (such as Start investigation) can now wait up to 10 seconds to begin; set `JOB_POLL_SECONDS` lower if that feels slow.
+**Bandwidth.** Render's free plan includes 5 GB of outbound traffic a month for the whole workspace, and the API's database round trips count as "service-initiated" traffic. An always-awake API that sweeps every minute and polls four job queues every 2 seconds used 5.45 GB in about two weeks and the workspace was suspended (D083). `render.yaml` therefore sets `RECONCILE_SWEEP_MS=0` and `JOB_POLL_SECONDS` (10 on Node, 30 on Python). Check Render, Billing, Included Usage after a few days. A queued job (such as Start investigation) can now wait up to 10 seconds to begin; set `JOB_POLL_SECONDS` lower if that feels slow.
 
 ## What visitors can do
 
@@ -42,13 +42,15 @@ This makes real, billed calls to Gemini and Jev (the whole suite is a fraction o
 
 On Render set `AI_MODE=LIVE`, `GEMINI_API_KEY` and `TYPESAFE_JEV_API_KEY`, then redeploy. Do this only for a private or short-lived demo: anyone with the link could then trigger billed calls. For interviews, run locally with `AI_MODE=LIVE` and keep the hosted copy on REPLAY.
 
-## Python agent service (optional, D085)
+## Python backend (B6, replaces the Node API)
 
-The hosted demo runs the TypeScript agents. To run the Python graph instead:
+`render.yaml` now describes one Python service, `payops-backend` (API, job worker, Socket.IO and the agents in one process). The Node API is kept in `render.node.yaml` as a rollback until B7.
 
-1. Create the Python service from `render.python.yaml` (a second Blueprint). Give it `AGENT_INTERNAL_SECRET` (16+ characters, the same value as below), `NODE_API_URL` (the API's public URL) and `DATABASE_URL` (the Supabase Session pooler string; paused runs are kept in the `checkpoints_py` schema).
-2. On the API service set `AGENT_RUNTIME=python`, `AGENT_SERVICE_URL` (the Python service's URL) and the same `AGENT_INTERNAL_SECRET`. Redeploy. Leave `AGENT_RUNTIME` unset to go back.
-3. Check `GET <python-url>/health`, start an investigation, and approve a manager-tier case to check that a paused run resumes.
+1. Reset the Supabase database password to letters and digits only (a `@` or `/` breaks the URL), then copy the **Session pooler** string (port 5432).
+2. Render: New > Blueprint > this repo > `render.yaml`. Set `DATABASE_URL` and `WEB_ORIGIN` (the Vercel URL). First boot runs the migrations and creates the demo users.
+3. Open `<service-url>/api/health`; `database` and `agents` should both be ok.
+4. In `vercel.json` change the three `payops-api-xatz.onrender.com` hosts to the new service host, push, and let Vercel redeploy.
+5. Suspend the old `payops-api` service (do not delete it until B7) and keep UptimeRobot paused until the bandwidth looks fine.
+6. After 3 to 4 days check Render, Billing, Included Usage. The target is under about 6.7 MB per awake hour.
 
-Costs to expect on the free plan: a second service that also sleeps after 15 idle minutes, so the first investigation after a quiet period waits for the API (about 50 seconds) and then the Python service (about the same), and traffic between the two over public URLs counts as outbound bandwidth (D083). Neither is measured yet. Keep the monitor paused, and read Render's Included Usage after a few days before leaving it on.
-
+Rollback: resume the old service and point `vercel.json` back at it.

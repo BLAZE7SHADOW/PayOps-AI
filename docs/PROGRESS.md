@@ -105,6 +105,11 @@ Shivam's Mac directly, same as task 9 did.
 
 ## Session log
 
+### 2026-10-26 · Phase B6 batch 3: Render blueprint for the Python backend
+- `render.yaml` is now one Python service (`payops-backend`); the Node blueprint moved to `render.node.yaml` (rollback until B7); `render.python.yaml` (agent-only service) removed. `docs/DEPLOY.md` has the new steps.
+- CI for 09d895b passed.
+- Next (needs Shivam): reset the Supabase password, create the Blueprint, set `DATABASE_URL` and `WEB_ORIGIN`, then I repoint `vercel.json` at the new host. Then a few days of bandwidth measurement, then B7.
+
 ### 2026-10-26 · Phase B6 batch 2: browser pass on the real web app against the Python API
 - Ran the real web app (Vite) against the Python API and a local Postgres (`scripts/dev_db.py`, pgserver, no Docker), in REPLAY with the real queue worker and Socket.IO. Passed: landing page, demo accounts list, sign in as the ops analyst, overview, exceptions, PAY-0001 investigation (steps stream in live, resolves, independent verification PASS), RFD-0002 investigation pausing for a manager, sign in as the manager, approve the ₹78,000 refund (run resumes through the queue, executes, validates PASS, case resolved), and the Simulator reset from the UI (back to 20 exceptions). Zero server errors in the final run.
 - The pass found one real bug the tests could not: the first investigation failed with "QueuePool limit of size 10 reached". A request holds one application connection while the gateway reads take a second from the same pool, so a burst of requests (the page polls a lot) waited on each other. Gateway reads now have their own pool (`GATEWAY_POOL_MAX`, default 5), so the waits cannot form a cycle. A second find: the job worker's connector must not set `autocommit` itself; a new test runs the real Procrastinate connector against Postgres.

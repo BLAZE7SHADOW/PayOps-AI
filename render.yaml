@@ -1,33 +1,36 @@
-# Render blueprint for the free API host. The database is Supabase (free) and the web app is on Vercel.
-# Free web services sleep after 15 minutes idle, so the first request takes about 50 seconds to wake.
+# Render blueprint for the free API host: one Python service (FastAPI, job worker, Socket.IO and the agents in one process).
+# The database is Supabase (free) and the web app is on Vercel. Free web services sleep after 15 minutes idle,
+# so the first request takes about 50 seconds to wake.
 services:
   - type: web
-    name: payops-api
-    runtime: node
+    name: payops-backend
+    runtime: python
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
-    # Seeding is idempotent: it migrates, creates demo users, and adds any missing fault scenarios.
-    startCommand: pnpm --filter @payops/server seed && pnpm --filter @payops/server exec tsx src/main.ts
+    # The project lives in python/payops and installs the agent package from ../agents, so build from the repo root.
+    buildCommand: pip install uv && cd python/payops && uv sync --frozen --no-dev
+    # Migrations and demo users are applied on start (MIGRATE_ON_START defaults to on).
+    startCommand: cd python/payops && uv run uvicorn payops.api.app:app_factory --factory --host 0.0.0.0 --port $PORT --timeout-graceful-shutdown 30
     healthCheckPath: /api/health
     envVars:
-      - key: NODE_VERSION
-        value: 22
+      - key: PYTHON_VERSION
+        value: 3.12.8
       - key: NODE_ENV
         value: production
       - key: AI_MODE
         value: REPLAY          # recorded responses only: no Gemini or Jev keys needed
       - key: DEMO_MODE
         value: true
-      # Bandwidth (D083): Render's free plan includes 5 GB of outbound traffic a month, and the API's
-      # database round trips count. The minute-by-minute sweep is not needed on the hosted demo (cases
-      # open when scenarios are generated), and the job queue only has to check every 10 seconds.
+      # Bandwidth (D083): the free plan includes 5 GB of outbound traffic a month and database round trips count.
+      # No minute-by-minute sweep on the hosted demo; the queue waits on LISTEN/NOTIFY and polls rarely.
       - key: RECONCILE_SWEEP_MS
         value: 0
       - key: JOB_POLL_SECONDS
-        value: 10
+        value: 30
+      - key: GATEWAY_POOL_MAX
+        value: 3
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
-        sync: false            # Supabase: Project Settings > Database > Session pooler (port 5432)
+        sync: false            # Supabase: Project Settings > Database > Session pooler (port 5432). Letters and digits in the password.
       - key: WEB_ORIGIN
         sync: false            # your Vercel URL, e.g. https://payops-ai.vercel.app
