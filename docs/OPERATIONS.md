@@ -65,6 +65,8 @@ On `SIGTERM` uvicorn stops taking requests, the job worker stops fetching, and p
 
 `pnpm typecheck && pnpm lint && pnpm test && pnpm py:test && pnpm eval` (CI runs the same). `pnpm eval` fails when a scenario gate fails, an aggregate limit is crossed, or anything is worse than the committed baseline `fixtures/evals/baseline.json`; CI keeps the full JSON record of each run as the `eval-report` artifact (90 days) and prints the numbers on the run page. A change to prompt, Jev question or tool-description text also needs a billed re-recording (`pnpm cassette:record`), because cassette keys hash the exact text.
 
+`pnpm eval:live` (and the weekly `Live evals` workflow) runs the model-driven goldens against the real providers: it is billed, capped at $0.50 by default, and its JSON report is kept as the `live-eval-report` artifact. Run it after a model or prompt change, before re-recording cassettes.
+
 Before pointing traffic at a new database, run `python/payops/scripts/check_listen_notify.py` against its Session pooler (port 5432): it sends one notification and waits for it, which is what the job queue relies on.
 
 ### Database connection budget

@@ -1488,3 +1488,16 @@ The Python backend (`python/payops`) matches the TypeScript API on everything th
 **What is lost.** (1) The test oracle: new Python behaviour is no longer compared with TypeScript, only with the recordings. (2) `pnpm eval:live` was TypeScript and is gone. `pnpm cassette:record` is now `python -m payops.evals.record` (same 22 scenario and seed pairs, same manifest); it is tested only in REPLAY and has not yet made a real recording. (3) `pnpm jev:ping`.
 
 **CI.** The parity job is gone; the backend job also runs `python -m payops.evals`.
+
+## D091 · Evals: a baseline, failure-path goldens and a live run (2026-10-26)
+
+**Baseline.** Every replay run is compared with `fixtures/evals/baseline.json`, which pins per scenario the outcome, proposed actions, tool, model and Jev calls, cost, grounding violations and replay fallbacks. Anything worse fails; anything better is listed. Replay is deterministic, so a difference is a real change, and a deliberate one is accepted with `--update-baseline` and a reviewed diff. The aggregate limits stay as the "good enough" bar; the baseline is the "not worse than before" bar.
+
+**Failure-path goldens.** `unknown_cause_escalates`, `inconsistent_evidence_escalates` and `providers_down_escalates` (18 goldens in all). Each must end escalated with nothing proposed or executed. They use fixtures, so they are free. `FixtureOptions.fail` makes every Jev call raise.
+
+**Live run.** `payops.evals.live` runs the model-driven goldens against real Gemini and Jev, with a cost cap and no baseline comparison, on demand and weekly in a separate workflow. It is never part of the push pipeline: it costs money and its answers vary.
+
+**Found while doing this.** Replay finds a recording by exact key, and only after one exact hit does it use the nearest recording for the same step. So a seed without a recording either resolves from near-matches or escalates, depending on whether its first prompt matches. That is why the hosted demo says other seeds "may escalate", and why "unrecorded seed" is not a stable failure case.
+
+**Not done.** A budget-guard golden (the limit is a constant, and changing it for a test would test the test), and a scenario for "Jev down but Gemini up" (it needs a recorded model answer). Neither the recorder nor the live run has made a real call yet.
+

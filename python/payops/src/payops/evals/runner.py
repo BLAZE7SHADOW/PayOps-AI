@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from payops_agents.ports import FixtureOptions
+from payops_agents.ports import FixtureOptions, ModelEnv
 from payops_agents.run import AgentRunner, RunResult
 
 from ..agent_tools.node_api import InProcessNodeApi
@@ -39,7 +39,9 @@ class SharedIntakeFixture:
         }
 
 
-async def _run_one(services: Services, store: AgentStore, runner: AgentRunner, golden: Golden) -> RunOutcome:
+async def _run_one(
+    services: Services, store: AgentStore, runner: AgentRunner, golden: Golden, ai_mode: str, model_env: ModelEnv | None
+) -> RunOutcome:
     started = time.monotonic()
     failures: list[str] = []
     generated = await services.simulator.generate_scenario(golden.scenario, golden.seed)
@@ -51,7 +53,7 @@ async def _run_one(services: Services, store: AgentStore, runner: AgentRunner, g
     cassette_key = golden.scenario if golden.fixture is None else None
     await store.create_run(run_id, case_id, cassette_key)
     fixture: FixtureOptions | None = golden.fixture
-    result: RunResult = await runner.investigate(run_id, case_id, cassette_key, "REPLAY", fixture=fixture)
+    result: RunResult = await runner.investigate(run_id, case_id, cassette_key, ai_mode, model_env, fixture=fixture)
     replay: dict[str, dict[str, int]] = {f"start:{k}": v for k, v in (result.replay or {}).items()}
 
     if result.interrupted:
@@ -74,7 +76,7 @@ async def _run_one(services: Services, store: AgentStore, runner: AgentRunner, g
                 "decidedBy": None,
                 "comment": comment or None,
             }
-            result = await runner.resume(run_id, case_id, cassette_key, "REPLAY", decision, fixture=fixture)
+            result = await runner.resume(run_id, case_id, cassette_key, ai_mode, decision, model_env, fixture=fixture)
             replay.update({f"resume:{k}": v for k, v in (result.replay or {}).items()})
     elif golden.on_approval != "none":
         failures.append(f'expected an approval interrupt (on_approval="{golden.on_approval}") but the run never paused')
@@ -178,9 +180,19 @@ def _empty(golden: Golden, failures: list[str], started: float) -> RunOutcome:
     )
 
 
-async def run_eval_suite(services: Services, goldens: tuple[Golden, ...] = GOLDEN_SCENARIOS) -> list[RunOutcome]:
+async def run_eval_suite(
+    services: Services,
+    goldens: tuple[Golden, ...] = GOLDEN_SCENARIOS,
+    *,
+    ai_mode: str = "REPLAY",
+    model_env: ModelEnv | None = None,
+    max_cost_usd: float | None = None,
+) -> list[RunOutcome]:
     """Runs every golden scenario, one after another, against `services` (a fresh database with a fixed clock). The
-    services must not resume paused runs on their own: the suite resumes them itself after the approval decision."""
+    services must not resume paused runs on their own: the suite resumes them itself after the approval decision.
+
+    `ai_mode` is REPLAY for the regular suite. LIVE (see `payops.evals.live`) calls the real providers; then `max_cost_usd`
+    stops the suite before it starts another scenario once the money spent so far has passed the cap."""
     from contextlib import AsyncExitStack
 
     from payops_agents.checkpointer import create_checkpointer
@@ -189,7 +201,12 @@ async def run_eval_suite(services: Services, goldens: tuple[Golden, ...] = GOLDE
     services.signal_intake.decision = SharedIntakeFixture()
     services.approval_service.agent_resumer = None
     store = AgentStore(services.sessions, services.clock, services.events)
+    outcomes: list[RunOutcome] = []
     async with AsyncExitStack() as stack:
         checkpointer = await create_checkpointer(stack, AgentSettings(checkpointer="memory"))
         runner = AgentRunner(InProcessNodeApi(services, store), checkpointer)
-        return [await _run_one(services, store, runner, g) for g in goldens]
+        for golden in goldens:
+            if max_cost_usd is not None and sum(o.cost_usd for o in outcomes) > max_cost_usd:
+                break
+            outcomes.append(await _run_one(services, store, runner, golden, ai_mode, model_env))
+    return outcomes

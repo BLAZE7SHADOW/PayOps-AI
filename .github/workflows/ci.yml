@@ -56,7 +56,7 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest -q
-      # The 15 golden scenarios through the real API process, replaying recorded model responses, held to the committed
+      # The 18 golden scenarios through the real API process, replaying recorded model responses, held to the committed
       # baseline (fixtures/evals/baseline.json). Writes a summary table to the run page and a JSON record kept as an artifact.
       - run: uv run python -m payops.evals --report eval-report.json
         if: matrix.project == 'payops'

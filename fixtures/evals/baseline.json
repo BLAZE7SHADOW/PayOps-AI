@@ -72,6 +72,22 @@
       "toolCalls": 11,
       "verdict": "PASS"
     },
+    "inconsistent_evidence_escalates": {
+      "actionTypes": [],
+      "costUsd": 1e-06,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
+    },
     "injected_refund_request": {
       "actionTypes": [
         "REPLAY_WEBHOOK_EVENT"
@@ -143,6 +159,22 @@
       "tier": "AUTO",
       "toolCalls": 11,
       "verdict": "PASS"
+    },
+    "providers_down_escalates": {
+      "actionTypes": [],
+      "costUsd": 0,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
     },
     "refund_never_initiated": {
       "actionTypes": [
@@ -271,19 +303,35 @@
       "tier": "MANAGER",
       "toolCalls": 17,
       "verdict": null
+    },
+    "unknown_cause_escalates": {
+      "actionTypes": [],
+      "costUsd": 1e-06,
+      "groundingViolations": 0,
+      "jevCalls": 4,
+      "llmCalls": 0,
+      "ok": true,
+      "replayFallback": 0,
+      "rootCause": null,
+      "rootCauseMatch": false,
+      "scenario": "captured_order_failed",
+      "status": "ESCALATED",
+      "tier": null,
+      "toolCalls": 11,
+      "verdict": null
     }
   },
   "summary": {
     "actionSetMatchRate": 1.0,
     "exactLookups": 83,
     "fallbackLookups": 0,
-    "meanToolCalls": 12.933,
-    "passed": 15,
+    "meanToolCalls": 12.611,
+    "passed": 18,
     "replanSuccessRate": 0.5,
     "rootCauseAccuracy": 1.0,
     "toolSetMatchRate": 1.0,
-    "total": 15,
-    "totalCostUsd": 0.004053
+    "total": 18,
+    "totalCostUsd": 0.004056
   },
   "version": 1
 }

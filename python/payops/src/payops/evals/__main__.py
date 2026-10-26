@@ -18,6 +18,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+from payops_agents.ports import ModelEnv
 from pgserver.postgres_server import get_server
 
 from ..container import build_services
@@ -26,13 +27,20 @@ from ..db.migrate import upgrade
 from ..ports import FixedClock
 from ..settings import Settings
 from .baseline import BASELINE_PATH, Comparison, compare, dumps, load_baseline, make_baseline, make_report
+from .golden import GOLDEN_SCENARIOS, Golden
 from .report import RunOutcome, Summary, check_thresholds, render, summarize
 from .runner import run_eval_suite
 
 NOW = datetime.fromisoformat("2026-09-28T12:00:00+00:00")
 
 
-async def run_suite() -> list[RunOutcome]:
+async def run_suite(
+    goldens: tuple[Golden, ...] = GOLDEN_SCENARIOS,
+    *,
+    ai_mode: str = "REPLAY",
+    model_env: ModelEnv | None = None,
+    max_cost_usd: float | None = None,
+) -> list[RunOutcome]:
     with tempfile.TemporaryDirectory(prefix="payops-eval-") as data_dir:
         server = get_server(data_dir)
         url = server.get_uri()
@@ -40,7 +48,9 @@ async def run_suite() -> list[RunOutcome]:
         engine = create_engine(url=url, pool_size=5)
         try:
             services = build_services(session_factory(engine), clock=FixedClock(NOW), cassette_dir=Settings().cassettes)
-            return await run_eval_suite(services)
+            return await run_eval_suite(
+                services, goldens, ai_mode=ai_mode, model_env=model_env, max_cost_usd=max_cost_usd
+            )
         finally:
             await engine.dispose()
             server.cleanup()

@@ -197,11 +197,15 @@ class FixtureOptions:
     root_cause: str
     consistent: float = 0.99
     replan_strategy: str = "escalate_to_human"
+    #: Every Jev call raises, as an outage would. Each decision point must then use its deterministic fallback.
+    fail: bool = False
 
 
 def fixture_decision(opts: FixtureOptions) -> DecisionPort:
     class _Fixture:
         async def ask(self, tag: str, state: Any, questions: dict[str, Any]) -> dict[str, Any]:
+            if opts.fail:
+                raise ConnectionError("Jev is unavailable (fixture)")
             if tag == "J5_REPLAN":
                 return {
                     "answers": {"strategy": {"type": "choice", "choice": opts.replan_strategy, "confidence": 0.9}},

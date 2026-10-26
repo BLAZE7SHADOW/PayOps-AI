@@ -37,3 +37,6 @@ __pycache__/
 
 # Written by `python -m payops.evals --report`
 eval-report.json
+
+# Written by `python -m payops.evals.live --report`
+live-eval-report.json
