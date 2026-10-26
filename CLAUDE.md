@@ -75,7 +75,8 @@ pnpm dev            # API :4000 (migrates and creates demo users on start) + web
 pnpm test           # vitest: web and shared
 pnpm typecheck && pnpm lint
 pnpm py:test        # ruff, pyright, pytest for python/agents and python/payops
-pnpm eval           # the 15 golden evals in REPLAY (python -m payops.evals)
+pnpm eval           # the 15 golden evals in REPLAY, compared with fixtures/evals/baseline.json (python -m payops.evals)
+                    # after a deliberate change: `cd python/payops && uv run python -m payops.evals --update-baseline`, read the diff
 pnpm cassette:record # record missing cassettes (REAL, billed calls; needs the API keys in .env)
 ```
 

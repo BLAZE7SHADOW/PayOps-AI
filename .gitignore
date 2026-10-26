@@ -34,3 +34,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+
+# Written by `python -m payops.evals --report`
+eval-report.json

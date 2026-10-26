@@ -63,7 +63,7 @@ On `SIGTERM` uvicorn stops taking requests, the job worker stops fetching, and p
 
 ## Checks before a release
 
-`pnpm typecheck && pnpm lint && pnpm test && pnpm py:test && pnpm eval` (CI runs the same). A change to prompt, Jev question or tool-description text also needs a billed re-recording (`pnpm cassette:record`), because cassette keys hash the exact text.
+`pnpm typecheck && pnpm lint && pnpm test && pnpm py:test && pnpm eval` (CI runs the same). `pnpm eval` fails when a scenario gate fails, an aggregate limit is crossed, or anything is worse than the committed baseline `fixtures/evals/baseline.json`; CI keeps the full JSON record of each run as the `eval-report` artifact (90 days) and prints the numbers on the run page. A change to prompt, Jev question or tool-description text also needs a billed re-recording (`pnpm cassette:record`), because cassette keys hash the exact text.
 
 Before pointing traffic at a new database, run `python/payops/scripts/check_listen_notify.py` against its Session pooler (port 5432): it sends one notification and waits for it, which is what the job queue relies on.
 

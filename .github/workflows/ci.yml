@@ -56,9 +56,17 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run pyright
       - run: uv run pytest -q
-      # The 15 golden scenarios through the real API process, replaying recorded model responses.
-      - run: uv run python -m payops.evals
+      # The 15 golden scenarios through the real API process, replaying recorded model responses, held to the committed
+      # baseline (fixtures/evals/baseline.json). Writes a summary table to the run page and a JSON record kept as an artifact.
+      - run: uv run python -m payops.evals --report eval-report.json
         if: matrix.project == 'payops'
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.project == 'payops'
+        with:
+          name: eval-report
+          path: python/payops/eval-report.json
+          if-no-files-found: ignore
+          retention-days: 90
 
   audit:
     name: Dependency audit
