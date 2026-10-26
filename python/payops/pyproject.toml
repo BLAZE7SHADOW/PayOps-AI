@@ -68,3 +68,4 @@ reportOptionalSubscript = false
 reportArgumentType = false
 reportCallIssue = false
 reportIndexIssue = false
+reportAttributeAccessIssue = false

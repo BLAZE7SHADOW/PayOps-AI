@@ -5,24 +5,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, TypeVar
 
+from ...db.models import Dispute
 from ..gateway import GatewaySettlementLine
 from ..money import format_money
 from .facts import FeeBreakdown, FeeTerms, expected_fee
 from .rules import RuleHit
-
-
-class DisputeLike(Protocol):
-    @property
-    def id(self) -> str: ...
-    @property
-    def status(self) -> str: ...
-    @property
-    def amount_minor(self) -> int: ...
-
-
-D = TypeVar("D", bound=DisputeLike)
 
 
 @dataclass(frozen=True)
@@ -46,7 +34,7 @@ class BatchCheck:
     dispute_id: str | None
 
 
-def covering_dispute(disputes: Sequence[D], diff_minor: int) -> D | None:
+def covering_dispute(disputes: Sequence[Dispute], diff_minor: int) -> Dispute | None:
     """D7 is suppressed while an OPEN dispute covers exactly the batch's difference: the shortfall is claimed and waiting on the acquirer."""
     if diff_minor == 0:
         return None
@@ -54,7 +42,7 @@ def covering_dispute(disputes: Sequence[D], diff_minor: int) -> D | None:
 
 
 def check_batch(
-    settlement_id: str, lines: Sequence[GatewaySettlementLine], merchant: FeeTerms, disputes: Sequence[DisputeLike] = ()
+    settlement_id: str, lines: Sequence[GatewaySettlementLine], merchant: FeeTerms, disputes: Sequence[Dispute] = ()
 ) -> BatchCheck:
     ordered = sorted(lines, key=lambda line: line.line_no)
     offending: list[OffendingLine] = []

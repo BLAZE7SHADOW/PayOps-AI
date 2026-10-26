@@ -73,3 +73,6 @@ DETECTION_RULE_LABEL: Final = {
     "D8_RISK_VELOCITY": "High-value capture after repeated failures",
 }
 ACTOR_TYPES: Final = ("USER", "AGENT", "SYSTEM")
+
+#: Our refund status that corresponds to a gateway refund status.
+REFUND_STATUS_FROM_GATEWAY: Final = {"PENDING": "PENDING", "PROCESSED": "PROCESSED", "FAILED": "FAILED"}
